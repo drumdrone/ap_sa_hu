@@ -73,6 +73,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
   
+  // Tag editing state for gallery
+  const [editingTagImageId, setEditingTagImageId] = useState<string | null>(null);
+  const [editingTagValue, setEditingTagValue] = useState("");
+
   // Lightbox state for gallery
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -87,6 +91,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl);
   const saveImage = useMutation(api.gallery.saveImage);
   const deleteImage = useMutation(api.gallery.deleteImage);
+  const updateImageTags = useMutation(api.gallery.updateTags);
   const savePdfToProduct = useMutation(api.gallery.savePdfToProduct);
   
   // Top product mutations
@@ -3155,35 +3160,89 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     {galleryImages && galleryImages.length > 0 ? (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {galleryImages.map((img) => (
-                          <div key={img._id} className="relative group aspect-square rounded-lg overflow-hidden bg-muted">
-                            {img.url ? (
-                              <Image
-                                src={img.url}
-                                alt={img.filename || "Gallery image"}
-                                fill
-                                className="object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                                Načítám...
+                          <div key={img._id} className="relative group rounded-lg overflow-hidden bg-muted">
+                            <div className="aspect-square relative">
+                              {img.url ? (
+                                <Image
+                                  src={img.url}
+                                  alt={img.filename || "Gallery image"}
+                                  fill
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                  Načítám...
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingTagImageId(img._id);
+                                    setEditingTagValue(img.tags?.join(", ") || "");
+                                  }}
+                                  className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600"
+                                >
+                                  Tagy
+                                </button>
+                                <button
+                                  onClick={() => deleteImage({ id: img._id })}
+                                  className="px-3 py-1 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600"
+                                >
+                                  Smazat
+                                </button>
                               </div>
-                            )}
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <button
-                                onClick={() => deleteImage({ id: img._id })}
-                                className="px-3 py-1 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600"
-                              >
-                                Smazat
-                              </button>
+                              {img.tags && img.tags.length > 0 && (
+                                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent">
+                                  <div className="flex flex-wrap gap-1">
+                                    {img.tags.slice(0, 2).map((tag, i) => (
+                                      <span key={i} className="text-xs bg-white/20 text-white px-2 py-0.5 rounded">
+                                        {tag}
+                                      </span>
+                                    ))}
+                                    {img.tags.length > 2 && (
+                                      <span className="text-xs text-white/70">+{img.tags.length - 2}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            {img.tags && img.tags.length > 0 && (
-                              <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent">
-                                <div className="flex flex-wrap gap-1">
-                                  {img.tags.slice(0, 2).map((tag, i) => (
-                                    <span key={i} className="text-xs bg-white/20 text-white px-2 py-0.5 rounded">
-                                      {tag}
-                                    </span>
-                                  ))}
+                            {/* Inline tag editing */}
+                            {editingTagImageId === img._id && (
+                              <div className="p-2 bg-card border-t border-border">
+                                <Input
+                                  type="text"
+                                  placeholder="Tagy (oddělte čárkou, např: banner, 1138x230)"
+                                  value={editingTagValue}
+                                  onChange={(e) => setEditingTagValue(e.target.value)}
+                                  className="text-xs mb-2"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      const tags = editingTagValue.split(",").map(t => t.trim()).filter(Boolean);
+                                      updateImageTags({ id: img._id, tags });
+                                      setEditingTagImageId(null);
+                                    } else if (e.key === "Escape") {
+                                      setEditingTagImageId(null);
+                                    }
+                                  }}
+                                />
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => {
+                                      const tags = editingTagValue.split(",").map(t => t.trim()).filter(Boolean);
+                                      updateImageTags({ id: img._id, tags });
+                                      setEditingTagImageId(null);
+                                    }}
+                                    className="flex-1 px-2 py-1 bg-primary text-primary-foreground rounded text-xs font-medium hover:bg-primary/90"
+                                  >
+                                    Uložit
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingTagImageId(null)}
+                                    className="px-2 py-1 bg-muted text-muted-foreground rounded text-xs font-medium hover:bg-muted/80"
+                                  >
+                                    Zrušit
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -3943,57 +4002,121 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     {galleryImages.map((image, index) => (
                       <div
                         key={image._id}
-                        className="relative group rounded-xl overflow-hidden bg-muted aspect-square cursor-pointer"
-                        onClick={() => image.url && handleOpenLightbox(index)}
+                        className="group rounded-xl overflow-hidden bg-muted"
                       >
-                        {image.url ? (
-                          <img
-                            src={image.url}
-                            alt={image.filename}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                            Načítám...
-                          </div>
-                        )}
-                        {/* Click hint overlay */}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                          <svg className="w-10 h-10 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                          </svg>
-                        </div>
-                        {/* Tags & delete - bottom overlay */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <p className="text-white text-xs truncate">{image.filename}</p>
-                          {image.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {image.tags.slice(0, 2).map((tag) => (
-                                <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  {tag}
-                                </Badge>
-                              ))}
-                              {image.tags.length > 2 && (
-                                <span className="text-white/70 text-[10px]">+{image.tags.length - 2}</span>
-                              )}
+                        <div
+                          className="relative aspect-square cursor-pointer"
+                          onClick={() => image.url && handleOpenLightbox(index)}
+                        >
+                          {image.url ? (
+                            <img
+                              src={image.url}
+                              alt={image.filename}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                              Načítám...
                             </div>
                           )}
+                          {/* Click hint overlay */}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <svg className="w-10 h-10 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                            </svg>
+                          </div>
+                          {/* Tags & delete - bottom overlay */}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p className="text-white text-xs truncate">{image.filename}</p>
+                            {image.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {image.tags.slice(0, 2).map((tag) => (
+                                  <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                                {image.tags.length > 2 && (
+                                  <span className="text-white/70 text-[10px]">+{image.tags.length - 2}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {/* Edit tags button - top left */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingTagImageId(image._id);
+                              setEditingTagValue(image.tags?.join(", ") || "");
+                            }}
+                            className="absolute top-2 left-2 p-1.5 bg-blue-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600"
+                            title="Upravit tagy"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                          </button>
+                          {/* Delete button - top right */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("Smazat tento obrázek?")) {
+                                deleteImage({ id: image._id });
+                              }
+                            }}
+                            className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                            title="Smazat"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
                         </div>
-                        {/* Delete button - top right */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm("Smazat tento obrázek?")) {
-                              deleteImage({ id: image._id });
-                            }
-                          }}
-                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                          title="Smazat"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        {/* Inline tag editing */}
+                        {editingTagImageId === image._id && (
+                          <div className="p-3 bg-card border-t border-border">
+                            <p className="text-xs text-muted-foreground mb-2">Upravit tagy (oddělte čárkou, např: banner, 1138x230)</p>
+                            <Input
+                              type="text"
+                              placeholder="banner, 1138x230, social..."
+                              value={editingTagValue}
+                              onChange={(e) => setEditingTagValue(e.target.value)}
+                              className="text-sm mb-2"
+                              autoFocus
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const tags = editingTagValue.split(",").map(t => t.trim()).filter(Boolean);
+                                  updateImageTags({ id: image._id, tags });
+                                  setEditingTagImageId(null);
+                                } else if (e.key === "Escape") {
+                                  setEditingTagImageId(null);
+                                }
+                              }}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const tags = editingTagValue.split(",").map(t => t.trim()).filter(Boolean);
+                                  updateImageTags({ id: image._id, tags });
+                                  setEditingTagImageId(null);
+                                }}
+                                className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90"
+                              >
+                                Uložit
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTagImageId(null);
+                                }}
+                                className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-sm font-medium hover:bg-muted/80"
+                              >
+                                Zrušit
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
