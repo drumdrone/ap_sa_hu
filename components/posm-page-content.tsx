@@ -499,111 +499,51 @@ export function PosmPageContent() {
           {/* CATALOG TAB */}
           <TabsContent value="catalog" className="space-y-6">
             {/* Filters */}
-            <div className="space-y-3">
-              {/* Typ */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider w-16 shrink-0">Typ</span>
-                <button
-                  onClick={() => setFilterType("all")}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    filterType === "all"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
-                  }`}
-                >
-                  Vse
-                </button>
-                {Object.entries(POSM_TYPES).map(([key, { label, color }]) => (
-                  <button
-                    key={key}
-                    onClick={() => setFilterType(filterType === key ? "all" : key)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      filterType === key
-                        ? color + " ring-2 ring-offset-1 ring-current shadow-sm"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Typ:</span>
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Vsechny typy</SelectItem>
+                    {Object.entries(POSM_TYPES).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {/* Distribuce */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider w-16 shrink-0">Distrib.</span>
-                <button
-                  onClick={() => setFilterDistribution("all")}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    filterDistribution === "all"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
-                  }`}
-                >
-                  Vse
-                </button>
-                {Object.entries(DISTRIBUTION_TYPES).map(([key, { label, color }]) => (
-                  <button
-                    key={key}
-                    onClick={() => setFilterDistribution(filterDistribution === key ? "all" : key)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      filterDistribution === key
-                        ? color + " ring-2 ring-offset-1 ring-current shadow-sm"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Distribuce:</span>
+                <Select value={filterDistribution} onValueChange={setFilterDistribution}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Vsechny</SelectItem>
+                    {Object.entries(DISTRIBUTION_TYPES).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {/* Velikost - only if sizes exist */}
-              {allSizes.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider w-16 shrink-0">Velikost</span>
-                  <button
-                    onClick={() => setFilterSize("all")}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      filterSize === "all"
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    Vse
-                  </button>
-                  {allSizes.map((size) => (
-                    <button
-                      key={size}
-                      onClick={() => setFilterSize(filterSize === size ? "all" : size)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        filterSize === size
-                          ? "bg-violet-100 text-violet-700 ring-2 ring-offset-1 ring-current shadow-sm"
-                          : "bg-muted text-muted-foreground hover:bg-muted/80"
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Active filters summary & reset */}
-              {(filterType !== "all" || filterSize !== "all" || filterDistribution !== "all") && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-xs text-muted-foreground">
-                    {filteredItems?.length ?? 0} z {items?.length ?? 0} polozek
-                  </span>
-                  <button
-                    onClick={() => {
-                      setFilterType("all");
-                      setFilterSize("all");
-                      setFilterDistribution("all");
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                  >
-                    Zrusit filtry
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Velikost:</span>
+                <Select value={filterSize} onValueChange={setFilterSize}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Vsechny velikosti</SelectItem>
+                    {allSizes.map((size) => (
+                      <SelectItem key={size} value={size}>{size}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Items Grid */}
