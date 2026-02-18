@@ -650,11 +650,16 @@ export function PosmPageContent() {
                         </div>
                       )}
                       <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h3 className="font-semibold text-foreground line-clamp-2">{item.name}</h3>
+                        <h3 className="font-semibold text-foreground line-clamp-2 mb-2">{item.name}</h3>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
                           <Badge className={POSM_TYPES[item.type as PosmType]?.color || "bg-gray-100"}>
                             {POSM_TYPES[item.type as PosmType]?.label || item.type}
                           </Badge>
+                          {item.distributionType && (
+                            <Badge className={DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.color || "bg-gray-100 text-gray-700"}>
+                              {DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.label || item.distributionType}
+                            </Badge>
+                          )}
                         </div>
                         {item.description && (
                           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
@@ -663,8 +668,9 @@ export function PosmPageContent() {
                         )}
                         {item.sizes && item.sizes.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-3">
+                            <span className="text-xs text-muted-foreground mr-1">Vel.:</span>
                             {item.sizes.map((size) => (
-                              <span key={size} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              <span key={size} className="text-xs bg-violet-50 text-violet-600 px-2 py-0.5 rounded border border-violet-200">
                                 {size}
                               </span>
                             ))}
@@ -1067,41 +1073,52 @@ export function PosmPageContent() {
                     <p className="text-muted-foreground">{selectedItemData.description}</p>
                   )}
 
-                  {selectedItemData.sizes && selectedItemData.sizes.length > 0 && (
+                  {/* Metadata grid */}
+                  <div className="grid grid-cols-2 gap-3 bg-muted/30 rounded-lg p-4">
                     <div>
-                      <Label className="text-sm font-medium mb-2 block">Dostupne velikosti</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedItemData.sizes.map((size) => (
-                          <Badge key={size} variant="outline">{size}</Badge>
-                        ))}
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typ</span>
+                      <div className="mt-1">
+                        <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || "bg-gray-100"}>
+                          {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
+                        </Badge>
                       </div>
                     </div>
-                  )}
-
-                  {/* Distribution type selector for editing */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Typ distribuce</Label>
-                    <Select
-                      value={selectedItemData.distributionType || "order"}
-                      onValueChange={async (value) => {
-                        await updateItem({
-                          id: selectedItemData._id,
-                          distributionType: value as DistributionType
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="download">Ke stazeni - uzivatel si material stahne</SelectItem>
-                        <SelectItem value="order">K objednani - uzivatel posle objednavku na pocet ks</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="text-sm text-muted-foreground">
-                    Vytvoreno: {new Date(selectedItemData.createdAt).toLocaleDateString("cs-CZ")}
+                    <div>
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Distribuce</span>
+                      <div className="mt-1">
+                        <Select
+                          value={selectedItemData.distributionType || "order"}
+                          onValueChange={async (value) => {
+                            await updateItem({
+                              id: selectedItemData._id,
+                              distributionType: value as DistributionType
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-auto text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="download">Ke stazeni</SelectItem>
+                            <SelectItem value="order">K objednani</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {selectedItemData.sizes && selectedItemData.sizes.length > 0 && (
+                      <div className="col-span-2">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Velikost</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {selectedItemData.sizes.map((size) => (
+                            <Badge key={size} variant="outline" className="bg-violet-50 text-violet-600 border-violet-200">{size}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="col-span-2">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Vytvoreno</span>
+                      <div className="text-sm mt-1">{new Date(selectedItemData.createdAt).toLocaleDateString("cs-CZ")}</div>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter className="gap-2">
