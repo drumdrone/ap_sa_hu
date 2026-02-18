@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useQuery, useMutation } from "convex/react";
@@ -51,7 +51,16 @@ type SectionId = typeof BULK_SECTIONS[number]["id"];
 export default function BulkEditContent() {
   // Filters
   const [search, setSearch] = useState("");
-  
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search - wait 400ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   // Selection
   const [selectedProducts, setSelectedProducts] = useState<Set<Id<"products">>>(new Set());
   
@@ -83,7 +92,7 @@ export default function BulkEditContent() {
   
   // Queries and mutations
   const products = useQuery(api.products.list, {
-    search: search || undefined,
+    search: debouncedSearch || undefined,
   });
   const bulkUpdate = useMutation(api.products.bulkUpdate);
   
