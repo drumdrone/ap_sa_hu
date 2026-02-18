@@ -140,6 +140,12 @@ export default defineSchema({
       v.literal("other")
     ),
     imageUrl: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")), // Convex storage ID for uploaded files
+    downloadUrl: v.optional(v.string()), // External download URL (for download type materials)
+    distributionType: v.optional(v.union(
+      v.literal("download"),  // ke stažení
+      v.literal("order")      // k objednání
+    )),
     sizes: v.optional(v.array(v.string())), // e.g. ["A4", "A5", "A3"]
     isActive: v.boolean(),
     createdAt: v.number(),
