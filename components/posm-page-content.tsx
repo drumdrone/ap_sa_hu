@@ -499,51 +499,89 @@ export function PosmPageContent() {
           {/* CATALOG TAB */}
           <TabsContent value="catalog" className="space-y-6">
             {/* Filters */}
-            <div className="flex flex-wrap items-center gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Typ:</span>
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Vsechny typy</SelectItem>
-                    {Object.entries(POSM_TYPES).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-muted-foreground mr-1">Typ:</span>
+                <button
+                  onClick={() => setFilterType("all")}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    filterType === "all"
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  Vse
+                </button>
+                {Object.entries(POSM_TYPES).map(([key, { label, color }]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilterType(filterType === key ? "all" : key)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterType === key
+                        ? color
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Distribuce:</span>
-                <Select value={filterDistribution} onValueChange={setFilterDistribution}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Vsechny</SelectItem>
-                    {Object.entries(DISTRIBUTION_TYPES).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-muted-foreground mr-1">Distribuce:</span>
+                <button
+                  onClick={() => setFilterDistribution("all")}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    filterDistribution === "all"
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  Vse
+                </button>
+                {Object.entries(DISTRIBUTION_TYPES).map(([key, { label, color }]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilterDistribution(filterDistribution === key ? "all" : key)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterDistribution === key
+                        ? color
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Velikost:</span>
-                <Select value={filterSize} onValueChange={setFilterSize}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Vsechny velikosti</SelectItem>
-                    {allSizes.map((size) => (
-                      <SelectItem key={size} value={size}>{size}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {allSizes.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-muted-foreground mr-1">Velikost:</span>
+                  <button
+                    onClick={() => setFilterSize("all")}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterSize === "all"
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    Vse
+                  </button>
+                  {allSizes.map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => setFilterSize(filterSize === size ? "all" : size)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                        filterSize === size
+                          ? "bg-violet-100 text-violet-700"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Items Grid */}
