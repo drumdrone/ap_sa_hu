@@ -18,7 +18,7 @@ export const listItems = query({
   },
   handler: async (ctx, args) => {
     let items;
-    
+
     if (args.type) {
       items = await ctx.db
         .query("posmItems")
@@ -27,19 +27,47 @@ export const listItems = query({
     } else {
       items = await ctx.db.query("posmItems").collect();
     }
-    
+
     if (args.activeOnly !== false) {
       items = items.filter(item => item.isActive);
     }
-    
-    return items.sort((a, b) => b.createdAt - a.createdAt);
+
+    // Resolve storage URLs for items with storageId
+    const itemsWithUrls = await Promise.all(
+      items.map(async (item) => {
+        let resolvedImageUrl = item.imageUrl;
+        if (item.storageId) {
+          const url = await ctx.storage.getUrl(item.storageId);
+          if (url) resolvedImageUrl = url;
+        }
+        return {
+          ...item,
+          imageUrl: resolvedImageUrl,
+        };
+      })
+    );
+
+    return itemsWithUrls.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 
 export const getItem = query({
   args: { id: v.id("posmItems") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const item = await ctx.db.get(args.id);
+    if (!item) return null;
+
+    // Resolve storage URL
+    let resolvedImageUrl = item.imageUrl;
+    if (item.storageId) {
+      const url = await ctx.storage.getUrl(item.storageId);
+      if (url) resolvedImageUrl = url;
+    }
+
+    return {
+      ...item,
+      imageUrl: resolvedImageUrl,
+    };
   },
 });
 
@@ -57,6 +85,12 @@ export const createItem = mutation({
       v.literal("other")
     ),
     imageUrl: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    downloadUrl: v.optional(v.string()),
+    distributionType: v.optional(v.union(
+      v.literal("download"),
+      v.literal("order")
+    )),
     sizes: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
@@ -84,6 +118,12 @@ export const updateItem = mutation({
       v.literal("other")
     )),
     imageUrl: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    downloadUrl: v.optional(v.string()),
+    distributionType: v.optional(v.union(
+      v.literal("download"),
+      v.literal("order")
+    )),
     sizes: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
   },
@@ -98,6 +138,15 @@ export const updateItem = mutation({
 export const deleteItem = mutation({
   args: { id: v.id("posmItems") },
   handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    // Clean up storage if there's a stored file
+    if (item?.storageId) {
+      try {
+        await ctx.storage.delete(item.storageId);
+      } catch (e) {
+        console.error("Failed to delete storage file:", e);
+      }
+    }
     console.log("Deleting POSM item:", args.id);
     await ctx.db.delete(args.id);
     return args.id;
@@ -118,7 +167,7 @@ export const listOrders = query({
   },
   handler: async (ctx, args) => {
     let orders;
-    
+
     if (args.status) {
       orders = await ctx.db
         .query("posmOrders")
@@ -131,18 +180,25 @@ export const listOrders = query({
         .order("desc")
         .collect();
     }
-    
-    // Enrich with item data
+
+    // Enrich with item data (including resolved URLs)
     const enrichedOrders = await Promise.all(
       orders.map(async (order) => {
         const item = await ctx.db.get(order.itemId);
+        let resolvedItem = item;
+        if (item?.storageId) {
+          const url = await ctx.storage.getUrl(item.storageId);
+          if (url) {
+            resolvedItem = { ...item, imageUrl: url };
+          }
+        }
         return {
           ...order,
-          item,
+          item: resolvedItem,
         };
       })
     );
-    
+
     return enrichedOrders;
   },
 });
@@ -152,7 +208,7 @@ export const getOrder = query({
   handler: async (ctx, args) => {
     const order = await ctx.db.get(args.id);
     if (!order) return null;
-    
+
     const item = await ctx.db.get(order.itemId);
     return { ...order, item };
   },
@@ -212,14 +268,18 @@ export const getStats = query({
   handler: async (ctx) => {
     const items = await ctx.db.query("posmItems").collect();
     const orders = await ctx.db.query("posmOrders").collect();
-    
+
     const activeItems = items.filter(i => i.isActive).length;
+    const downloadItems = items.filter(i => i.isActive && i.distributionType === "download").length;
+    const orderItems = items.filter(i => i.isActive && i.distributionType === "order").length;
     const newOrders = orders.filter(o => o.status === "new").length;
     const processingOrders = orders.filter(o => o.status === "processing").length;
-    
+
     return {
       totalItems: items.length,
       activeItems,
+      downloadItems,
+      orderItems,
       totalOrders: orders.length,
       newOrders,
       processingOrders,
