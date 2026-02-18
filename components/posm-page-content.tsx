@@ -499,65 +499,88 @@ export function PosmPageContent() {
           {/* CATALOG TAB */}
           <TabsContent value="catalog" className="space-y-6">
             {/* Filters */}
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Typ:</Label>
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Vsechny typy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Vsechny typy</SelectItem>
-                    {Object.entries(POSM_TYPES).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-muted-foreground mr-1">Typ:</span>
+                <button
+                  onClick={() => setFilterType("all")}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    filterType === "all"
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  Vse
+                </button>
+                {Object.entries(POSM_TYPES).map(([key, { label, color }]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilterType(filterType === key ? "all" : key)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterType === key
+                        ? color
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Distribuce:</Label>
-                <Select value={filterDistribution} onValueChange={setFilterDistribution}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Vsechny" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Vsechny</SelectItem>
-                    <SelectItem value="download">Ke stazeni</SelectItem>
-                    <SelectItem value="order">K objednani</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-muted-foreground mr-1">Distribuce:</span>
+                <button
+                  onClick={() => setFilterDistribution("all")}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    filterDistribution === "all"
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  Vse
+                </button>
+                {Object.entries(DISTRIBUTION_TYPES).map(([key, { label, color }]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilterDistribution(filterDistribution === key ? "all" : key)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterDistribution === key
+                        ? color
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
               {allSizes.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-medium">Velikost:</Label>
-                  <Select value={filterSize} onValueChange={setFilterSize}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Vsechny velikosti" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Vsechny velikosti</SelectItem>
-                      {allSizes.map((size) => (
-                        <SelectItem key={size} value={size}>{size}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-muted-foreground mr-1">Velikost:</span>
+                  <button
+                    onClick={() => setFilterSize("all")}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterSize === "all"
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    Vse
+                  </button>
+                  {allSizes.map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => setFilterSize(filterSize === size ? "all" : size)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                        filterSize === size
+                          ? "bg-violet-100 text-violet-700"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
                 </div>
-              )}
-
-              {(filterType !== "all" || filterSize !== "all" || filterDistribution !== "all") && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setFilterType("all");
-                    setFilterSize("all");
-                    setFilterDistribution("all");
-                  }}
-                >
-                  Zrusit filtry
-                </Button>
               )}
             </div>
 
@@ -605,11 +628,16 @@ export function PosmPageContent() {
                         </div>
                       )}
                       <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h3 className="font-semibold text-foreground line-clamp-2">{item.name}</h3>
+                        <h3 className="font-semibold text-foreground line-clamp-2 mb-2">{item.name}</h3>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
                           <Badge className={POSM_TYPES[item.type as PosmType]?.color || "bg-gray-100"}>
                             {POSM_TYPES[item.type as PosmType]?.label || item.type}
                           </Badge>
+                          {item.distributionType && (
+                            <Badge className={DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.color || "bg-gray-100 text-gray-700"}>
+                              {DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.label || item.distributionType}
+                            </Badge>
+                          )}
                         </div>
                         {item.description && (
                           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
@@ -618,8 +646,9 @@ export function PosmPageContent() {
                         )}
                         {item.sizes && item.sizes.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-3">
+                            <span className="text-xs text-muted-foreground mr-1">Vel.:</span>
                             {item.sizes.map((size) => (
-                              <span key={size} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              <span key={size} className="text-xs bg-violet-50 text-violet-600 px-2 py-0.5 rounded border border-violet-200">
                                 {size}
                               </span>
                             ))}
@@ -1022,41 +1051,52 @@ export function PosmPageContent() {
                     <p className="text-muted-foreground">{selectedItemData.description}</p>
                   )}
 
-                  {selectedItemData.sizes && selectedItemData.sizes.length > 0 && (
+                  {/* Metadata grid */}
+                  <div className="grid grid-cols-2 gap-3 bg-muted/30 rounded-lg p-4">
                     <div>
-                      <Label className="text-sm font-medium mb-2 block">Dostupne velikosti</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedItemData.sizes.map((size) => (
-                          <Badge key={size} variant="outline">{size}</Badge>
-                        ))}
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typ</span>
+                      <div className="mt-1">
+                        <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || "bg-gray-100"}>
+                          {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
+                        </Badge>
                       </div>
                     </div>
-                  )}
-
-                  {/* Distribution type selector for editing */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Typ distribuce</Label>
-                    <Select
-                      value={selectedItemData.distributionType || "order"}
-                      onValueChange={async (value) => {
-                        await updateItem({
-                          id: selectedItemData._id,
-                          distributionType: value as DistributionType
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="download">Ke stazeni - uzivatel si material stahne</SelectItem>
-                        <SelectItem value="order">K objednani - uzivatel posle objednavku na pocet ks</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="text-sm text-muted-foreground">
-                    Vytvoreno: {new Date(selectedItemData.createdAt).toLocaleDateString("cs-CZ")}
+                    <div>
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Distribuce</span>
+                      <div className="mt-1">
+                        <Select
+                          value={selectedItemData.distributionType || "order"}
+                          onValueChange={async (value) => {
+                            await updateItem({
+                              id: selectedItemData._id,
+                              distributionType: value as DistributionType
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-auto text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="download">Ke stazeni</SelectItem>
+                            <SelectItem value="order">K objednani</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {selectedItemData.sizes && selectedItemData.sizes.length > 0 && (
+                      <div className="col-span-2">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Velikost</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {selectedItemData.sizes.map((size) => (
+                            <Badge key={size} variant="outline" className="bg-violet-50 text-violet-600 border-violet-200">{size}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="col-span-2">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Vytvoreno</span>
+                      <div className="text-sm mt-1">{new Date(selectedItemData.createdAt).toLocaleDateString("cs-CZ")}</div>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter className="gap-2">
