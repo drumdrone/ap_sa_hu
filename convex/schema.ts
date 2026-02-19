@@ -104,6 +104,7 @@ export default defineSchema({
       title: v.string(),
       url: v.string(),
     }))),
+    videoUrl: v.optional(v.string()), // URL for product video (MP4)
     // Activity tracking
     marketingLastUpdated: v.optional(v.number()), // timestamp when marketing data was last changed
     lastUpdatedField: v.optional(v.string()), // which field was updated last
@@ -259,6 +260,7 @@ export default defineSchema({
       title: v.string(),
       url: v.string(),
     }))),
+    videoUrl: v.optional(v.string()),
     isTop: v.optional(v.boolean()),
     topOrder: v.optional(v.number()),
     // Backup metadata
