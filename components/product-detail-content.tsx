@@ -50,6 +50,7 @@ type InlineEdit =
   | "competitionComparison"
   | "seasonalOpportunities"
   | "sensoryProfile"
+  | "videoUrl"
   | null;
 
 export function ProductDetailContent({ productId }: ProductDetailContentProps) {
@@ -880,6 +881,110 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Product Video Section */}
+              {product.videoUrl ? (
+                <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                  <div className="p-4 flex items-center justify-between border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🎬</span>
+                      <h2 className="font-semibold text-foreground">Produktové video</h2>
+                    </div>
+                    <button
+                      onClick={() => { setInlineEdit("videoUrl"); setInlineValue(product.videoUrl || ""); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Upravit
+                    </button>
+                  </div>
+                  {inlineEdit === "videoUrl" ? (
+                    <div className="p-4 space-y-3">
+                      <Input
+                        value={inlineValue}
+                        onChange={(e) => setInlineValue(e.target.value)}
+                        placeholder="https://example.com/video.mp4"
+                        className="w-full"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleInlineSave("videoUrl", inlineValue)}
+                          disabled={isSaving}
+                          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          {isSaving ? "Ukládám..." : "Uložit"}
+                        </button>
+                        <button
+                          onClick={() => { handleInlineSave("videoUrl", ""); }}
+                          disabled={isSaving}
+                          className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 disabled:opacity-50"
+                        >
+                          Odebrat video
+                        </button>
+                        <button
+                          onClick={() => setInlineEdit(null)}
+                          className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80"
+                        >
+                          Zrušit
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative w-full" style={{ maxHeight: "500px" }}>
+                      <video
+                        controls
+                        preload="metadata"
+                        playsInline
+                        className="w-full h-auto max-h-[500px] object-contain bg-black"
+                        poster={product.image || undefined}
+                      >
+                        <source src={product.videoUrl} type="video/mp4" />
+                        Váš prohlížeč nepodporuje přehrávání videa.
+                      </video>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className="bg-card border-2 border-dashed border-border rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                  onClick={() => { setInlineEdit("videoUrl"); setInlineValue(""); }}
+                >
+                  {inlineEdit === "videoUrl" ? (
+                    <div className="w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
+                      <p className="font-semibold text-foreground text-center">Přidat produktové video</p>
+                      <Input
+                        value={inlineValue}
+                        onChange={(e) => setInlineValue(e.target.value)}
+                        placeholder="https://example.com/video.mp4"
+                        className="w-full"
+                        autoFocus
+                      />
+                      <div className="flex gap-2 justify-center">
+                        <button
+                          onClick={() => handleInlineSave("videoUrl", inlineValue)}
+                          disabled={isSaving || !inlineValue}
+                          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          {isSaving ? "Ukládám..." : "Uložit"}
+                        </button>
+                        <button
+                          onClick={() => setInlineEdit(null)}
+                          className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80"
+                        >
+                          Zrušit
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                        <span className="text-3xl">🎬</span>
+                      </div>
+                      <p className="font-semibold text-foreground">Přidat produktové video</p>
+                      <p className="text-sm text-muted-foreground">Klikněte pro vložení URL odkazu na MP4 video</p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Three Column Layout: Alerts + Quick Actions + Pro prodejce */}
               <div className="grid 2xl:grid-cols-[1fr_1fr_minmax(500px,1.5fr)] xl:grid-cols-3 lg:grid-cols-2 gap-6">
@@ -3003,6 +3108,35 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="p-4 bg-muted/30 rounded-lg text-center text-muted-foreground text-sm">
                           Fotka není k dispozici
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Product Video */}
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-foreground flex items-center gap-2">
+                        <span>🎬</span> Produktové video
+                      </h3>
+                      {product.videoUrl ? (
+                        <div className="space-y-3">
+                          <div className="rounded-lg overflow-hidden bg-black">
+                            <video
+                              controls
+                              preload="metadata"
+                              playsInline
+                              className="w-full h-auto"
+                              poster={product.image || undefined}
+                            >
+                              <source src={product.videoUrl} type="video/mp4" />
+                            </video>
+                          </div>
+                          <a href={product.videoUrl} target="_blank" rel="noopener noreferrer" className="block text-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
+                            Stáhnout video
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-muted/30 rounded-lg text-center text-muted-foreground text-sm">
+                          Video není k dispozici
                         </div>
                       )}
                     </div>
