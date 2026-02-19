@@ -702,6 +702,23 @@ export const bulkUpdate = mutation({
   },
 });
 
+// One-time migration: remove videoUrl field from all products
+export const removeVideoUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db.query("products").collect();
+    let cleaned = 0;
+    for (const product of products) {
+      if ((product as Record<string, unknown>).videoUrl !== undefined) {
+        await ctx.db.patch(product._id, { videoUrl: undefined });
+        cleaned++;
+      }
+    }
+    console.log(`Removed videoUrl from ${cleaned} products`);
+    return { success: true, cleaned };
+  },
+});
+
 // Find products by SKUs (externalId or image filename)
 export const findBySkus = mutation({
   args: {
