@@ -719,6 +719,24 @@ export const removeVideoUrl = mutation({
   },
 });
 
+// Delete demo products (products without externalId = not linked to e-shop)
+export const deleteDemoProducts = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db.query("products").collect();
+    const demoProducts = products.filter((p) => !p.externalId);
+    for (const product of demoProducts) {
+      await ctx.db.delete(product._id);
+    }
+    console.log(`Deleted ${demoProducts.length} demo products (without externalId)`);
+    return {
+      success: true,
+      deleted: demoProducts.length,
+      names: demoProducts.map((p) => p.name),
+    };
+  },
+});
+
 // Find products by SKUs (externalId or image filename)
 export const findBySkus = mutation({
   args: {
