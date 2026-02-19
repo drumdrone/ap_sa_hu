@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ProductImageSlider } from "@/components/product-image-slider";
 
 type MenuSection = "dashboard" | "eshop" | "marketing" | "social" | "gallery" | "materials" | "edit";
 type MobileView = "product" | "data";
@@ -566,21 +567,14 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
             <div className="space-y-4">
               {/* Product Image and Info Card */}
               <div className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="aspect-square max-h-72 bg-muted">
-                  {product.image ? (
-                    <Image
-                      src={product.image}
-                      alt={product.name}
-                      width={400}
-                      height={400}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      <span className="text-6xl">🍵</span>
-                    </div>
-                  )}
-                </div>
+                <ProductImageSlider
+                  productImage={product.image}
+                  galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
+                  productName={product.name}
+                  maxThumbnails={3}
+                  onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
+                  className="aspect-square max-h-72"
+                />
                 <div className="p-4">
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {product.category && <CategoryBadge category={product.category} />}
@@ -797,40 +791,15 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               {/* Hero Section - Large Image + Product Name */}
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="flex flex-col md:flex-row">
-                  {/* Large Product Image */}
-                  <div 
-                    className="w-full md:w-80 h-64 md:h-80 bg-muted flex-shrink-0 relative group cursor-pointer"
-                    onClick={() => {
-                      if (galleryImages && galleryImages.length > 0) {
-                        handleOpenLightbox(0);
-                      }
-                    }}
-                  >
-                    {product.image ? (
-                      <Image
-                        src={product.image}
-                        alt={product.name}
-                        width={320}
-                        height={320}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <span className="text-8xl">🍵</span>
-                      </div>
-                    )}
-                    {/* Gallery button overlay */}
-                    {galleryImages && galleryImages.length > 0 && (
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors">
-                        <button className="absolute bottom-3 right-3 flex items-center gap-2 px-3 py-2 bg-white/90 hover:bg-white rounded-lg shadow-lg text-sm font-medium text-foreground transition-all opacity-80 group-hover:opacity-100">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          {galleryImages.length} {galleryImages.length === 1 ? "foto" : galleryImages.length < 5 ? "fotky" : "fotek"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  {/* Product Image Slider */}
+                  <ProductImageSlider
+                    productImage={product.image}
+                    galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
+                    productName={product.name}
+                    maxThumbnails={4}
+                    onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
+                    className="w-full md:w-96 h-64 md:h-80 flex-shrink-0"
+                  />
                   {/* Product Info */}
                   <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
                     <div className="flex flex-wrap gap-2 mb-3">
