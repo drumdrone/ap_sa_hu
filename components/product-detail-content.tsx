@@ -118,14 +118,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   
   const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
   
-  // Lightbox functions for gallery (supports both images and video)
-  const lightboxMedia: { type: "image" | "video"; url: string; poster?: string }[] = [
-    ...(product.videoUrl ? [{ type: "video" as const, url: product.videoUrl, poster: product.image || undefined }] : []),
-    ...(galleryImages?.filter(img => img.url).map(img => ({ type: "image" as const, url: img.url! })) || []),
-  ];
-
-  // Number of items before gallery images in lightboxMedia (video offset)
-  const galleryImageOffset = product.videoUrl ? 1 : 0;
+  // Lightbox functions for gallery
+  const lightboxImages = galleryImages?.filter(img => img.url).map(img => img.url!) || [];
   
   const handleOpenLightbox = (index: number) => {
     setLightboxIndex(index);
@@ -133,11 +127,11 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   };
   
   const handleLightboxPrev = () => {
-    setLightboxIndex(prev => (prev > 0 ? prev - 1 : lightboxMedia.length - 1));
+    setLightboxIndex(prev => (prev > 0 ? prev - 1 : lightboxImages.length - 1));
   };
   
   const handleLightboxNext = () => {
-    setLightboxIndex(prev => (prev < lightboxMedia.length - 1 ? prev + 1 : 0));
+    setLightboxIndex(prev => (prev < lightboxImages.length - 1 ? prev + 1 : 0));
   };
   
   // Keyboard navigation for lightbox
@@ -156,7 +150,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lightboxOpen, lightboxMedia.length]);
+  }, [lightboxOpen, lightboxImages.length]);
   
   const addToSalesKit = (item: SalesKitItem) => {
     setSalesKitItems(prev => {
@@ -809,7 +803,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     className="w-full md:w-80 h-64 md:h-80 bg-muted flex-shrink-0 relative group cursor-pointer"
                     onClick={() => {
                       if (galleryImages && galleryImages.length > 0) {
-                        handleOpenLightbox(galleryImageOffset);
+                        handleOpenLightbox(0);
                       }
                     }}
                   >
@@ -887,6 +881,110 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Product Video Section */}
+              {product.videoUrl ? (
+                <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                  <div className="p-4 flex items-center justify-between border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🎬</span>
+                      <h2 className="font-semibold text-foreground">Produktové video</h2>
+                    </div>
+                    <button
+                      onClick={() => { setInlineEdit("videoUrl"); setInlineValue(product.videoUrl || ""); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Upravit
+                    </button>
+                  </div>
+                  {inlineEdit === "videoUrl" ? (
+                    <div className="p-4 space-y-3">
+                      <Input
+                        value={inlineValue}
+                        onChange={(e) => setInlineValue(e.target.value)}
+                        placeholder="https://example.com/video.mp4"
+                        className="w-full"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleInlineSave("videoUrl", inlineValue)}
+                          disabled={isSaving}
+                          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          {isSaving ? "Ukládám..." : "Uložit"}
+                        </button>
+                        <button
+                          onClick={() => { handleInlineSave("videoUrl", ""); }}
+                          disabled={isSaving}
+                          className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 disabled:opacity-50"
+                        >
+                          Odebrat video
+                        </button>
+                        <button
+                          onClick={() => setInlineEdit(null)}
+                          className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80"
+                        >
+                          Zrušit
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative w-full" style={{ maxHeight: "500px" }}>
+                      <video
+                        controls
+                        preload="metadata"
+                        playsInline
+                        className="w-full h-auto max-h-[500px] object-contain bg-black"
+                        poster={product.image || undefined}
+                      >
+                        <source src={product.videoUrl} type="video/mp4" />
+                        Váš prohlížeč nepodporuje přehrávání videa.
+                      </video>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className="bg-card border-2 border-dashed border-border rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                  onClick={() => { setInlineEdit("videoUrl"); setInlineValue(""); }}
+                >
+                  {inlineEdit === "videoUrl" ? (
+                    <div className="w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
+                      <p className="font-semibold text-foreground text-center">Přidat produktové video</p>
+                      <Input
+                        value={inlineValue}
+                        onChange={(e) => setInlineValue(e.target.value)}
+                        placeholder="https://example.com/video.mp4"
+                        className="w-full"
+                        autoFocus
+                      />
+                      <div className="flex gap-2 justify-center">
+                        <button
+                          onClick={() => handleInlineSave("videoUrl", inlineValue)}
+                          disabled={isSaving || !inlineValue}
+                          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          {isSaving ? "Ukládám..." : "Uložit"}
+                        </button>
+                        <button
+                          onClick={() => setInlineEdit(null)}
+                          className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80"
+                        >
+                          Zrušit
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                        <span className="text-3xl">🎬</span>
+                      </div>
+                      <p className="font-semibold text-foreground">Přidat produktové video</p>
+                      <p className="text-sm text-muted-foreground">Klikněte pro vložení URL odkazu na MP4 video</p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Three Column Layout: Alerts + Quick Actions + Pro prodejce */}
               <div className="grid 2xl:grid-cols-[1fr_1fr_minmax(500px,1.5fr)] xl:grid-cols-3 lg:grid-cols-2 gap-6">
@@ -2133,7 +2231,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             <div 
                               key={img._id} 
                               className="aspect-square rounded-lg overflow-hidden bg-white border cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                              onClick={() => img.url && handleOpenLightbox(index + galleryImageOffset)}
+                              onClick={() => img.url && handleOpenLightbox(index)}
                             >
                               {img.url ? (
                                 <Image
@@ -3846,62 +3944,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
             <div className="space-y-6">
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Galerie produktu</h1>
-                <p className="text-muted-foreground">Obrázky, video a marketingové materiály k tomuto produktu</p>
+                <p className="text-muted-foreground">Obrázky a marketingové materiály k tomuto produktu</p>
               </div>
-
-              {/* Video URL Section */}
-              {(inlineEdit === "videoUrl" && activeSection === "gallery") && (
-                <div className="bg-card border border-border rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                    <span className="text-xl">🎬</span>
-                    {product.videoUrl ? "Upravit video" : "Přidat produktové video"}
-                  </h3>
-                  <div className="space-y-3">
-                    <Input
-                      value={inlineValue}
-                      onChange={(e) => setInlineValue(e.target.value)}
-                      placeholder="https://example.com/video.mp4"
-                      className="w-full"
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleInlineSave("videoUrl", inlineValue)}
-                        disabled={isSaving || !inlineValue}
-                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-                      >
-                        {isSaving ? "Ukládám..." : "Uložit"}
-                      </button>
-                      {product.videoUrl && (
-                        <button
-                          onClick={() => { handleInlineSave("videoUrl", ""); }}
-                          disabled={isSaving}
-                          className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 disabled:opacity-50"
-                        >
-                          Odebrat video
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setInlineEdit(null)}
-                        className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80"
-                      >
-                        Zrušit
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Add video button (when no video exists and not editing) */}
-              {!product.videoUrl && inlineEdit !== "videoUrl" && (
-                <button
-                  onClick={() => { setInlineEdit("videoUrl"); setInlineValue(""); }}
-                  className="w-full bg-card border-2 border-dashed border-border rounded-xl p-4 flex items-center justify-center gap-2 text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors"
-                >
-                  <span className="text-xl">🎬</span>
-                  <span className="text-sm font-medium">Přidat produktové video</span>
-                </button>
-              )}
 
               {/* Upload Section */}
               <div className="bg-card border border-border rounded-xl p-6">
@@ -4017,67 +4061,24 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               <div className="bg-card border border-border rounded-xl p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                   <span className="text-xl">🖼️</span>
-                  Galerie ({lightboxMedia.length})
+                  Obrázky ({galleryImages?.length || 0})
                 </h3>
                 {galleryImages === undefined ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   </div>
-                ) : lightboxMedia.length === 0 ? (
+                ) : galleryImages.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <div className="text-4xl mb-3">📷</div>
-                    <p>Zatím žádné obrázky ani video. Nahrajte první pomocí formuláře výše.</p>
+                    <p>Zatím žádné obrázky. Nahrajte první pomocí formuláře výše.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {/* Video tile */}
-                    {product.videoUrl && (
-                      <div
-                        className="relative group rounded-xl overflow-hidden bg-black aspect-square cursor-pointer"
-                        onClick={() => handleOpenLightbox(0)}
-                      >
-                        <video
-                          src={product.videoUrl}
-                          preload="metadata"
-                          muted
-                          playsInline
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                          poster={product.image || undefined}
-                        />
-                        {/* Play icon overlay */}
-                        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                          <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                            <svg className="w-7 h-7 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                          </div>
-                        </div>
-                        {/* Label */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <p className="text-white text-xs truncate">Produktové video</p>
-                        </div>
-                        {/* Edit button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setInlineEdit("videoUrl");
-                            setInlineValue(product.videoUrl || "");
-                          }}
-                          className="absolute top-2 right-2 p-1.5 bg-white/80 text-gray-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
-                          title="Upravit video URL"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                    {/* Image tiles */}
                     {galleryImages.map((image, index) => (
                       <div
                         key={image._id}
                         className="relative group rounded-xl overflow-hidden bg-muted aspect-square cursor-pointer"
-                        onClick={() => image.url && handleOpenLightbox(index + galleryImageOffset)}
+                        onClick={() => image.url && handleOpenLightbox(index)}
                       >
                         {image.url ? (
                           <img
@@ -4359,7 +4360,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       </Dialog>
 
       {/* Gallery Lightbox */}
-      {lightboxOpen && lightboxMedia.length > 0 && (
+      {lightboxOpen && lightboxImages.length > 0 && (
         <div 
           className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center"
           onClick={() => setLightboxOpen(false)}
@@ -4376,11 +4377,11 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
 
           {/* Image counter */}
           <div className="absolute top-4 left-4 text-white/70 text-sm font-medium">
-            {lightboxIndex + 1} / {lightboxMedia.length}
+            {lightboxIndex + 1} / {lightboxImages.length}
           </div>
 
           {/* Previous button */}
-          {lightboxMedia.length > 1 && (
+          {lightboxImages.length > 1 && (
             <button
               onClick={(e) => { e.stopPropagation(); handleLightboxPrev(); }}
               className="absolute left-4 p-3 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all"
@@ -4391,33 +4392,20 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
             </button>
           )}
 
-          {/* Main content (image or video) */}
-          <div
+          {/* Main image */}
+          <div 
             className="max-w-[90vw] max-h-[85vh] flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
           >
-            {lightboxMedia[lightboxIndex]?.type === "video" ? (
-              <video
-                controls
-                autoPlay
-                preload="metadata"
-                playsInline
-                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-                poster={lightboxMedia[lightboxIndex]?.poster}
-              >
-                <source src={lightboxMedia[lightboxIndex]?.url} type="video/mp4" />
-              </video>
-            ) : (
-              <img
-                src={lightboxMedia[lightboxIndex]?.url}
-                alt=""
-                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-              />
-            )}
+            <img
+              src={lightboxImages[lightboxIndex]}
+              alt=""
+              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            />
           </div>
 
           {/* Next button */}
-          {lightboxMedia.length > 1 && (
+          {lightboxImages.length > 1 && (
             <button
               onClick={(e) => { e.stopPropagation(); handleLightboxNext(); }}
               className="absolute right-4 p-3 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all"
@@ -4429,27 +4417,19 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
           )}
 
           {/* Thumbnail strip */}
-          {lightboxMedia.length > 1 && (
+          {lightboxImages.length > 1 && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 bg-black/50 rounded-full max-w-[90vw] overflow-x-auto">
-              {lightboxMedia.map((item, idx) => (
+              {lightboxImages.map((img, idx) => (
                 <button
                   key={idx}
                   onClick={(e) => { e.stopPropagation(); setLightboxIndex(idx); }}
                   className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
-                    idx === lightboxIndex
-                      ? "border-white scale-110"
+                    idx === lightboxIndex 
+                      ? "border-white scale-110" 
                       : "border-transparent opacity-60 hover:opacity-100"
                   }`}
                 >
-                  {item.type === "video" ? (
-                    <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </div>
-                  ) : (
-                    <img src={item.url} alt="" className="w-full h-full object-cover" />
-                  )}
+                  <img src={img} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
