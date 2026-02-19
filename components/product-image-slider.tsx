@@ -96,12 +96,13 @@ export function ProductImageSlider({
   };
 
   return (
-    <div className={`flex flex-row ${className ?? ""}`}>
+    <div className={`flex flex-row gap-2 ${className ?? ""}`}>
       {/* Left: Vertical Thumbnails */}
-      <div className="flex flex-col gap-1.5 p-2 justify-center flex-shrink-0">
+      <div className="flex flex-col gap-1.5 py-2 justify-center flex-shrink-0">
         {visibleThumbnails.map((img, idx) => (
           <button
             key={idx}
+            onMouseEnter={() => setCurrentIndex(idx)}
             onClick={() => setCurrentIndex(idx)}
             className={`w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
               idx === currentIndex
@@ -119,6 +120,7 @@ export function ProductImageSlider({
         {/* +N indicator for remaining images */}
         {remainingCount > 0 && (
           <button
+            onMouseEnter={() => setCurrentIndex(maxThumbnails)}
             onClick={() => setCurrentIndex(maxThumbnails)}
             className="w-12 h-12 md:w-14 md:h-14 rounded-lg border-2 border-border bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground hover:border-muted-foreground hover:text-foreground transition-all flex-shrink-0"
           >
@@ -128,7 +130,7 @@ export function ProductImageSlider({
       </div>
 
       {/* Right: Main Image with Navigation Arrows */}
-      <div className="relative flex-1 bg-muted overflow-hidden group">
+      <div className="relative flex-1 min-w-0 bg-muted overflow-hidden group">
         {/* Main Image */}
         <div
           className="w-full h-full cursor-pointer"
