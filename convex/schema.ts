@@ -190,7 +190,19 @@ export default defineSchema({
     instructions: v.optional(v.string()), // quick reference - pokyny k akci
     tip: v.optional(v.string()), // quick tip for salespeople
     onlineBanners: v.optional(v.string()), // URLs or description of online banners
+    bannerFiles: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      filename: v.string(),
+      contentType: v.string(),
+      size: v.number(),
+    }))),
     printFlyers: v.optional(v.string()), // URLs or description of print flyers
+    flyerFiles: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      filename: v.string(),
+      contentType: v.string(),
+      size: v.number(),
+    }))),
     productIds: v.optional(v.array(v.id("products"))), // assigned products
     posmItemIds: v.optional(v.array(v.id("posmItems"))), // related POSM materials
     createdAt: v.number(),

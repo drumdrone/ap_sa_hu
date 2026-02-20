@@ -54,6 +54,9 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
   const updateTip = useMutation(api.opportunities.updateTip);
   const updateOnlineBanners = useMutation(api.opportunities.updateOnlineBanners);
   const updatePrintFlyers = useMutation(api.opportunities.updatePrintFlyers);
+  const generateUploadUrl = useMutation(api.opportunities.generateUploadUrl);
+  const saveOpportunityFile = useMutation(api.opportunities.saveOpportunityFile);
+  const deleteOpportunityFile = useMutation(api.opportunities.deleteOpportunityFile);
   const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
   
   // State for product search
@@ -73,6 +76,8 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
   const [bannersText, setBannersText] = useState("");
   const [isEditingFlyers, setIsEditingFlyers] = useState(false);
   const [flyersText, setFlyersText] = useState("");
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [isUploadingFlyer, setIsUploadingFlyer] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   
   // Event Sales Kit state
@@ -348,6 +353,60 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
     }
   };
   
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: "bannerFiles" | "flyerFiles"
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !opportunity) return;
+
+    const setUploading = field === "bannerFiles" ? setIsUploadingBanner : setIsUploadingFlyer;
+    setUploading(true);
+    try {
+      const uploadUrl = await generateUploadUrl();
+      const result = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await result.json();
+
+      await saveOpportunityFile({
+        opportunityId: opportunity._id,
+        field,
+        storageId,
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      });
+      setSaveMessage("Soubor nahrán!");
+      setTimeout(() => setSaveMessage(null), 2000);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleDeleteFile = async (
+    field: "bannerFiles" | "flyerFiles",
+    storageId: string
+  ) => {
+    if (!opportunity) return;
+    try {
+      await deleteOpportunityFile({
+        opportunityId: opportunity._id,
+        field,
+        storageId: storageId as any,
+      });
+      setSaveMessage("Soubor smazán!");
+      setTimeout(() => setSaveMessage(null), 2000);
+    } catch (error) {
+      console.error("Error deleting file:", error);
+    }
+  };
+
   // Cast products and posmItems to proper types
   const products = (opportunity?.products ?? []) as OpportunityProduct[];
   
@@ -927,7 +986,7 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
 
                     {/* Online Banners Card */}
                     <div className={`w-full rounded-xl transition-colors ${
-                      opportunity.onlineBanners
+                      opportunity.onlineBanners || (opportunity.bannerFiles && opportunity.bannerFiles.length > 0)
                         ? "bg-blue-50 border border-blue-200"
                         : "bg-gray-50 border-2 border-dashed border-gray-300"
                     }`}>
@@ -937,66 +996,166 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                             <p className="font-semibold text-foreground">🖼️ Online bannery</p>
                             <button onClick={() => setIsEditingBanners(false)} className="text-muted-foreground hover:text-foreground">✕</button>
                           </div>
+
+                          {/* File Upload Area */}
+                          <div className="space-y-2">
+                            <label className="block">
+                              <div className={`border-2 border-dashed border-blue-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors ${isUploadingBanner ? "opacity-50 pointer-events-none" : ""}`}>
+                                <input
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  className="hidden"
+                                  onChange={(e) => handleFileUpload(e, "bannerFiles")}
+                                />
+                                {isUploadingBanner ? (
+                                  <div className="flex items-center justify-center gap-2 text-blue-600">
+                                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    <span className="text-sm">Nahrávám...</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <svg className="w-8 h-8 mx-auto text-blue-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <p className="text-sm text-blue-600 font-medium">Klikněte pro nahrání souboru</p>
+                                    <p className="text-xs text-muted-foreground">Obrázky (JPG, PNG, WebP) nebo PDF</p>
+                                  </>
+                                )}
+                              </div>
+                            </label>
+
+                            {/* Uploaded Files */}
+                            {opportunity.bannerFiles && opportunity.bannerFiles.length > 0 && (
+                              <div className="space-y-2">
+                                {(opportunity.bannerFiles as Array<{ storageId: string; filename: string; contentType: string; size: number; url: string | null }>).map((file) => (
+                                  <div key={file.storageId} className="flex items-center gap-3 bg-white rounded-lg p-2 border border-blue-100">
+                                    {file.url && file.contentType.startsWith("image/") ? (
+                                      <img src={file.url} alt={file.filename} className="w-12 h-12 object-cover rounded" />
+                                    ) : (
+                                      <div className="w-12 h-12 bg-blue-100 rounded flex items-center justify-center">
+                                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{file.filename}</p>
+                                      <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                                    </div>
+                                    {file.url && (
+                                      <a href={file.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Otevřít">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteFile("bannerFiles", file.storageId)}
+                                      className="p-1.5 rounded hover:bg-red-100 text-red-500"
+                                      title="Smazat"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Text Description */}
                           <Textarea
                             value={bannersText}
                             onChange={(e) => setBannersText(e.target.value)}
                             placeholder="Vložte odkazy na bannery nebo popis..."
-                            className="w-full min-h-[150px] resize-none"
+                            className="w-full min-h-[100px] resize-none"
                           />
                           <Button onClick={handleSaveBanners} className="bg-blue-600 hover:bg-blue-700">
-                            Uložit
+                            Uložit popis
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-4 p-4">
-                          <button
-                            onClick={() => setIsEditingBanners(true)}
-                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                          >
-                            <div className="relative flex-shrink-0">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                                opportunity.onlineBanners ? "bg-blue-100" : "bg-gray-200"
-                              }`}>
-                                <span className="text-2xl">🖼️</span>
-                              </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">4</span>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-foreground flex items-center gap-2">
-                                Online bannery
-                                {opportunity.onlineBanners && (
-                                  <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">✓</span>
-                                )}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {opportunity.onlineBanners 
-                                  ? opportunity.onlineBanners.substring(0, 40) + (opportunity.onlineBanners.length > 40 ? "..." : "")
-                                  : "Odkazy na online bannery"}
-                              </p>
-                            </div>
-                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                          {opportunity.onlineBanners && (
+                        <div className="p-4">
+                          <div className="flex items-center gap-4">
                             <button
-                              onClick={() => addToSalesKit({
-                                id: "onlineBanners",
-                                type: "material",
-                                label: "Online bannery",
-                                content: opportunity.onlineBanners || ""
-                              })}
-                              className={`p-2 rounded-lg transition-colors ${
-                                isInSalesKit("onlineBanners")
-                                  ? "bg-green-500 text-white"
-                                  : "bg-blue-100 hover:bg-blue-200 text-blue-700"
-                              }`}
-                              title="Přidat do Event Kit"
+                              onClick={() => setIsEditingBanners(true)}
+                              className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              <div className="relative flex-shrink-0">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                  opportunity.onlineBanners || (opportunity.bannerFiles && opportunity.bannerFiles.length > 0) ? "bg-blue-100" : "bg-gray-200"
+                                }`}>
+                                  <span className="text-2xl">🖼️</span>
+                                </div>
+                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">4</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-foreground flex items-center gap-2">
+                                  Online bannery
+                                  {(opportunity.onlineBanners || (opportunity.bannerFiles && opportunity.bannerFiles.length > 0)) && (
+                                    <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">
+                                      {opportunity.bannerFiles && opportunity.bannerFiles.length > 0
+                                        ? `${opportunity.bannerFiles.length} ${opportunity.bannerFiles.length === 1 ? "soubor" : opportunity.bannerFiles.length < 5 ? "soubory" : "souborů"}`
+                                        : "✓"}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {opportunity.bannerFiles && opportunity.bannerFiles.length > 0
+                                    ? (opportunity.bannerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").substring(0, 50) + ((opportunity.bannerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").length > 50 ? "..." : "")
+                                    : opportunity.onlineBanners
+                                      ? opportunity.onlineBanners.substring(0, 40) + (opportunity.onlineBanners.length > 40 ? "..." : "")
+                                      : "Nahrát bannery nebo zadat odkazy"}
+                                </p>
+                              </div>
+                              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
                             </button>
+                            {(opportunity.onlineBanners || (opportunity.bannerFiles && opportunity.bannerFiles.length > 0)) && (
+                              <button
+                                onClick={() => addToSalesKit({
+                                  id: "onlineBanners",
+                                  type: "material",
+                                  label: "Online bannery",
+                                  content: opportunity.onlineBanners || (opportunity.bannerFiles ? `Soubory: ${(opportunity.bannerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ")}` : "")
+                                })}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  isInSalesKit("onlineBanners")
+                                    ? "bg-green-500 text-white"
+                                    : "bg-blue-100 hover:bg-blue-200 text-blue-700"
+                                }`}
+                                title="Přidat do Event Kit"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                          {/* File thumbnails preview in collapsed state */}
+                          {opportunity.bannerFiles && opportunity.bannerFiles.length > 0 && (
+                            <div className="flex gap-2 mt-3 ml-16 overflow-x-auto">
+                              {(opportunity.bannerFiles as Array<{ storageId: string; filename: string; contentType: string; url: string | null }>).map((file) => (
+                                <div key={file.storageId} className="flex-shrink-0">
+                                  {file.url && file.contentType.startsWith("image/") ? (
+                                    <a href={file.url} target="_blank" rel="noopener noreferrer">
+                                      <img src={file.url} alt={file.filename} className="w-16 h-16 object-cover rounded-lg border border-blue-200 hover:border-blue-400 transition-colors" />
+                                    </a>
+                                  ) : (
+                                    <a href={file.url || "#"} target="_blank" rel="noopener noreferrer" className="w-16 h-16 bg-blue-100 rounded-lg border border-blue-200 hover:border-blue-400 transition-colors flex items-center justify-center">
+                                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                      </svg>
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
                       )}
@@ -1004,7 +1163,7 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
 
                     {/* Print Flyers Card */}
                     <div className={`w-full rounded-xl transition-colors ${
-                      opportunity.printFlyers
+                      opportunity.printFlyers || (opportunity.flyerFiles && opportunity.flyerFiles.length > 0)
                         ? "bg-orange-50 border border-orange-200"
                         : "bg-gray-50 border-2 border-dashed border-gray-300"
                     }`}>
@@ -1014,66 +1173,166 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                             <p className="font-semibold text-foreground">📄 Tiskové letáky</p>
                             <button onClick={() => setIsEditingFlyers(false)} className="text-muted-foreground hover:text-foreground">✕</button>
                           </div>
+
+                          {/* File Upload Area */}
+                          <div className="space-y-2">
+                            <label className="block">
+                              <div className={`border-2 border-dashed border-orange-300 rounded-lg p-4 text-center cursor-pointer hover:border-orange-500 hover:bg-orange-50 transition-colors ${isUploadingFlyer ? "opacity-50 pointer-events-none" : ""}`}>
+                                <input
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  className="hidden"
+                                  onChange={(e) => handleFileUpload(e, "flyerFiles")}
+                                />
+                                {isUploadingFlyer ? (
+                                  <div className="flex items-center justify-center gap-2 text-orange-600">
+                                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    <span className="text-sm">Nahrávám...</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <svg className="w-8 h-8 mx-auto text-orange-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <p className="text-sm text-orange-600 font-medium">Klikněte pro nahrání souboru</p>
+                                    <p className="text-xs text-muted-foreground">Obrázky (JPG, PNG, WebP) nebo PDF</p>
+                                  </>
+                                )}
+                              </div>
+                            </label>
+
+                            {/* Uploaded Files */}
+                            {opportunity.flyerFiles && opportunity.flyerFiles.length > 0 && (
+                              <div className="space-y-2">
+                                {(opportunity.flyerFiles as Array<{ storageId: string; filename: string; contentType: string; size: number; url: string | null }>).map((file) => (
+                                  <div key={file.storageId} className="flex items-center gap-3 bg-white rounded-lg p-2 border border-orange-100">
+                                    {file.url && file.contentType.startsWith("image/") ? (
+                                      <img src={file.url} alt={file.filename} className="w-12 h-12 object-cover rounded" />
+                                    ) : (
+                                      <div className="w-12 h-12 bg-orange-100 rounded flex items-center justify-center">
+                                        <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{file.filename}</p>
+                                      <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                                    </div>
+                                    {file.url && (
+                                      <a href={file.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded hover:bg-orange-100 text-orange-600" title="Otevřít">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteFile("flyerFiles", file.storageId)}
+                                      className="p-1.5 rounded hover:bg-red-100 text-red-500"
+                                      title="Smazat"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Text Description */}
                           <Textarea
                             value={flyersText}
                             onChange={(e) => setFlyersText(e.target.value)}
                             placeholder="Vložte odkazy na letáky nebo popis..."
-                            className="w-full min-h-[150px] resize-none"
+                            className="w-full min-h-[100px] resize-none"
                           />
                           <Button onClick={handleSaveFlyers} className="bg-orange-600 hover:bg-orange-700">
-                            Uložit
+                            Uložit popis
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-4 p-4">
-                          <button
-                            onClick={() => setIsEditingFlyers(true)}
-                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                          >
-                            <div className="relative flex-shrink-0">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                                opportunity.printFlyers ? "bg-orange-100" : "bg-gray-200"
-                              }`}>
-                                <span className="text-2xl">📄</span>
-                              </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">5</span>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-foreground flex items-center gap-2">
-                                Tiskové letáky
-                                {opportunity.printFlyers && (
-                                  <span className="text-xs bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full">✓</span>
-                                )}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {opportunity.printFlyers 
-                                  ? opportunity.printFlyers.substring(0, 40) + (opportunity.printFlyers.length > 40 ? "..." : "")
-                                  : "Odkazy na tiskové letáky"}
-                              </p>
-                            </div>
-                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                          {opportunity.printFlyers && (
+                        <div className="p-4">
+                          <div className="flex items-center gap-4">
                             <button
-                              onClick={() => addToSalesKit({
-                                id: "printFlyers",
-                                type: "material",
-                                label: "Tiskové letáky",
-                                content: opportunity.printFlyers || ""
-                              })}
-                              className={`p-2 rounded-lg transition-colors ${
-                                isInSalesKit("printFlyers")
-                                  ? "bg-green-500 text-white"
-                                  : "bg-orange-100 hover:bg-orange-200 text-orange-700"
-                              }`}
-                              title="Přidat do Event Kit"
+                              onClick={() => setIsEditingFlyers(true)}
+                              className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              <div className="relative flex-shrink-0">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                  opportunity.printFlyers || (opportunity.flyerFiles && opportunity.flyerFiles.length > 0) ? "bg-orange-100" : "bg-gray-200"
+                                }`}>
+                                  <span className="text-2xl">📄</span>
+                                </div>
+                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">5</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-foreground flex items-center gap-2">
+                                  Tiskové letáky
+                                  {(opportunity.printFlyers || (opportunity.flyerFiles && opportunity.flyerFiles.length > 0)) && (
+                                    <span className="text-xs bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full">
+                                      {opportunity.flyerFiles && opportunity.flyerFiles.length > 0
+                                        ? `${opportunity.flyerFiles.length} ${opportunity.flyerFiles.length === 1 ? "soubor" : opportunity.flyerFiles.length < 5 ? "soubory" : "souborů"}`
+                                        : "✓"}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {opportunity.flyerFiles && opportunity.flyerFiles.length > 0
+                                    ? (opportunity.flyerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").substring(0, 50) + ((opportunity.flyerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").length > 50 ? "..." : "")
+                                    : opportunity.printFlyers
+                                      ? opportunity.printFlyers.substring(0, 40) + (opportunity.printFlyers.length > 40 ? "..." : "")
+                                      : "Nahrát letáky nebo zadat odkazy"}
+                                </p>
+                              </div>
+                              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
                             </button>
+                            {(opportunity.printFlyers || (opportunity.flyerFiles && opportunity.flyerFiles.length > 0)) && (
+                              <button
+                                onClick={() => addToSalesKit({
+                                  id: "printFlyers",
+                                  type: "material",
+                                  label: "Tiskové letáky",
+                                  content: opportunity.printFlyers || (opportunity.flyerFiles ? `Soubory: ${(opportunity.flyerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ")}` : "")
+                                })}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  isInSalesKit("printFlyers")
+                                    ? "bg-green-500 text-white"
+                                    : "bg-orange-100 hover:bg-orange-200 text-orange-700"
+                                }`}
+                                title="Přidat do Event Kit"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                          {/* File thumbnails preview in collapsed state */}
+                          {opportunity.flyerFiles && opportunity.flyerFiles.length > 0 && (
+                            <div className="flex gap-2 mt-3 ml-16 overflow-x-auto">
+                              {(opportunity.flyerFiles as Array<{ storageId: string; filename: string; contentType: string; url: string | null }>).map((file) => (
+                                <div key={file.storageId} className="flex-shrink-0">
+                                  {file.url && file.contentType.startsWith("image/") ? (
+                                    <a href={file.url} target="_blank" rel="noopener noreferrer">
+                                      <img src={file.url} alt={file.filename} className="w-16 h-16 object-cover rounded-lg border border-orange-200 hover:border-orange-400 transition-colors" />
+                                    </a>
+                                  ) : (
+                                    <a href={file.url || "#"} target="_blank" rel="noopener noreferrer" className="w-16 h-16 bg-orange-100 rounded-lg border border-orange-200 hover:border-orange-400 transition-colors flex items-center justify-center">
+                                      <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                      </svg>
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
                       )}

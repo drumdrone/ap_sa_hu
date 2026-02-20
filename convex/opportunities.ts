@@ -151,10 +151,26 @@ export const getBySlug = query({
       }
     }
     
+    // Resolve file URLs for banners and flyers
+    const bannerFilesWithUrls = await Promise.all(
+      (opportunity.bannerFiles || []).map(async (file) => ({
+        ...file,
+        url: await ctx.storage.getUrl(file.storageId),
+      }))
+    );
+    const flyerFilesWithUrls = await Promise.all(
+      (opportunity.flyerFiles || []).map(async (file) => ({
+        ...file,
+        url: await ctx.storage.getUrl(file.storageId),
+      }))
+    );
+
     return {
       ...opportunity,
       products,
       posmItems,
+      bannerFiles: bannerFilesWithUrls,
+      flyerFiles: flyerFilesWithUrls,
     };
   },
 });
@@ -249,6 +265,69 @@ export const updatePrintFlyers = mutation({
     await ctx.db.patch(args.opportunityId, {
       printFlyers: args.printFlyers,
     });
+    return { success: true };
+  },
+});
+
+// Generate upload URL for opportunity files
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Save uploaded file to opportunity (banners or flyers)
+export const saveOpportunityFile = mutation({
+  args: {
+    opportunityId: v.id("opportunities"),
+    field: v.union(v.literal("bannerFiles"), v.literal("flyerFiles")),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const opportunity = await ctx.db.get(args.opportunityId);
+    if (!opportunity) throw new Error("Příležitost nenalezena");
+
+    const currentFiles = opportunity[args.field] || [];
+    const newFile = {
+      storageId: args.storageId,
+      filename: args.filename,
+      contentType: args.contentType,
+      size: args.size,
+    };
+
+    await ctx.db.patch(args.opportunityId, {
+      [args.field]: [...currentFiles, newFile],
+    });
+    return { success: true };
+  },
+});
+
+// Delete uploaded file from opportunity
+export const deleteOpportunityFile = mutation({
+  args: {
+    opportunityId: v.id("opportunities"),
+    field: v.union(v.literal("bannerFiles"), v.literal("flyerFiles")),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const opportunity = await ctx.db.get(args.opportunityId);
+    if (!opportunity) throw new Error("Příležitost nenalezena");
+
+    const currentFiles = opportunity[args.field] || [];
+    const updatedFiles = currentFiles.filter(
+      (f: { storageId: string }) => f.storageId !== args.storageId
+    );
+
+    await ctx.db.patch(args.opportunityId, {
+      [args.field]: updatedFiles,
+    });
+
+    // Delete from storage
+    await ctx.storage.delete(args.storageId);
     return { success: true };
   },
 });
