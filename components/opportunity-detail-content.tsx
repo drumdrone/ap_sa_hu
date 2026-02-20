@@ -625,6 +625,34 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                                 productUrl: product.productUrl,
                               });
                             });
+                            // Add banners with download links
+                            if (opportunity.onlineBanners || (opportunity.bannerFiles && opportunity.bannerFiles.length > 0)) {
+                              const bannerFileLines = (opportunity.bannerFiles as Array<{ filename: string; url: string | null }> || [])
+                                .map(f => f.url ? `${f.filename}: ${f.url}` : f.filename);
+                              const bannerParts: string[] = [];
+                              if (opportunity.onlineBanners) bannerParts.push(opportunity.onlineBanners);
+                              if (bannerFileLines.length > 0) bannerParts.push(bannerFileLines.join("\n"));
+                              addToSalesKit({
+                                id: "onlineBanners",
+                                type: "material",
+                                label: "Online bannery",
+                                content: bannerParts.join("\n\n") || "Bannery bez odkazů",
+                              });
+                            }
+                            // Add flyers with download links
+                            if (opportunity.printFlyers || (opportunity.flyerFiles && opportunity.flyerFiles.length > 0)) {
+                              const flyerFileLines = (opportunity.flyerFiles as Array<{ filename: string; url: string | null }> || [])
+                                .map(f => f.url ? `${f.filename}: ${f.url}` : f.filename);
+                              const flyerParts: string[] = [];
+                              if (opportunity.printFlyers) flyerParts.push(opportunity.printFlyers);
+                              if (flyerFileLines.length > 0) flyerParts.push(flyerFileLines.join("\n"));
+                              addToSalesKit({
+                                id: "printFlyers",
+                                type: "material",
+                                label: "Tiskové letáky",
+                                content: flyerParts.join("\n\n") || "Letáky bez odkazů",
+                              });
+                            }
                             setSaveMessage("Všechny materiály přidány do Event Kit!");
                             setTimeout(() => setSaveMessage(null), 2000);
                           }}
@@ -1043,7 +1071,11 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                                     )}
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm font-medium truncate">{file.filename}</p>
-                                      <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                                      {file.url ? (
+                                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate block">{file.url}</a>
+                                      ) : (
+                                        <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                                      )}
                                     </div>
                                     {file.url && (
                                       <a href={file.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Otevřít">
@@ -1106,7 +1138,7 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                                 </p>
                                 <p className="text-sm text-muted-foreground">
                                   {opportunity.bannerFiles && opportunity.bannerFiles.length > 0
-                                    ? (opportunity.bannerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").substring(0, 50) + ((opportunity.bannerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").length > 50 ? "..." : "")
+                                    ? (opportunity.bannerFiles as Array<{ filename: string; url: string | null }>).map(f => f.url ? `${f.filename} (odkaz)` : f.filename).join(", ").substring(0, 60) + ((opportunity.bannerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").length > 60 ? "..." : "")
                                     : opportunity.onlineBanners
                                       ? opportunity.onlineBanners.substring(0, 40) + (opportunity.onlineBanners.length > 40 ? "..." : "")
                                       : "Nahrát bannery nebo zadat odkazy"}
@@ -1118,12 +1150,19 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                             </button>
                             {(opportunity.onlineBanners || (opportunity.bannerFiles && opportunity.bannerFiles.length > 0)) && (
                               <button
-                                onClick={() => addToSalesKit({
-                                  id: "onlineBanners",
-                                  type: "material",
-                                  label: "Online bannery",
-                                  content: opportunity.onlineBanners || (opportunity.bannerFiles ? `Soubory: ${(opportunity.bannerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ")}` : "")
-                                })}
+                                onClick={() => {
+                                  const fileLines = (opportunity.bannerFiles as Array<{ filename: string; url: string | null }> || [])
+                                    .map(f => f.url ? `${f.filename}: ${f.url}` : f.filename);
+                                  const textParts: string[] = [];
+                                  if (opportunity.onlineBanners) textParts.push(opportunity.onlineBanners);
+                                  if (fileLines.length > 0) textParts.push(fileLines.join("\n"));
+                                  addToSalesKit({
+                                    id: "onlineBanners",
+                                    type: "material",
+                                    label: "Online bannery",
+                                    content: textParts.join("\n\n") || "Bannery bez odkazů",
+                                  });
+                                }}
                                 className={`p-2 rounded-lg transition-colors ${
                                   isInSalesKit("onlineBanners")
                                     ? "bg-green-500 text-white"
@@ -1220,7 +1259,11 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                                     )}
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm font-medium truncate">{file.filename}</p>
-                                      <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                                      {file.url ? (
+                                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-xs text-orange-600 hover:underline truncate block">{file.url}</a>
+                                      ) : (
+                                        <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                                      )}
                                     </div>
                                     {file.url && (
                                       <a href={file.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded hover:bg-orange-100 text-orange-600" title="Otevřít">
@@ -1283,7 +1326,7 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                                 </p>
                                 <p className="text-sm text-muted-foreground">
                                   {opportunity.flyerFiles && opportunity.flyerFiles.length > 0
-                                    ? (opportunity.flyerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").substring(0, 50) + ((opportunity.flyerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").length > 50 ? "..." : "")
+                                    ? (opportunity.flyerFiles as Array<{ filename: string; url: string | null }>).map(f => f.url ? `${f.filename} (odkaz)` : f.filename).join(", ").substring(0, 60) + ((opportunity.flyerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ").length > 60 ? "..." : "")
                                     : opportunity.printFlyers
                                       ? opportunity.printFlyers.substring(0, 40) + (opportunity.printFlyers.length > 40 ? "..." : "")
                                       : "Nahrát letáky nebo zadat odkazy"}
@@ -1295,12 +1338,19 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                             </button>
                             {(opportunity.printFlyers || (opportunity.flyerFiles && opportunity.flyerFiles.length > 0)) && (
                               <button
-                                onClick={() => addToSalesKit({
-                                  id: "printFlyers",
-                                  type: "material",
-                                  label: "Tiskové letáky",
-                                  content: opportunity.printFlyers || (opportunity.flyerFiles ? `Soubory: ${(opportunity.flyerFiles as Array<{ filename: string }>).map(f => f.filename).join(", ")}` : "")
-                                })}
+                                onClick={() => {
+                                  const fileLines = (opportunity.flyerFiles as Array<{ filename: string; url: string | null }> || [])
+                                    .map(f => f.url ? `${f.filename}: ${f.url}` : f.filename);
+                                  const textParts: string[] = [];
+                                  if (opportunity.printFlyers) textParts.push(opportunity.printFlyers);
+                                  if (fileLines.length > 0) textParts.push(fileLines.join("\n"));
+                                  addToSalesKit({
+                                    id: "printFlyers",
+                                    type: "material",
+                                    label: "Tiskové letáky",
+                                    content: textParts.join("\n\n") || "Letáky bez odkazů",
+                                  });
+                                }}
                                 className={`p-2 rounded-lg transition-colors ${
                                   isInSalesKit("printFlyers")
                                     ? "bg-green-500 text-white"
@@ -1581,6 +1631,9 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{item.label}</p>
                   {item.sku && <p className="text-xs text-muted-foreground">SKU: {item.sku}</p>}
+                  {item.content && !item.sku && (
+                    <p className="text-xs text-muted-foreground truncate">{item.content.substring(0, 80)}{item.content.length > 80 ? "..." : ""}</p>
+                  )}
                 </div>
                 <button
                   onClick={() => removeFromSalesKit(item.id)}
