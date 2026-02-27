@@ -26,10 +26,10 @@
 
 ## URL adresy
 
-| Prostředí  | URL                                     | Git branch | Convex deployment |
-|------------|-----------------------------------------|------------|-------------------|
-| Production | https://apsahu.netlify.app              | `main`     | production        |
-| Staging    | https://staging--apsahu.netlify.app     | `staging`  | staging (dev)     |
+| Prostředí  | URL                                     | Git branch | Convex deployment | Convex URL |
+|------------|-----------------------------------------|------------|-------------------|------------|
+| Production | https://apsahu.netlify.app              | `main`     | `prod:exuberant-koala-3` | `https://exuberant-koala-3.eu-west-1.convex.cloud` |
+| Staging    | https://staging--apsahu.netlify.app     | `staging`  | `dev:quirky-wolverine-818` | `https://quirky-wolverine-818.convex.cloud` |
 
 ## Jak to funguje
 
@@ -54,7 +54,7 @@ Netlify automaticky deployuje branch `staging` na subdoménu `staging--apsahu.ne
 
 ```bash
 # V terminálu projektu:
-npx convex deploy --cmd "npm run build" --project <your-project-name>
+npx convex deploy --cmd "npm run build" --project ap_sa_hu
 ```
 
 Nebo v Convex dashboardu:
@@ -62,20 +62,20 @@ Nebo v Convex dashboardu:
 2. Vyberte váš projekt
 3. Klikněte na **"Deployments"** → **"Create deployment"**
 4. Pojmenujte ho např. `staging`
-5. Poznamenejte si staging URL (např. `https://your-project-staging.convex.cloud`)
+5. Poznamenejte si staging URL (např. `https://quirky-wolverine-818.convex.cloud`)
 
 ### Krok 2: Nastavte environment variables v Netlify
 
 1. Jděte do Netlify dashboardu → Site settings → Environment variables
 2. Nastavte pro **branch `main`** (Production):
    ```
-   NEXT_PUBLIC_CONVEX_URL = https://your-project.convex.cloud
-   CONVEX_DEPLOYMENT = prod:your-project
+   NEXT_PUBLIC_CONVEX_URL = https://exuberant-koala-3.eu-west-1.convex.cloud
+   CONVEX_DEPLOYMENT = prod:exuberant-koala-3
    ```
 3. Nastavte pro **branch `staging`** (Staging):
    ```
-   NEXT_PUBLIC_CONVEX_URL = https://your-project-staging.convex.cloud
-   CONVEX_DEPLOYMENT = dev:your-project
+   NEXT_PUBLIC_CONVEX_URL = https://quirky-wolverine-818.convex.cloud
+   CONVEX_DEPLOYMENT = dev:quirky-wolverine-818
    ```
 
 > **Důležité:** V Netlify UI můžete u každé proměnné nastavit "Scopes" —
@@ -102,7 +102,7 @@ git push -u origin staging
 
 ```bash
 # Přepněte se na staging Convex deployment
-npx convex dev --deployment dev:your-project
+npx convex dev --deployment dev:quirky-wolverine-818
 
 # Importujte seed data
 npx convex import --table products convex/seed/products/documents.jsonl
@@ -163,10 +163,10 @@ Když měníte Convex schema nebo funkce (soubory v `/convex/`):
 
 ```bash
 # Deploy na staging
-npx convex deploy --deployment dev:your-project --cmd "npm run build"
+npx convex deploy --deployment dev:quirky-wolverine-818 --cmd "npm run build"
 
 # Deploy na produkci (až po otestování!)
-npx convex deploy --deployment prod:your-project --cmd "npm run build"
+npx convex deploy --deployment prod:exuberant-koala-3 --cmd "npm run build"
 ```
 
 **Pozor:** Convex backend se deployuje odděleně od Netlify frontendu. Pokud měníte schema, musíte deployment provést ručně (nebo nastavit CI/CD).
@@ -202,10 +202,10 @@ Convex nepodporuje automatický rollback, ale můžete:
 
 ```bash
 # Export z produkce
-npx convex export --deployment prod:your-project --path ./backup
+npx convex export --deployment prod:exuberant-koala-3 --path ./backup
 
 # Import do stagingu
-npx convex import --deployment dev:your-project --path ./backup
+npx convex import --deployment dev:quirky-wolverine-818 --path ./backup
 ```
 
 ### Co když se staging rozbije?
