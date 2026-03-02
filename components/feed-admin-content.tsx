@@ -28,6 +28,15 @@ export function FeedAdminContent() {
   const marketingBackups = useQuery(api.feedImport.listMarketingBackups);
   const deleteOrphaned = useMutation(api.feedImport.deleteOrphanedProducts);
   const restoreBackup = useMutation(api.feedImport.restoreBackupToProduct);
+  const restoreAllBackups = useMutation(api.feedImport.restoreAllBackups);
+
+  // State for restore all
+  const [isRestoringAll, setIsRestoringAll] = useState(false);
+  const [restoreAllResult, setRestoreAllResult] = useState<string | null>(null);
+
+  // State for restore from seed
+  const [isRestoringFromSeed, setIsRestoringFromSeed] = useState(false);
+  const [restoreFromSeedResult, setRestoreFromSeedResult] = useState<string | null>(null);
 
   // State for orphaned products cleanup
   const [isCheckingOrphans, setIsCheckingOrphans] = useState(false);
@@ -144,6 +153,74 @@ export function FeedAdminContent() {
           </CardContent>
         </Card>
 
+        {/* Restore Marketing Data from Seed */}
+        {syncStatus && syncStatus.withMarketingData === 0 && (
+          <Card className="mb-6 border-red-200 bg-red-50/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-red-800">
+                <AlertCircle className="w-5 h-5" />
+                Marketingová data chybí
+              </CardTitle>
+              <CardDescription>
+                Žádný produkt nemá marketingová data. Můžete je obnovit z exportu (seed dat uložených v repozitáři).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={async () => {
+                    if (!confirm("Obnovit marketingová data ze seed exportu? Toto nahraje uložená data zpět na produkty odpovídající SKU.")) return;
+                    setIsRestoringFromSeed(true);
+                    setRestoreFromSeedResult(null);
+                    try {
+                      const res = await fetch("/api/sync-feed", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "restoreFromSeed" }),
+                      });
+                      const data = await res.json();
+                      if (data.error) {
+                        setRestoreFromSeedResult(`Chyba: ${data.details || data.error}`);
+                      } else {
+                        setRestoreFromSeedResult(
+                          `Obnoveno ${data.restored} produktů ze ${data.seedProductsFound} nalezených v seed datech${data.notFound > 0 ? `, ${data.notFound} SKU nenalezeno v databázi` : ""}`
+                        );
+                      }
+                    } catch (error) {
+                      setRestoreFromSeedResult(`Chyba: ${error}`);
+                    } finally {
+                      setIsRestoringFromSeed(false);
+                    }
+                  }}
+                  disabled={isRestoringFromSeed}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {isRestoringFromSeed ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji ze seed dat...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit marketingová data ze seed exportu
+                    </>
+                  )}
+                </Button>
+              </div>
+              {restoreFromSeedResult && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  restoreFromSeedResult.startsWith("Chyba")
+                    ? "bg-red-100 border border-red-300 text-red-800"
+                    : "bg-green-50 border border-green-200 text-green-800"
+                }`}>
+                  {restoreFromSeedResult}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Backup Stats & Restore */}
         {backupStats && (backupStats.marketingBackups > 0 || backupStats.galleryBackups > 0) && (
           <Card className="mb-6 border-amber-200 bg-amber-50/50">
@@ -170,6 +247,46 @@ export function FeedAdminContent() {
                   <div className="text-2xl font-bold text-amber-700">{backupStats.galleryBackups}</div>
                   <div className="text-sm text-amber-600">Obrázků v galerii</div>
                 </div>
+              </div>
+
+              {/* Restore All button */}
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={async () => {
+                    if (!confirm("Obnovit všechna marketingová data ze záloh? Toto přepíše aktuální marketingová data na produktech odpovídajících SKU.")) return;
+                    setIsRestoringAll(true);
+                    setRestoreAllResult(null);
+                    try {
+                      const result = await restoreAllBackups({});
+                      setRestoreAllResult(`Obnoveno ${result.restored} produktů${result.notFound > 0 ? `, ${result.notFound} SKU nenalezeno` : ""}`);
+                    } catch (error) {
+                      setRestoreAllResult(`Chyba: ${error}`);
+                    } finally {
+                      setIsRestoringAll(false);
+                    }
+                  }}
+                  disabled={isRestoringAll}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {isRestoringAll ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji všechna data...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit všechny zálohy
+                    </>
+                  )}
+                </Button>
+                {restoreAllResult && (
+                  <span className={`text-sm ${
+                    restoreAllResult.startsWith("Chyba") ? "text-red-600" : "text-green-600"
+                  }`}>
+                    {restoreAllResult}
+                  </span>
+                )}
               </div>
 
               {/* Backup list and restore UI */}
