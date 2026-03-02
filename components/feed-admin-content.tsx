@@ -28,6 +28,11 @@ export function FeedAdminContent() {
   const marketingBackups = useQuery(api.feedImport.listMarketingBackups);
   const deleteOrphaned = useMutation(api.feedImport.deleteOrphanedProducts);
   const restoreBackup = useMutation(api.feedImport.restoreBackupToProduct);
+  const restoreAllBackups = useMutation(api.feedImport.restoreAllBackups);
+
+  // State for restore all
+  const [isRestoringAll, setIsRestoringAll] = useState(false);
+  const [restoreAllResult, setRestoreAllResult] = useState<string | null>(null);
 
   // State for orphaned products cleanup
   const [isCheckingOrphans, setIsCheckingOrphans] = useState(false);
@@ -170,6 +175,46 @@ export function FeedAdminContent() {
                   <div className="text-2xl font-bold text-amber-700">{backupStats.galleryBackups}</div>
                   <div className="text-sm text-amber-600">Obrázků v galerii</div>
                 </div>
+              </div>
+
+              {/* Restore All button */}
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={async () => {
+                    if (!confirm("Obnovit všechna marketingová data ze záloh? Toto přepíše aktuální marketingová data na produktech odpovídajících SKU.")) return;
+                    setIsRestoringAll(true);
+                    setRestoreAllResult(null);
+                    try {
+                      const result = await restoreAllBackups({});
+                      setRestoreAllResult(`Obnoveno ${result.restored} produktů${result.notFound > 0 ? `, ${result.notFound} SKU nenalezeno` : ""}`);
+                    } catch (error) {
+                      setRestoreAllResult(`Chyba: ${error}`);
+                    } finally {
+                      setIsRestoringAll(false);
+                    }
+                  }}
+                  disabled={isRestoringAll}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {isRestoringAll ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji všechna data...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit všechny zálohy
+                    </>
+                  )}
+                </Button>
+                {restoreAllResult && (
+                  <span className={`text-sm ${
+                    restoreAllResult.startsWith("Chyba") ? "text-red-600" : "text-green-600"
+                  }`}>
+                    {restoreAllResult}
+                  </span>
+                )}
               </div>
 
               {/* Backup list and restore UI */}
