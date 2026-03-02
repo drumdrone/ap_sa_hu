@@ -784,3 +784,85 @@ export const findBySkus = mutation({
     return products;
   },
 });
+
+// Restore marketing data from seed export - matches by externalId (SKU)
+export const restoreMarketingFromSeed = mutation({
+  args: {
+    products: v.array(v.object({
+      externalId: v.string(),
+      category: v.optional(v.union(
+        v.literal("Bylinný"),
+        v.literal("Funkční"),
+        v.literal("Dětský"),
+        v.literal("BIO")
+      )),
+      salesClaim: v.optional(v.string()),
+      salesClaimSubtitle: v.optional(v.string()),
+      whyBuy: v.optional(v.array(v.object({ icon: v.string(), text: v.string() }))),
+      targetAudience: v.optional(v.string()),
+      pdfUrl: v.optional(v.string()),
+      bannerUrls: v.optional(v.array(v.object({ size: v.string(), url: v.string() }))),
+      socialFacebook: v.optional(v.string()),
+      socialInstagram: v.optional(v.string()),
+      socialFacebookImage: v.optional(v.string()),
+      socialInstagramImage: v.optional(v.string()),
+      hashtags: v.optional(v.array(v.string())),
+      brandPillar: v.optional(v.union(
+        v.literal("Věda"),
+        v.literal("BIO"),
+        v.literal("Funkce"),
+        v.literal("Tradice"),
+        v.literal("Rodina")
+      )),
+      tier: v.optional(v.union(v.literal("A"), v.literal("B"), v.literal("C"))),
+      quickReferenceCard: v.optional(v.string()),
+      faq: v.optional(v.array(v.object({ question: v.string(), answer: v.string() }))),
+      faqText: v.optional(v.string()),
+      salesForecast: v.optional(v.string()),
+      sensoryProfile: v.optional(v.string()),
+      seasonalOpportunities: v.optional(v.string()),
+      mainBenefits: v.optional(v.string()),
+      herbComposition: v.optional(v.string()),
+      competitionComparison: v.optional(v.string()),
+      articleUrls: v.optional(v.array(v.object({ title: v.string(), url: v.string() }))),
+      isTop: v.optional(v.boolean()),
+      topOrder: v.optional(v.number()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    let restored = 0;
+    let notFound = 0;
+
+    for (const seedProduct of args.products) {
+      const existing = await ctx.db
+        .query("products")
+        .withIndex("by_externalId", (q) => q.eq("externalId", seedProduct.externalId))
+        .first();
+
+      if (!existing) {
+        console.log(`Product not found for SKU: ${seedProduct.externalId}`);
+        notFound++;
+        continue;
+      }
+
+      // Build update object with only defined fields
+      const updates: Record<string, unknown> = {};
+      const { externalId: _, ...marketingFields } = seedProduct;
+      for (const [key, value] of Object.entries(marketingFields)) {
+        if (value !== undefined) {
+          updates[key] = value;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        updates.marketingLastUpdated = Date.now();
+        updates.lastUpdatedField = "restored_from_seed";
+        await ctx.db.patch(existing._id, updates);
+        restored++;
+        console.log(`Restored marketing data for SKU: ${seedProduct.externalId} (${existing.name})`);
+      }
+    }
+
+    return { restored, notFound };
+  },
+});
