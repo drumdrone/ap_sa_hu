@@ -1,0 +1,50 @@
+# =============================================================================
+# Netlify Configuration — Staging & Production Environment
+# =============================================================================
+#
+# PRODUCTION:  main branch    → https://apsahu.netlify.app
+# STAGING:     staging branch → https://staging--apsahu.netlify.app
+#
+# =============================================================================
+
+# --- Production build (main branch) -----------------------------------------
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Next.js on Netlify requires the Next.js Runtime plugin
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# --- Branch deploys ----------------------------------------------------------
+# Netlify automatically deploys these branches to subdomains:
+#   staging → https://staging--apsahu.netlify.app
+[build.environment]
+  # Default environment (production)
+  NODE_VERSION = "20"
+
+# --- Staging branch-specific overrides ---------------------------------------
+[context.staging]
+  command = "npm run build"
+  [context.staging.environment]
+    # Staging uses the DEV Convex deployment — separate database!
+    # These values must also be set in Netlify UI > Site settings > Environment variables
+    # with the context set to "staging" branch
+    NEXT_PUBLIC_CONVEX_URL = "https://quirky-wolverine-818.convex.cloud"
+    NEXT_PUBLIC_ENVIRONMENT = "staging"
+
+# --- Production branch-specific overrides ------------------------------------
+[context.production]
+  command = "npm run build"
+  [context.production.environment]
+    # Production uses the PROD Convex deployment
+    NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
+    NEXT_PUBLIC_ENVIRONMENT = "production"
+
+# --- Headers -----------------------------------------------------------------
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

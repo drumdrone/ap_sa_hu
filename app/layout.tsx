@@ -3,6 +3,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { EnvironmentBanner } from "@/components/environment-banner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -25,6 +26,7 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased`}
         suppressHydrationWarning={true}
       >
+        <EnvironmentBanner />
         <ConvexClientProvider>
           {children}
         </ConvexClientProvider>
