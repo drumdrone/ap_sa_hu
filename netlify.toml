@@ -30,7 +30,7 @@
     # Staging uses the DEV Convex deployment — separate database!
     # These values must also be set in Netlify UI > Site settings > Environment variables
     # with the context set to "staging" branch
-    NEXT_PUBLIC_CONVEX_URL = "https://quirky-wolverine-818.convex.cloud"
+    NEXT_PUBLIC_CONVEX_URL = "https://quirky-wolverine-818.eu-west-1.convex.cloud"
     NEXT_PUBLIC_ENVIRONMENT = "staging"
 
 # --- Production branch-specific overrides ------------------------------------
