@@ -33,23 +33,58 @@ export async function POST(request: Request) {
     // Handle restoreFromSeed action - restore marketing data from seed export
     if (body.action === "restoreFromSeed") {
       // Use pre-processed seed marketing data (bundled as JSON import)
-      const allProducts = [
+      const allSeedProducts = [
         ...seedMarketingData.productsWithMarketing,
         ...seedMarketingData.backupProducts,
       ]
 
-      if (allProducts.length === 0) {
+      if (allSeedProducts.length === 0) {
         return NextResponse.json({ restored: 0, notFound: 0, message: "No marketing data found in seed" })
       }
 
-      // Call mutation to restore
-      const restoreResult = await fetchMutation(api.products.restoreMarketingFromSeed, {
-        products: allProducts,
-      })
+      // Fetch all products from DB to match by externalId
+      const dbProducts = await fetchQuery(api.products.list, {})
+      const skuToId = new Map<string, string>()
+      for (const p of dbProducts) {
+        if (p.externalId) {
+          skuToId.set(p.externalId, p._id)
+        }
+      }
+
+      // Restore marketing data product by product using updateMarketingData
+      let restored = 0
+      let notFound = 0
+      for (const seedProduct of allSeedProducts) {
+        const productId = skuToId.get(seedProduct.externalId)
+        if (!productId) {
+          notFound++
+          continue
+        }
+
+        // Extract only fields supported by updateMarketingData
+        const skipFields = new Set(["externalId", "isTop", "topOrder", "whyBuy", "bannerUrls"])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateArgs: any = { id: productId }
+        for (const [key, value] of Object.entries(seedProduct)) {
+          if (!skipFields.has(key) && value !== undefined && value !== null) {
+            updateArgs[key] = value
+          }
+        }
+
+        if (Object.keys(updateArgs).length > 1) {
+          try {
+            await fetchMutation(api.products.updateMarketingData, updateArgs)
+            restored++
+          } catch (err) {
+            console.error(`Failed to restore SKU ${seedProduct.externalId}:`, err)
+          }
+        }
+      }
 
       return NextResponse.json({
-        ...restoreResult,
-        seedProductsFound: allProducts.length,
+        restored,
+        notFound,
+        seedProductsFound: allSeedProducts.length,
         backupsFound: seedMarketingData.totalBackups,
       })
     }
