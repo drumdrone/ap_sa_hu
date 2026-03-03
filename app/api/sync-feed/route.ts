@@ -52,48 +52,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ restored: 0, notFound: 0, message: "No marketing data found in seed" })
       }
 
-      // Fetch all products from DB to match by externalId
-      const dbProducts = await fetchQuery(api.products.list, {})
-      const skuToId = new Map<string, string>()
-      for (const p of dbProducts) {
-        if (p.externalId) {
-          skuToId.set(p.externalId, p._id)
-        }
-      }
+      // Use the Convex mutation that handles all fields including isTop/topOrder
+      // Process in batches to avoid payload size limits
+      const BATCH_SIZE = 20
+      let totalRestored = 0
+      let totalNotFound = 0
 
-      // Restore marketing data product by product using updateMarketingData
-      let restored = 0
-      let notFound = 0
-      for (const seedProduct of allSeedProducts) {
-        const productId = skuToId.get(seedProduct.externalId)
-        if (!productId) {
-          notFound++
-          continue
-        }
-
-        // Extract only fields supported by updateMarketingData
-        const skipFields = new Set(["externalId", "isTop", "topOrder", "whyBuy", "bannerUrls"])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updateArgs: any = { id: productId }
-        for (const [key, value] of Object.entries(seedProduct)) {
-          if (!skipFields.has(key) && value !== undefined && value !== null) {
-            updateArgs[key] = value
-          }
-        }
-
-        if (Object.keys(updateArgs).length > 1) {
-          try {
-            await fetchMutation(api.products.updateMarketingData, updateArgs)
-            restored++
-          } catch (err) {
-            console.error(`Failed to restore SKU ${seedProduct.externalId}:`, err)
-          }
-        }
+      for (let i = 0; i < allSeedProducts.length; i += BATCH_SIZE) {
+        const batch = allSeedProducts.slice(i, i + BATCH_SIZE)
+        const result = await fetchMutation(api.products.restoreMarketingFromSeed, {
+          products: batch,
+        })
+        totalRestored += result.restored
+        totalNotFound += result.notFound
       }
 
       return NextResponse.json({
-        restored,
-        notFound,
+        restored: totalRestored,
+        notFound: totalNotFound,
         seedProductsFound: allSeedProducts.length,
         backupsFound: seedMarketingData.totalBackups,
       })
