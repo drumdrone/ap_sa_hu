@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server"
 import { fetchAction, fetchQuery, fetchMutation } from "convex/nextjs"
 import { api } from "@/convex/_generated/api"
-import { readFileSync } from "fs"
-import { join } from "path"
+import seedMarketingData from "@/lib/seed-marketing-data.json"
 
 // Default feed URL (LuigisBox format)
 const DEFAULT_FEED_URL = "https://www.apotheke.cz/xml-feeds/apotheke-luigisbox-products.xml"
 
 export async function POST(request: Request) {
   try {
+    // Check that Convex URL is configured
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+    if (!convexUrl) {
+      console.error("NEXT_PUBLIC_CONVEX_URL is not set")
+      return NextResponse.json(
+        { error: "Convex not configured", details: "NEXT_PUBLIC_CONVEX_URL environment variable is missing" },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json().catch(() => ({}))
-    
+
     // Handle checkOrphans action - runs entirely on Convex server
     if (body.action === "checkOrphans") {
       const feedUrl = body.feedUrl || DEFAULT_FEED_URL
@@ -33,77 +42,36 @@ export async function POST(request: Request) {
     
     // Handle restoreFromSeed action - restore marketing data from seed export
     if (body.action === "restoreFromSeed") {
-      // Read seed products file
-      const seedPath = join(process.cwd(), "convex/seed/products/documents.jsonl")
-      const seedContent = readFileSync(seedPath, "utf-8")
-      const seedProducts = seedContent
-        .split("\n")
-        .filter((line: string) => line.trim())
-        .map((line: string) => JSON.parse(line))
-
-      // Marketing fields to extract
-      const marketingFields = [
-        "category", "salesClaim", "salesClaimSubtitle", "whyBuy", "targetAudience",
-        "pdfUrl", "bannerUrls", "socialFacebook", "socialInstagram", "socialFacebookImage",
-        "socialInstagramImage", "hashtags", "brandPillar", "tier", "quickReferenceCard",
-        "faq", "faqText", "salesForecast", "sensoryProfile", "seasonalOpportunities",
-        "mainBenefits", "herbComposition", "competitionComparison", "articleUrls",
-        "isTop", "topOrder"
+      // Use pre-processed seed marketing data (bundled as JSON import)
+      const allSeedProducts = [
+        ...seedMarketingData.productsWithMarketing,
+        ...seedMarketingData.backupProducts,
       ]
 
-      // Filter products that have marketing data AND a valid externalId
-      const productsWithMarketing = seedProducts
-        .filter((p: Record<string, unknown>) => {
-          if (!p.externalId) return false
-          return marketingFields.some((f) => p[f] !== undefined && p[f] !== null)
-        })
-        .map((p: Record<string, unknown>) => {
-          const result: Record<string, unknown> = { externalId: p.externalId }
-          for (const f of marketingFields) {
-            if (p[f] !== undefined && p[f] !== null) {
-              result[f] = p[f]
-            }
-          }
-          return result
-        })
-
-      // Also restore from marketingBackup seed
-      const backupPath = join(process.cwd(), "convex/seed/marketingBackup/documents.jsonl")
-      const backupContent = readFileSync(backupPath, "utf-8")
-      const backups = backupContent
-        .split("\n")
-        .filter((line: string) => line.trim())
-        .map((line: string) => JSON.parse(line))
-
-      // Add backup products that aren't already in the list
-      const existingSkus = new Set(productsWithMarketing.map((p: Record<string, unknown>) => p.externalId))
-      for (const backup of backups) {
-        if (backup.sku && !existingSkus.has(backup.sku)) {
-          const result: Record<string, unknown> = { externalId: backup.sku }
-          for (const f of marketingFields) {
-            if (backup[f] !== undefined && backup[f] !== null) {
-              result[f] = backup[f]
-            }
-          }
-          if (Object.keys(result).length > 1) {
-            productsWithMarketing.push(result)
-          }
-        }
-      }
-
-      if (productsWithMarketing.length === 0) {
+      if (allSeedProducts.length === 0) {
         return NextResponse.json({ restored: 0, notFound: 0, message: "No marketing data found in seed" })
       }
 
-      // Call mutation to restore
-      const restoreResult = await fetchMutation(api.products.restoreMarketingFromSeed, {
-        products: productsWithMarketing,
-      })
+      // Use the Convex mutation that handles all fields including isTop/topOrder
+      // Process in batches to avoid payload size limits
+      const BATCH_SIZE = 20
+      let totalRestored = 0
+      let totalNotFound = 0
+
+      for (let i = 0; i < allSeedProducts.length; i += BATCH_SIZE) {
+        const batch = allSeedProducts.slice(i, i + BATCH_SIZE)
+        const result = await fetchMutation(api.products.restoreMarketingFromSeed, {
+          products: batch,
+        })
+        totalRestored += result.restored
+        totalNotFound += result.notFound
+      }
 
       return NextResponse.json({
-        ...restoreResult,
-        seedProductsFound: productsWithMarketing.length,
-        backupsFound: backups.length,
+        restored: totalRestored,
+        notFound: totalNotFound,
+        seedProductsFound: allSeedProducts.length,
+        backupsFound: seedMarketingData.totalBackups,
       })
     }
 
@@ -118,17 +86,22 @@ export async function POST(request: Request) {
     
     return NextResponse.json(result)
   } catch (error) {
-    console.error("Feed sync error:", error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error("Feed sync error:", errorMessage, errorStack)
     return NextResponse.json(
-      { error: "Failed to sync feed", details: String(error) },
+      { error: "Failed to sync feed", details: errorMessage },
       { status: 500 }
     )
   }
 }
 
 export async function GET() {
-  return NextResponse.json({ 
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+  return NextResponse.json({
     message: "Use POST to trigger feed sync",
-    example: { limit: 100 }
+    example: { limit: 100 },
+    convexConfigured: !!convexUrl,
+    environment: process.env.NEXT_PUBLIC_ENVIRONMENT || "unknown",
   })
 }
