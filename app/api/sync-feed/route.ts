@@ -8,8 +8,18 @@ const DEFAULT_FEED_URL = "https://www.apotheke.cz/xml-feeds/apotheke-luigisbox-p
 
 export async function POST(request: Request) {
   try {
+    // Check that Convex URL is configured
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+    if (!convexUrl) {
+      console.error("NEXT_PUBLIC_CONVEX_URL is not set")
+      return NextResponse.json(
+        { error: "Convex not configured", details: "NEXT_PUBLIC_CONVEX_URL environment variable is missing" },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json().catch(() => ({}))
-    
+
     // Handle checkOrphans action - runs entirely on Convex server
     if (body.action === "checkOrphans") {
       const feedUrl = body.feedUrl || DEFAULT_FEED_URL
@@ -100,17 +110,22 @@ export async function POST(request: Request) {
     
     return NextResponse.json(result)
   } catch (error) {
-    console.error("Feed sync error:", error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error("Feed sync error:", errorMessage, errorStack)
     return NextResponse.json(
-      { error: "Failed to sync feed", details: String(error) },
+      { error: "Failed to sync feed", details: errorMessage },
       { status: 500 }
     )
   }
 }
 
 export async function GET() {
-  return NextResponse.json({ 
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+  return NextResponse.json({
     message: "Use POST to trigger feed sync",
-    example: { limit: 100 }
+    example: { limit: 100 },
+    convexConfigured: !!convexUrl,
+    environment: process.env.NEXT_PUBLIC_ENVIRONMENT || "unknown",
   })
 }
