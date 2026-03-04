@@ -154,15 +154,17 @@ export function FeedAdminContent() {
         </Card>
 
         {/* Restore Marketing Data from Seed */}
-        {syncStatus && syncStatus.withMarketingData === 0 && (
-          <Card className="mb-6 border-red-200 bg-red-50/50">
+        {syncStatus && (
+          <Card className={`mb-6 ${syncStatus.withMarketingData === 0 ? "border-red-200 bg-red-50/50" : "border-amber-200 bg-amber-50/50"}`}>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-red-800">
+              <CardTitle className={`flex items-center gap-2 ${syncStatus.withMarketingData === 0 ? "text-red-800" : "text-amber-800"}`}>
                 <AlertCircle className="w-5 h-5" />
-                Marketingová data chybí
+                {syncStatus.withMarketingData === 0 ? "Marketingová data chybí" : "Obnovit marketingová data"}
               </CardTitle>
               <CardDescription>
-                Žádný produkt nemá marketingová data. Můžete je obnovit z exportu (seed dat uložených v repozitáři).
+                {syncStatus.withMarketingData === 0
+                  ? "Žádný produkt nemá marketingová data. Můžete je obnovit z exportu (seed dat uložených v repozitáři)."
+                  : `${syncStatus.withMarketingData} z ${syncStatus.totalProducts} produktů má marketingová data. Můžete je znovu obnovit/aktualizovat ze seed exportu.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
