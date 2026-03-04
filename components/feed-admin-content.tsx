@@ -196,18 +196,22 @@ export function FeedAdminContent() {
                         }
                         return clean;
                       }).filter((p) => p.externalId);
-                      const BATCH_SIZE = 20;
+                      const BATCH_SIZE = 10;
                       let totalRestored = 0;
                       let totalNotFound = 0;
+                      const allErrors: string[] = [];
                       for (let i = 0; i < allSeedProducts.length; i += BATCH_SIZE) {
                         const batch = allSeedProducts.slice(i, i + BATCH_SIZE);
+                        setRestoreFromSeedResult(`Zpracovávám ${i + 1}-${Math.min(i + BATCH_SIZE, allSeedProducts.length)} z ${allSeedProducts.length}...`);
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const result = await restoreMarketingFromSeed({ products: batch as any });
                         totalRestored += result.restored;
                         totalNotFound += result.notFound;
+                        if (result.errors?.length) allErrors.push(...result.errors);
                       }
+                      const errMsg = allErrors.length > 0 ? ` | Chyby: ${allErrors.join("; ")}` : "";
                       setRestoreFromSeedResult(
-                        `Obnoveno ${totalRestored} produktů ze ${allSeedProducts.length} nalezených v seed datech${totalNotFound > 0 ? `, ${totalNotFound} SKU nenalezeno v databázi` : ""}`
+                        `Obnoveno ${totalRestored} produktů ze ${allSeedProducts.length} v seed datech${totalNotFound > 0 ? `, ${totalNotFound} SKU nenalezeno` : ""}${errMsg}`
                       );
                     } catch (error) {
                       setRestoreFromSeedResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
