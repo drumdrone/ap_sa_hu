@@ -164,14 +164,16 @@ export const restoreFromSeed = mutation({
       const title = item.title as string;
       if (!type || !title) continue;
 
-      await ctx.db.insert("news", {
+      const doc: Record<string, unknown> = {
         type,
         title,
-        content: (item.content as string) ?? undefined,
-        skus: (item.skus as string[]) ?? undefined,
-        url: (item.url as string) ?? undefined,
         createdAt: (item.createdAt as number) ?? Date.now(),
-      });
+      };
+      if (item.content) doc.content = item.content as string;
+      if (item.skus) doc.skus = item.skus as string[];
+      if (item.url) doc.url = item.url as string;
+
+      await ctx.db.insert("news", doc as any);
       restored++;
     }
 

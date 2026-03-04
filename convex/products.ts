@@ -809,15 +809,27 @@ export const restoreMarketingFromSeed = mutation({
     const errors: string[] = [];
     const seedProducts = args.products as Array<Record<string, unknown>>;
 
+    // Pre-build name lookup for fallback matching
+    let productsByName: Map<string, any> | null = null;
+
     for (const seedProduct of seedProducts) {
       const externalId = seedProduct.externalId as string;
       if (!externalId) continue;
 
       try {
-        const existing = await ctx.db
+        let existing = await ctx.db
           .query("products")
           .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
           .first();
+
+        // Fallback: match by name if externalId not found
+        if (!existing && seedProduct.name) {
+          if (!productsByName) {
+            const allProducts = await ctx.db.query("products").collect();
+            productsByName = new Map(allProducts.map(p => [p.name, p]));
+          }
+          existing = productsByName.get(seedProduct.name as string) ?? null;
+        }
 
         if (!existing) {
           notFound++;
