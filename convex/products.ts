@@ -788,6 +788,7 @@ export const findBySkus = mutation({
 // Restore marketing data from seed export - matches by externalId (SKU)
 // Uses v.any() for products to avoid strict validator issues with seed data
 const MARKETING_STRING_FIELDS = new Set([
+  "image", "name", "description",
   "salesClaim", "salesClaimSubtitle", "targetAudience", "pdfUrl",
   "socialFacebook", "socialInstagram", "socialFacebookImage", "socialInstagramImage",
   "quickReferenceCard", "faqText", "salesForecast", "sensoryProfile",
