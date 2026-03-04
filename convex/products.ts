@@ -786,83 +786,80 @@ export const findBySkus = mutation({
 });
 
 // Restore marketing data from seed export - matches by externalId (SKU)
+// Uses v.any() for products to avoid strict validator issues with seed data
+const MARKETING_STRING_FIELDS = new Set([
+  "salesClaim", "salesClaimSubtitle", "targetAudience", "pdfUrl",
+  "socialFacebook", "socialInstagram", "socialFacebookImage", "socialInstagramImage",
+  "quickReferenceCard", "faqText", "salesForecast", "sensoryProfile",
+  "seasonalOpportunities", "mainBenefits", "herbComposition", "competitionComparison",
+]);
+const MARKETING_ARRAY_FIELDS = new Set(["hashtags", "whyBuy", "bannerUrls", "faq", "articleUrls"]);
+const VALID_CATEGORIES = new Set(["Bylinný", "Funkční", "Dětský", "BIO"]);
+const VALID_BRAND_PILLARS = new Set(["Věda", "BIO", "Funkce", "Tradice", "Rodina"]);
+const VALID_TIERS = new Set(["A", "B", "C"]);
+
 export const restoreMarketingFromSeed = mutation({
   args: {
-    products: v.array(v.object({
-      externalId: v.string(),
-      category: v.optional(v.union(
-        v.literal("Bylinný"),
-        v.literal("Funkční"),
-        v.literal("Dětský"),
-        v.literal("BIO")
-      )),
-      salesClaim: v.optional(v.string()),
-      salesClaimSubtitle: v.optional(v.string()),
-      whyBuy: v.optional(v.array(v.object({ icon: v.string(), text: v.string() }))),
-      targetAudience: v.optional(v.string()),
-      pdfUrl: v.optional(v.string()),
-      bannerUrls: v.optional(v.array(v.object({ size: v.string(), url: v.string() }))),
-      socialFacebook: v.optional(v.string()),
-      socialInstagram: v.optional(v.string()),
-      socialFacebookImage: v.optional(v.string()),
-      socialInstagramImage: v.optional(v.string()),
-      hashtags: v.optional(v.array(v.string())),
-      brandPillar: v.optional(v.union(
-        v.literal("Věda"),
-        v.literal("BIO"),
-        v.literal("Funkce"),
-        v.literal("Tradice"),
-        v.literal("Rodina")
-      )),
-      tier: v.optional(v.union(v.literal("A"), v.literal("B"), v.literal("C"))),
-      quickReferenceCard: v.optional(v.string()),
-      faq: v.optional(v.array(v.object({ question: v.string(), answer: v.string() }))),
-      faqText: v.optional(v.string()),
-      salesForecast: v.optional(v.string()),
-      sensoryProfile: v.optional(v.string()),
-      seasonalOpportunities: v.optional(v.string()),
-      mainBenefits: v.optional(v.string()),
-      herbComposition: v.optional(v.string()),
-      competitionComparison: v.optional(v.string()),
-      articleUrls: v.optional(v.array(v.object({ title: v.string(), url: v.string() }))),
-      isTop: v.optional(v.boolean()),
-      topOrder: v.optional(v.number()),
-    })),
+    products: v.any(),
   },
   handler: async (ctx, args) => {
     let restored = 0;
     let notFound = 0;
+    const errors: string[] = [];
+    const seedProducts = args.products as Array<Record<string, unknown>>;
 
-    for (const seedProduct of args.products) {
-      const existing = await ctx.db
-        .query("products")
-        .withIndex("by_externalId", (q) => q.eq("externalId", seedProduct.externalId))
-        .first();
+    for (const seedProduct of seedProducts) {
+      const externalId = seedProduct.externalId as string;
+      if (!externalId) continue;
 
-      if (!existing) {
-        console.log(`Product not found for SKU: ${seedProduct.externalId}`);
-        notFound++;
-        continue;
-      }
+      try {
+        const existing = await ctx.db
+          .query("products")
+          .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
+          .first();
 
-      // Build update object with only defined fields
-      const updates: Record<string, unknown> = {};
-      const { externalId: _, ...marketingFields } = seedProduct;
-      for (const [key, value] of Object.entries(marketingFields)) {
-        if (value !== undefined) {
-          updates[key] = value;
+        if (!existing) {
+          notFound++;
+          continue;
         }
-      }
 
-      if (Object.keys(updates).length > 0) {
-        updates.marketingLastUpdated = Date.now();
-        updates.lastUpdatedField = "restored_from_seed";
-        await ctx.db.patch(existing._id, updates);
-        restored++;
-        console.log(`Restored marketing data for SKU: ${seedProduct.externalId} (${existing.name})`);
+        // Build safe update object - only include valid fields
+        const updates: Record<string, unknown> = {};
+
+        for (const [key, value] of Object.entries(seedProduct)) {
+          if (key === "externalId" || value === undefined || value === null) continue;
+
+          if (MARKETING_STRING_FIELDS.has(key) && typeof value === "string") {
+            updates[key] = value;
+          } else if (MARKETING_ARRAY_FIELDS.has(key) && Array.isArray(value)) {
+            updates[key] = value;
+          } else if (key === "category" && VALID_CATEGORIES.has(value as string)) {
+            updates[key] = value;
+          } else if (key === "brandPillar" && VALID_BRAND_PILLARS.has(value as string)) {
+            updates[key] = value;
+          } else if (key === "tier" && VALID_TIERS.has(value as string)) {
+            updates[key] = value;
+          } else if (key === "isTop" && typeof value === "boolean") {
+            updates[key] = value;
+          } else if (key === "topOrder" && typeof value === "number") {
+            updates[key] = value;
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          updates.marketingLastUpdated = Date.now();
+          updates.lastUpdatedField = "restored_from_seed";
+          if (updates.isTop) {
+            updates.topAddedAt = Date.now();
+          }
+          await ctx.db.patch(existing._id, updates);
+          restored++;
+        }
+      } catch (e) {
+        errors.push(`${externalId}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
-    return { restored, notFound };
+    return { restored, notFound, errors: errors.slice(0, 5) };
   },
 });
