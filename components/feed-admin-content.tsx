@@ -33,6 +33,7 @@ export function FeedAdminContent() {
   const restoreBackup = useMutation(api.feedImport.restoreBackupToProduct);
   const restoreAllBackups = useMutation(api.feedImport.restoreAllBackups);
   const restoreMarketingFromSeed = useMutation(api.products.restoreMarketingFromSeed);
+  const restoreImagesFromSeed = useMutation(api.products.restoreImagesFromSeed);
   const restoreNewsFromSeed = useMutation(api.news.restoreFromSeed);
 
   // State for restore all
@@ -265,26 +266,20 @@ export function FeedAdminContent() {
                     setIsRestoringImages(true);
                     setRestoreImagesResult(null);
                     try {
-                      const BATCH_SIZE = 10;
+                      const BATCH_SIZE = 50;
                       let totalRestored = 0;
                       let totalNotFound = 0;
-                      let debugInfo = "";
+                      let totalInDb = 0;
                       for (let i = 0; i < seedProductImages.length; i += BATCH_SIZE) {
                         const batch = seedProductImages.slice(i, i + BATCH_SIZE);
                         setRestoreImagesResult(`Zpracovávám ${i + 1}-${Math.min(i + BATCH_SIZE, seedProductImages.length)} z ${seedProductImages.length}...`);
-                        const result = await restoreMarketingFromSeed({ products: batch as any });
+                        const result = await restoreImagesFromSeed({ products: batch as any });
                         totalRestored += result.restored;
                         totalNotFound += result.notFound;
-                        if (i === 0 && result.sampleDbProducts) {
-                          debugInfo = ` | DB sample: ${JSON.stringify(result.sampleDbProducts)} | Seed sample: ${JSON.stringify(batch.slice(0, 2).map((p: any) => ({ externalId: p.externalId, name: p.name?.slice(0, 40) })))}`;
-                        }
-                        if (totalNotFound > 20 && totalRestored === 0) {
-                          setRestoreImagesResult(`Zastaveno — žádný match. ${debugInfo}`);
-                          return;
-                        }
+                        totalInDb = result.total;
                       }
                       setRestoreImagesResult(
-                        `Obnoveno obrázků u ${totalRestored} produktů${totalNotFound > 0 ? `, ${totalNotFound} nenalezeno` : ""}${debugInfo}`
+                        `Obnoveno obrázků u ${totalRestored} produktů (${totalInDb} v DB, ${totalNotFound} nenalezeno v seed)`
                       );
                     } catch (error) {
                       setRestoreImagesResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);

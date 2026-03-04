@@ -883,3 +883,41 @@ export const restoreMarketingFromSeed = mutation({
     return { restored, notFound, errors: errors.slice(0, 5), sampleDbProducts };
   },
 });
+
+// Restore images from seed - matches by name, bulk operation
+export const restoreImagesFromSeed = mutation({
+  args: {
+    products: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const seedProducts = args.products as Array<{ externalId: string; image: string; name: string }>;
+
+    // Load all DB products once
+    const allDbProducts = await ctx.db.query("products").collect();
+    const byExternalId = new Map(allDbProducts.filter(p => p.externalId).map(p => [p.externalId!, p]));
+    const byName = new Map(allDbProducts.map(p => [p.name, p]));
+
+    let restored = 0;
+    let notFound = 0;
+
+    for (const seed of seedProducts) {
+      if (!seed.image) continue;
+
+      // Try externalId first, then name
+      const existing = byExternalId.get(seed.externalId) ?? byName.get(seed.name) ?? null;
+
+      if (!existing) {
+        notFound++;
+        continue;
+      }
+
+      // Only update if product doesn't already have an image
+      if (!existing.image) {
+        await ctx.db.patch(existing._id, { image: seed.image });
+        restored++;
+      }
+    }
+
+    return { restored, notFound, total: allDbProducts.length };
+  },
+});
