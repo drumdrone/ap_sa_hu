@@ -873,6 +873,13 @@ export const restoreMarketingFromSeed = mutation({
       }
     }
 
-    return { restored, notFound, errors: errors.slice(0, 5) };
+    // Debug: sample DB products to help diagnose matching issues
+    const sampleDbProducts = (await ctx.db.query("products").take(3)).map(p => ({
+      externalId: p.externalId,
+      name: p.name?.slice(0, 40),
+      hasImage: !!p.image,
+    }));
+
+    return { restored, notFound, errors: errors.slice(0, 5), sampleDbProducts };
   },
 });
