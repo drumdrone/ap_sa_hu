@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RefreshCw, Database, CheckCircle, AlertCircle, ExternalLink, Trash2, Archive, RotateCcw, Search, Link2 } from "lucide-react";
+import seedMarketingData from "@/lib/seed-marketing-data.json";
 
 const DEFAULT_FEED_URL = "https://www.apotheke.cz/xml-feeds/apotheke-luigisbox-products.xml";
 
@@ -29,6 +30,7 @@ export function FeedAdminContent() {
   const deleteOrphaned = useMutation(api.feedImport.deleteOrphanedProducts);
   const restoreBackup = useMutation(api.feedImport.restoreBackupToProduct);
   const restoreAllBackups = useMutation(api.feedImport.restoreAllBackups);
+  const restoreMarketingFromSeed = useMutation(api.products.restoreMarketingFromSeed);
 
   // State for restore all
   const [isRestoringAll, setIsRestoringAll] = useState(false);
@@ -175,19 +177,22 @@ export function FeedAdminContent() {
                     setIsRestoringFromSeed(true);
                     setRestoreFromSeedResult(null);
                     try {
-                      const res = await fetch("/api/sync-feed", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "restoreFromSeed" }),
-                      });
-                      const data = await res.json();
-                      if (data.error) {
-                        setRestoreFromSeedResult(`Chyba: ${data.details || data.error}`);
-                      } else {
-                        setRestoreFromSeedResult(
-                          `Obnoveno ${data.restored} produktů ze ${data.seedProductsFound} nalezených v seed datech${data.notFound > 0 ? `, ${data.notFound} SKU nenalezeno v databázi` : ""}`
-                        );
+                      const allSeedProducts = [
+                        ...seedMarketingData.productsWithMarketing,
+                        ...seedMarketingData.backupProducts,
+                      ];
+                      const BATCH_SIZE = 20;
+                      let totalRestored = 0;
+                      let totalNotFound = 0;
+                      for (let i = 0; i < allSeedProducts.length; i += BATCH_SIZE) {
+                        const batch = allSeedProducts.slice(i, i + BATCH_SIZE);
+                        const result = await restoreMarketingFromSeed({ products: batch });
+                        totalRestored += result.restored;
+                        totalNotFound += result.notFound;
                       }
+                      setRestoreFromSeedResult(
+                        `Obnoveno ${totalRestored} produktů ze ${allSeedProducts.length} nalezených v seed datech${totalNotFound > 0 ? `, ${totalNotFound} SKU nenalezeno v databázi` : ""}`
+                      );
                     } catch (error) {
                       setRestoreFromSeedResult(`Chyba: ${error}`);
                     } finally {
