@@ -155,18 +155,17 @@ export function FeedAdminContent() {
           </CardContent>
         </Card>
 
-        {/* Restore Marketing Data from Seed */}
+        {/* Restore Marketing Data from Seed - v2 direct mutation */}
         {syncStatus && (
-          <Card className={`mb-6 ${syncStatus.withMarketingData === 0 ? "border-red-200 bg-red-50/50" : "border-amber-200 bg-amber-50/50"}`}>
+          <Card className="mb-6 border-indigo-200 bg-indigo-50/50">
             <CardHeader className="pb-2">
-              <CardTitle className={`flex items-center gap-2 ${syncStatus.withMarketingData === 0 ? "text-red-800" : "text-amber-800"}`}>
-                <AlertCircle className="w-5 h-5" />
-                {syncStatus.withMarketingData === 0 ? "Marketingová data chybí" : "Obnovit marketingová data"}
+              <CardTitle className="flex items-center gap-2 text-indigo-800">
+                <RotateCcw className="w-5 h-5" />
+                Obnovit marketingová data
+                <span className="text-xs font-normal text-indigo-400 ml-2">v2</span>
               </CardTitle>
               <CardDescription>
-                {syncStatus.withMarketingData === 0
-                  ? "Žádný produkt nemá marketingová data. Můžete je obnovit z exportu (seed dat uložených v repozitáři)."
-                  : `${syncStatus.withMarketingData} z ${syncStatus.totalProducts} produktů má marketingová data. Můžete je znovu obnovit/aktualizovat ze seed exportu.`}
+                {syncStatus.withMarketingData} z {syncStatus.totalProducts} produktů má marketingová data. Obnovte je ze seed exportu (uloženého v repozitáři).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -177,16 +176,33 @@ export function FeedAdminContent() {
                     setIsRestoringFromSeed(true);
                     setRestoreFromSeedResult(null);
                     try {
+                      // Known fields accepted by the mutation validator
+                      const KNOWN_FIELDS = new Set([
+                        "externalId", "category", "salesClaim", "salesClaimSubtitle",
+                        "whyBuy", "targetAudience", "pdfUrl", "bannerUrls",
+                        "socialFacebook", "socialInstagram", "socialFacebookImage", "socialInstagramImage",
+                        "hashtags", "brandPillar", "tier", "quickReferenceCard",
+                        "faq", "faqText", "salesForecast", "sensoryProfile",
+                        "seasonalOpportunities", "mainBenefits", "herbComposition",
+                        "competitionComparison", "articleUrls", "isTop", "topOrder",
+                      ]);
                       const allSeedProducts = [
                         ...seedMarketingData.productsWithMarketing,
                         ...seedMarketingData.backupProducts,
-                      ];
+                      ].map((p: Record<string, unknown>) => {
+                        const clean: Record<string, unknown> = {};
+                        for (const [k, v] of Object.entries(p)) {
+                          if (KNOWN_FIELDS.has(k)) clean[k] = v;
+                        }
+                        return clean;
+                      }).filter((p) => p.externalId);
                       const BATCH_SIZE = 20;
                       let totalRestored = 0;
                       let totalNotFound = 0;
                       for (let i = 0; i < allSeedProducts.length; i += BATCH_SIZE) {
                         const batch = allSeedProducts.slice(i, i + BATCH_SIZE);
-                        const result = await restoreMarketingFromSeed({ products: batch });
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const result = await restoreMarketingFromSeed({ products: batch as any });
                         totalRestored += result.restored;
                         totalNotFound += result.notFound;
                       }
@@ -194,13 +210,13 @@ export function FeedAdminContent() {
                         `Obnoveno ${totalRestored} produktů ze ${allSeedProducts.length} nalezených v seed datech${totalNotFound > 0 ? `, ${totalNotFound} SKU nenalezeno v databázi` : ""}`
                       );
                     } catch (error) {
-                      setRestoreFromSeedResult(`Chyba: ${error}`);
+                      setRestoreFromSeedResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
                     } finally {
                       setIsRestoringFromSeed(false);
                     }
                   }}
                   disabled={isRestoringFromSeed}
-                  className="bg-red-600 hover:bg-red-700"
+                  className="bg-indigo-600 hover:bg-indigo-700"
                 >
                   {isRestoringFromSeed ? (
                     <>
