@@ -124,13 +124,14 @@ export function Header() {
               >
                 Hromadná
               </Link>
-              <Link 
-                href="/admin/feed" 
+              <Link
+                href="/admin/feed"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 Feed
               </Link>
             </nav>
+            <span className="text-xs text-muted-foreground/50 font-mono">v1.1</span>
           </div>
         </div>
       </div>
