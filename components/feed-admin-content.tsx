@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RefreshCw, Database, CheckCircle, AlertCircle, ExternalLink, Trash2, Archive, RotateCcw, Search, Link2 } from "lucide-react";
+import seedMarketingData from "@/lib/seed-marketing-data.json";
+import seedProductImages from "@/lib/seed-product-images.json";
+import seedNewsData from "@/lib/seed-news.json";
 
 const DEFAULT_FEED_URL = "https://www.apotheke.cz/xml-feeds/apotheke-luigisbox-products.xml";
 
@@ -28,6 +31,26 @@ export function FeedAdminContent() {
   const marketingBackups = useQuery(api.feedImport.listMarketingBackups);
   const deleteOrphaned = useMutation(api.feedImport.deleteOrphanedProducts);
   const restoreBackup = useMutation(api.feedImport.restoreBackupToProduct);
+  const restoreAllBackups = useMutation(api.feedImport.restoreAllBackups);
+  const restoreMarketingFromSeed = useMutation(api.products.restoreMarketingFromSeed);
+  const restoreImagesFromSeed = useMutation(api.products.restoreImagesFromSeed);
+  const restoreNewsFromSeed = useMutation(api.news.restoreFromSeed);
+
+  // State for restore all
+  const [isRestoringAll, setIsRestoringAll] = useState(false);
+  const [restoreAllResult, setRestoreAllResult] = useState<string | null>(null);
+
+  // State for restore from seed
+  const [isRestoringFromSeed, setIsRestoringFromSeed] = useState(false);
+  const [restoreFromSeedResult, setRestoreFromSeedResult] = useState<string | null>(null);
+
+  // State for image restore
+  const [isRestoringImages, setIsRestoringImages] = useState(false);
+  const [restoreImagesResult, setRestoreImagesResult] = useState<string | null>(null);
+
+  // State for news restore
+  const [isRestoringNews, setIsRestoringNews] = useState(false);
+  const [restoreNewsResult, setRestoreNewsResult] = useState<string | null>(null);
 
   // State for orphaned products cleanup
   const [isCheckingOrphans, setIsCheckingOrphans] = useState(false);
@@ -144,6 +167,197 @@ export function FeedAdminContent() {
           </CardContent>
         </Card>
 
+        {/* Restore Marketing Data from Seed - v2 direct mutation */}
+        {syncStatus && (
+          <Card className="mb-6 border-indigo-200 bg-indigo-50/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-indigo-800">
+                <RotateCcw className="w-5 h-5" />
+                Obnovit marketingová data
+                <span className="text-xs font-normal text-indigo-400 ml-2">v2</span>
+              </CardTitle>
+              <CardDescription>
+                {syncStatus.withMarketingData} z {syncStatus.totalProducts} produktů má marketingová data. Obnovte je ze seed exportu (uloženého v repozitáři).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={async () => {
+                    if (!confirm("Obnovit marketingová data ze seed exportu? Toto nahraje uložená data zpět na produkty odpovídající SKU.")) return;
+                    setIsRestoringFromSeed(true);
+                    setRestoreFromSeedResult(null);
+                    try {
+                      // Known fields accepted by the mutation validator
+                      const KNOWN_FIELDS = new Set([
+                        "externalId", "image", "name", "description",
+                        "category", "salesClaim", "salesClaimSubtitle",
+                        "whyBuy", "targetAudience", "pdfUrl", "bannerUrls",
+                        "socialFacebook", "socialInstagram", "socialFacebookImage", "socialInstagramImage",
+                        "hashtags", "brandPillar", "tier", "quickReferenceCard",
+                        "faq", "faqText", "salesForecast", "sensoryProfile",
+                        "seasonalOpportunities", "mainBenefits", "herbComposition",
+                        "competitionComparison", "articleUrls", "isTop", "topOrder",
+                      ]);
+                      const allSeedProducts = [
+                        ...seedMarketingData.productsWithMarketing,
+                        ...seedMarketingData.backupProducts,
+                      ].map((p: Record<string, unknown>) => {
+                        const clean: Record<string, unknown> = {};
+                        for (const [k, v] of Object.entries(p)) {
+                          if (KNOWN_FIELDS.has(k)) clean[k] = v;
+                        }
+                        return clean;
+                      }).filter((p) => p.externalId);
+                      const BATCH_SIZE = 10;
+                      let totalRestored = 0;
+                      let totalNotFound = 0;
+                      const allErrors: string[] = [];
+                      for (let i = 0; i < allSeedProducts.length; i += BATCH_SIZE) {
+                        const batch = allSeedProducts.slice(i, i + BATCH_SIZE);
+                        setRestoreFromSeedResult(`Zpracovávám ${i + 1}-${Math.min(i + BATCH_SIZE, allSeedProducts.length)} z ${allSeedProducts.length}...`);
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const result = await restoreMarketingFromSeed({ products: batch as any });
+                        totalRestored += result.restored;
+                        totalNotFound += result.notFound;
+                        if (result.errors?.length) allErrors.push(...result.errors);
+                      }
+                      const errMsg = allErrors.length > 0 ? ` | Chyby: ${allErrors.join("; ")}` : "";
+                      setRestoreFromSeedResult(
+                        `Obnoveno ${totalRestored} produktů ze ${allSeedProducts.length} v seed datech${totalNotFound > 0 ? `, ${totalNotFound} SKU nenalezeno` : ""}${errMsg}`
+                      );
+                    } catch (error) {
+                      setRestoreFromSeedResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
+                    } finally {
+                      setIsRestoringFromSeed(false);
+                    }
+                  }}
+                  disabled={isRestoringFromSeed}
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                >
+                  {isRestoringFromSeed ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji ze seed dat...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit marketingová data ze seed exportu
+                    </>
+                  )}
+                </Button>
+              </div>
+              {restoreFromSeedResult && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  restoreFromSeedResult.startsWith("Chyba")
+                    ? "bg-red-100 border border-red-300 text-red-800"
+                    : "bg-green-50 border border-green-200 text-green-800"
+                }`}>
+                  {restoreFromSeedResult}
+                </div>
+              )}
+
+              {/* Restore images from seed */}
+              <div className="flex items-center gap-3 mt-4">
+                <Button
+                  onClick={async () => {
+                    if (!confirm("Obnovit obrázky produktů ze seed dat? (982 produktů)")) return;
+                    setIsRestoringImages(true);
+                    setRestoreImagesResult(null);
+                    try {
+                      const BATCH_SIZE = 50;
+                      let totalRestored = 0;
+                      let totalNotFound = 0;
+                      let totalInDb = 0;
+                      for (let i = 0; i < seedProductImages.length; i += BATCH_SIZE) {
+                        const batch = seedProductImages.slice(i, i + BATCH_SIZE);
+                        setRestoreImagesResult(`Zpracovávám ${i + 1}-${Math.min(i + BATCH_SIZE, seedProductImages.length)} z ${seedProductImages.length}...`);
+                        const result = await restoreImagesFromSeed({ products: batch as any });
+                        totalRestored += result.restored;
+                        totalNotFound += result.notFound;
+                        totalInDb = result.total;
+                      }
+                      setRestoreImagesResult(
+                        `Obnoveno obrázků u ${totalRestored} produktů (${totalInDb} v DB, ${totalNotFound} nenalezeno v seed)`
+                      );
+                    } catch (error) {
+                      setRestoreImagesResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
+                    } finally {
+                      setIsRestoringImages(false);
+                    }
+                  }}
+                  disabled={isRestoringImages}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {isRestoringImages ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji obrázky...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit obrázky produktů ({seedProductImages.length})
+                    </>
+                  )}
+                </Button>
+              </div>
+              {restoreImagesResult && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  restoreImagesResult.startsWith("Chyba")
+                    ? "bg-red-100 border border-red-300 text-red-800"
+                    : "bg-green-50 border border-green-200 text-green-800"
+                }`}>
+                  {restoreImagesResult}
+                </div>
+              )}
+
+              {/* Restore news from seed */}
+              <div className="flex items-center gap-3 mt-4">
+                <Button
+                  onClick={async () => {
+                    if (!confirm(`Obnovit ${seedNewsData.length} novinek ze seed dat?`)) return;
+                    setIsRestoringNews(true);
+                    setRestoreNewsResult(null);
+                    try {
+                      const result = await restoreNewsFromSeed({ newsItems: seedNewsData });
+                      setRestoreNewsResult(`Obnoveno ${result.restored} novinek`);
+                    } catch (error) {
+                      setRestoreNewsResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
+                    } finally {
+                      setIsRestoringNews(false);
+                    }
+                  }}
+                  disabled={isRestoringNews}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  {isRestoringNews ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji novinky...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit novinky ({seedNewsData.length})
+                    </>
+                  )}
+                </Button>
+              </div>
+              {restoreNewsResult && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  restoreNewsResult.startsWith("Chyba")
+                    ? "bg-red-100 border border-red-300 text-red-800"
+                    : "bg-green-50 border border-green-200 text-green-800"
+                }`}>
+                  {restoreNewsResult}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Backup Stats & Restore */}
         {backupStats && (backupStats.marketingBackups > 0 || backupStats.galleryBackups > 0) && (
           <Card className="mb-6 border-amber-200 bg-amber-50/50">
@@ -170,6 +384,46 @@ export function FeedAdminContent() {
                   <div className="text-2xl font-bold text-amber-700">{backupStats.galleryBackups}</div>
                   <div className="text-sm text-amber-600">Obrázků v galerii</div>
                 </div>
+              </div>
+
+              {/* Restore All button */}
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={async () => {
+                    if (!confirm("Obnovit všechna marketingová data ze záloh? Toto přepíše aktuální marketingová data na produktech odpovídajících SKU.")) return;
+                    setIsRestoringAll(true);
+                    setRestoreAllResult(null);
+                    try {
+                      const result = await restoreAllBackups({});
+                      setRestoreAllResult(`Obnoveno ${result.restored} produktů${result.notFound > 0 ? `, ${result.notFound} SKU nenalezeno` : ""}`);
+                    } catch (error) {
+                      setRestoreAllResult(`Chyba: ${error}`);
+                    } finally {
+                      setIsRestoringAll(false);
+                    }
+                  }}
+                  disabled={isRestoringAll}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {isRestoringAll ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji všechna data...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit všechny zálohy
+                    </>
+                  )}
+                </Button>
+                {restoreAllResult && (
+                  <span className={`text-sm ${
+                    restoreAllResult.startsWith("Chyba") ? "text-red-600" : "text-green-600"
+                  }`}>
+                    {restoreAllResult}
+                  </span>
+                )}
               </div>
 
               {/* Backup list and restore UI */}
