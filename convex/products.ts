@@ -784,3 +784,140 @@ export const findBySkus = mutation({
     return products;
   },
 });
+
+// Restore marketing data from seed export - matches by externalId (SKU)
+// Uses v.any() for products to avoid strict validator issues with seed data
+const MARKETING_STRING_FIELDS = new Set([
+  "image", "name", "description",
+  "salesClaim", "salesClaimSubtitle", "targetAudience", "pdfUrl",
+  "socialFacebook", "socialInstagram", "socialFacebookImage", "socialInstagramImage",
+  "quickReferenceCard", "faqText", "salesForecast", "sensoryProfile",
+  "seasonalOpportunities", "mainBenefits", "herbComposition", "competitionComparison",
+]);
+const MARKETING_ARRAY_FIELDS = new Set(["hashtags", "whyBuy", "bannerUrls", "faq", "articleUrls"]);
+const VALID_CATEGORIES = new Set(["Bylinný", "Funkční", "Dětský", "BIO"]);
+const VALID_BRAND_PILLARS = new Set(["Věda", "BIO", "Funkce", "Tradice", "Rodina"]);
+const VALID_TIERS = new Set(["A", "B", "C"]);
+
+export const restoreMarketingFromSeed = mutation({
+  args: {
+    products: v.any(),
+  },
+  handler: async (ctx, args) => {
+    let restored = 0;
+    let notFound = 0;
+    const errors: string[] = [];
+    const seedProducts = args.products as Array<Record<string, unknown>>;
+
+    // Pre-build name lookup for fallback matching
+    let productsByName: Map<string, any> | null = null;
+
+    for (const seedProduct of seedProducts) {
+      const externalId = seedProduct.externalId as string;
+      if (!externalId) continue;
+
+      try {
+        let existing = await ctx.db
+          .query("products")
+          .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
+          .first();
+
+        // Fallback: match by name if externalId not found
+        if (!existing && seedProduct.name) {
+          if (!productsByName) {
+            const allProducts = await ctx.db.query("products").collect();
+            productsByName = new Map(allProducts.map(p => [p.name, p]));
+          }
+          existing = productsByName.get(seedProduct.name as string) ?? null;
+        }
+
+        if (!existing) {
+          notFound++;
+          continue;
+        }
+
+        // Build safe update object - only include valid fields
+        const updates: Record<string, unknown> = {};
+
+        for (const [key, value] of Object.entries(seedProduct)) {
+          if (key === "externalId" || value === undefined || value === null) continue;
+
+          if (MARKETING_STRING_FIELDS.has(key) && typeof value === "string") {
+            updates[key] = value;
+          } else if (MARKETING_ARRAY_FIELDS.has(key) && Array.isArray(value)) {
+            updates[key] = value;
+          } else if (key === "category" && VALID_CATEGORIES.has(value as string)) {
+            updates[key] = value;
+          } else if (key === "brandPillar" && VALID_BRAND_PILLARS.has(value as string)) {
+            updates[key] = value;
+          } else if (key === "tier" && VALID_TIERS.has(value as string)) {
+            updates[key] = value;
+          } else if (key === "isTop" && typeof value === "boolean") {
+            updates[key] = value;
+          } else if (key === "topOrder" && typeof value === "number") {
+            updates[key] = value;
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          updates.marketingLastUpdated = Date.now();
+          updates.lastUpdatedField = "restored_from_seed";
+          if (updates.isTop) {
+            updates.topAddedAt = Date.now();
+          }
+          await ctx.db.patch(existing._id, updates);
+          restored++;
+        }
+      } catch (e) {
+        errors.push(`${externalId}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    // Debug: sample DB products to help diagnose matching issues
+    const sampleDbProducts = (await ctx.db.query("products").take(3)).map(p => ({
+      externalId: p.externalId,
+      name: p.name?.slice(0, 40),
+      hasImage: !!p.image,
+    }));
+
+    return { restored, notFound, errors: errors.slice(0, 5), sampleDbProducts };
+  },
+});
+
+// Restore images from seed - matches by name, bulk operation
+export const restoreImagesFromSeed = mutation({
+  args: {
+    products: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const seedProducts = args.products as Array<{ externalId: string; image: string; name: string }>;
+
+    // Load all DB products once
+    const allDbProducts = await ctx.db.query("products").collect();
+    const byExternalId = new Map(allDbProducts.filter(p => p.externalId).map(p => [p.externalId!, p]));
+    const byName = new Map(allDbProducts.map(p => [p.name, p]));
+
+    let restored = 0;
+    let notFound = 0;
+
+    for (const seed of seedProducts) {
+      if (!seed.image) continue;
+
+      // Try externalId first, then name
+      const existing = byExternalId.get(seed.externalId) ?? byName.get(seed.name) ?? null;
+
+      if (!existing) {
+        notFound++;
+        continue;
+      }
+
+      // Only update if product doesn't already have an image
+      if (!existing.image) {
+        await ctx.db.patch(existing._id, { image: seed.image });
+        restored++;
+      }
+    }
+
+    return { restored, notFound, total: allDbProducts.length };
+  },
+});

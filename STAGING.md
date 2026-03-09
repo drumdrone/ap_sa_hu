@@ -1,4 +1,4 @@
-# Staging & Production Environment — Průvodce
+# Staging & Production — Průvodce
 
 ## Přehled architektury
 
@@ -15,138 +15,79 @@
 │              │   deploy     │  │   deploy      │                │
 │              └──────┬───────┘  └──────┬───────┘                │
 │                     │                 │                          │
-│                     ▼                 ▼                          │
-│              ┌──────────────┐  ┌──────────────┐                │
-│              │   STAGING    │  │  PRODUCTION   │                │
-│              │   Convex DB  │  │  Convex DB    │                │
-│              │  (testovací) │  │  (ostrá data) │                │
-│              └──────────────┘  └──────────────┘                │
+│                     └────────┬────────┘                          │
+│                              ▼                                  │
+│                     ┌──────────────┐                            │
+│                     │   SDÍLENÁ    │                            │
+│                     │  Convex DB   │                            │
+│                     │ (jedna DB)   │                            │
+│                     └──────────────┘                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ## URL adresy
 
-| Prostředí  | URL                                     | Git branch | Convex deployment | Convex URL |
-|------------|-----------------------------------------|------------|-------------------|------------|
-| Production | https://apsahu.netlify.app              | `main`     | `prod:exuberant-koala-3` | `https://exuberant-koala-3.eu-west-1.convex.cloud` |
-| Staging    | https://staging--apsahu.netlify.app     | `staging`  | `dev:quirky-wolverine-818` | `https://quirky-wolverine-818.convex.cloud` |
+| Prostředí  | URL                                     | Git branch | Convex URL |
+|------------|-----------------------------------------|------------|------------|
+| Production | https://apsahu.netlify.app              | `main`     | `https://exuberant-koala-3.eu-west-1.convex.cloud` |
+| Staging    | https://staging--apsahu.netlify.app     | `staging`  | `https://exuberant-koala-3.eu-west-1.convex.cloud` |
 
 ## Jak to funguje
 
-### 1. Dvě oddělené databáze (Convex)
+### Jedna sdílená databáze
 
-Convex automaticky podporuje oddělené deploymenty. Každý deployment má **svoji vlastní databázi**, takže:
+Staging i produkce sdílejí **stejnou Convex databázi**. To znamená:
 
-- **Production Convex** = ostrá data, na která se dívají uživatelé
-- **Staging Convex** = testovací data, kde se dá cokoliv zkoušet
+- **Data jsou vždy stejná** na obou prostředích — žádná desynchronizace
+- **Staging testuje pouze kód** (UI, funkce, logiku), ne data
+- Pokud na stagingu upravíte data, projeví se to i na produkci
 
-Data se mezi nimi **nepřekrývají** — pokud něco rozbijete na stagingu, produkce jede dál.
+### Dvě oddělené Netlify instance
 
-### 2. Dvě oddělené Netlify instance
+- Branch `main` → https://apsahu.netlify.app (produkce)
+- Branch `staging` → https://staging--apsahu.netlify.app (staging)
+- Kód se liší, data ne
 
-Netlify automaticky deployuje branch `staging` na subdoménu `staging--apsahu.netlify.app`. Branch `main` jde vždy na `apsahu.netlify.app`.
+### Environment banner
 
----
-
-## Nastavení (jednorázové)
-
-### Krok 1: Vytvořte staging Convex deployment
-
-```bash
-# V terminálu projektu:
-npx convex deploy --cmd "npm run build" --project ap_sa_hu
-```
-
-Nebo v Convex dashboardu:
-1. Jděte na https://dashboard.convex.dev
-2. Vyberte váš projekt
-3. Klikněte na **"Deployments"** → **"Create deployment"**
-4. Pojmenujte ho např. `staging`
-5. Poznamenejte si staging URL (např. `https://quirky-wolverine-818.convex.cloud`)
-
-### Krok 2: Nastavte environment variables v Netlify
-
-1. Jděte do Netlify dashboardu → Site settings → Environment variables
-2. Nastavte pro **branch `main`** (Production):
-   ```
-   NEXT_PUBLIC_CONVEX_URL = https://exuberant-koala-3.eu-west-1.convex.cloud
-   CONVEX_DEPLOYMENT = prod:exuberant-koala-3
-   ```
-3. Nastavte pro **branch `staging`** (Staging):
-   ```
-   NEXT_PUBLIC_CONVEX_URL = https://quirky-wolverine-818.convex.cloud
-   CONVEX_DEPLOYMENT = dev:quirky-wolverine-818
-   ```
-
-> **Důležité:** V Netlify UI můžete u každé proměnné nastavit "Scopes" —
-> vyberte "Branch deploys → staging" pro staging hodnoty
-> a "Production" pro produkční hodnoty.
-
-### Krok 3: Povolte branch deploys v Netlify
-
-1. Netlify dashboard → Site configuration → Build & deploy → Branches and deploy contexts
-2. Nastavte:
-   - **Production branch:** `main`
-   - **Branch deploys:** "Let me add individual branches" → přidejte `staging`
-
-### Krok 4: Vytvořte staging branch
-
-```bash
-git checkout main
-git pull origin main
-git checkout -b staging
-git push -u origin staging
-```
-
-### Krok 5: Naplňte staging databázi testovacími daty
-
-```bash
-# Přepněte se na staging Convex deployment
-npx convex dev --deployment dev:quirky-wolverine-818
-
-# Importujte seed data
-npx convex import --table products convex/seed/products/documents.jsonl
-npx convex import --table opportunities convex/seed/opportunities/documents.jsonl
-npx convex import --table news convex/seed/news/documents.jsonl
-npx convex import --table posmItems convex/seed/posmItems/documents.jsonl
-```
+Staging zobrazuje žlutý banner "STAGING ENVIRONMENT" díky proměnné `NEXT_PUBLIC_ENVIRONMENT = "staging"`. Na produkci se banner nezobrazuje.
 
 ---
 
-## Denní workflow pro vývojáře
+## Denní workflow
 
-### Nová funkce nebo oprava
+### 1. Nová funkce nebo oprava
 
 ```bash
-# 1. Vytvořte feature branch ze stagingu
+# Vytvořte feature branch ze stagingu
 git checkout staging
 git pull origin staging
 git checkout -b feature/nova-funkce
 
-# 2. Vyvíjejte lokálně (s dev Convex)
+# Vyvíjejte lokálně
 npm run dev
 
-# 3. Commitujte změny
+# Commitujte a pushněte
 git add .
 git commit -m "Popis změny"
-
-# 4. Pushněte a vytvořte PR do staging
 git push -u origin feature/nova-funkce
-# → vytvořte Pull Request: feature/nova-funkce → staging
+
+# → Vytvořte Pull Request: feature/nova-funkce → staging
 ```
 
-### Testování na stagingu
+### 2. Testování na stagingu
 
 Po merge PR do `staging`:
 1. Netlify automaticky deployuje na https://staging--apsahu.netlify.app
-2. Otestujte vše na staging URL
-3. Pokud je vše OK → pokračujte na produkci
+2. Otestujte nový kód na staging URL
+3. Data jsou stejná jako na produkci (sdílená DB)
+4. Pokud je vše OK → pokračujte na produkci
 
-### Nasazení do produkce
+### 3. Nasazení do produkce
 
 ```bash
 # Vytvořte PR: staging → main
-# Po schválení a merge → Netlify automaticky deployuje na produkci
+# Po merge → Netlify automaticky deployuje na produkci
 ```
 
 Nebo přes GitHub UI:
@@ -157,19 +98,22 @@ Nebo přes GitHub UI:
 
 ---
 
-## Convex schema & funkce — deployment na staging vs produkci
+## Synchronizace staging s produkcí
 
-Když měníte Convex schema nebo funkce (soubory v `/convex/`):
+Pokud se staging branch rozsynchronizuje s main (např. po přímých opravách na main):
 
 ```bash
-# Deploy na staging
-npx convex deploy --deployment dev:quirky-wolverine-818 --cmd "npm run build"
+# Stáhněte nejnovější main
+git checkout main
+git pull origin main
 
-# Deploy na produkci (až po otestování!)
-npx convex deploy --deployment prod:exuberant-koala-3 --cmd "npm run build"
+# Synchronizujte staging
+git checkout staging
+git merge main
+git push origin staging
 ```
 
-**Pozor:** Convex backend se deployuje odděleně od Netlify frontendu. Pokud měníte schema, musíte deployment provést ručně (nebo nastavit CI/CD).
+Nebo přes GitHub: vytvořte PR `main → staging` a merge.
 
 ---
 
@@ -191,38 +135,29 @@ Convex nepodporuje automatický rollback, ale můžete:
 
 1. **Nikdy nepushujte přímo do `main`** — vždy přes PR ze `staging`
 2. **Nikdy nedělejte `git push --force` na `main` nebo `staging`**
-3. **Staging databáze ≠ Produkční databáze** — testovací data neovlivní produkci
-4. **Revízia kódu** — každý PR by měl být schválen alespoň 1 další osobou
+3. **Sdílená databáze** — změny dat na stagingu se projeví i na produkci
+4. **Revize kódu** — každý PR by měl být schválen
 
 ---
 
 ## FAQ
 
-### Jak zkopírovat produkční data do staging databáze?
+### Proč sdílená databáze?
 
-```bash
-# Export z produkce
-npx convex export --deployment prod:exuberant-koala-3 --path ./backup
-
-# Import do stagingu
-npx convex import --deployment dev:quirky-wolverine-818 --path ./backup
-```
-
-### Co když se staging rozbije?
-
-Žádný problém — produkce na `main` branchi jede nezávisle. Na stagingu můžete:
-1. Vrátit commit (`git revert`)
-2. Smazat a znovu vytvořit staging Convex deployment
-3. Re-importovat data ze seedu
-
-### Mohu mít víc staging prostředí?
-
-Ano! Netlify podporuje branch deploys pro libovolný branch. Můžete mít:
-- `staging` → https://staging--apsahu.netlify.app
-- `staging-v2` → https://staging-v2--apsahu.netlify.app
-
-Každý s vlastním Convex deploymentem.
+- Jednodušší správa — žádné kopírování dat mezi prostředími
+- Staging testuje **kód**, ne data
+- Vždy vidíte reálná data při testování
 
 ### Jak poznám, že jsem na stagingu?
 
-Aplikace má environment proměnnou `NEXT_PUBLIC_ENVIRONMENT`. Můžete ji využít pro zobrazení banneru (viz komponenta `EnvironmentBanner`).
+Žlutý banner nahoře na stránce "STAGING ENVIRONMENT". Nastaveno přes proměnnou `NEXT_PUBLIC_ENVIRONMENT`.
+
+### Co když staging rozbije data?
+
+Protože sdílíte databázi, buďte opatrní s destruktivními operacemi. Testujte hlavně UI a logiku, ne operace mazání/úpravy dat. Pro nebezpečné testy dat zvažte vytvoření separátního Convex deploymentu.
+
+### Mohu mít víc staging prostředí?
+
+Ano! Netlify podporuje branch deploys pro libovolný branch:
+- `staging` → https://staging--apsahu.netlify.app
+- `staging-v2` → https://staging-v2--apsahu.netlify.app
