@@ -15,7 +15,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
+  NEXT_PUBLIC_CONVEX_URL = "https://efficient-basilisk-904.eu-west-1.convex.cloud"
 
 # Next.js on Netlify requires the Next.js Runtime plugin
 [[plugins]]
