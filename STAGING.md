@@ -193,6 +193,20 @@ Convex nepodporuje automatický rollback, ale můžete:
 2. **Nikdy nedělejte `git push --force` na `main` nebo `staging`**
 3. **Staging databáze ≠ Produkční databáze** — testovací data neovlivní produkci
 4. **Revízia kódu** — každý PR by měl být schválen alespoň 1 další osobou
+5. **Citlivé klíče NIKDY nepatří do gitu** — viz sekce níže
+
+### Citlivé proměnné (Netlify Dashboard)
+
+Tyto proměnné nastavte **výhradně v Netlify UI** (Site Settings → Environment variables), **nikdy je nedávejte do `netlify.toml` ani jiného souboru v gitu**:
+
+| Proměnná | Popis | Scope |
+|----------|-------|-------|
+| `CONVEX_DEPLOY_KEY` | Klíč pro Convex deployment | Per-branch (production / staging) |
+| `RESEND_API_KEY` | API klíč pro odesílání emailů (OTP) | Per-branch |
+| `AUTH_SECRET` | Secret pro autentizaci | Per-branch |
+
+> **Tip:** Pro staging prostředí zvažte použití **testovacího Resend API klíče**,
+> aby se testovací OTP emaily neposílaly z produkční domény.
 
 ---
 
