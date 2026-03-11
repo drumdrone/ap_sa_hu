@@ -8,8 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "convex:dev": "npx convex dev",
-    "convex:deploy:staging": "npx convex deploy --deployment dev:quirky-wolverine-818 --cmd 'npm run build'",
-    "convex:deploy:prod": "npx convex deploy --deployment prod:exuberant-koala-3 --cmd 'npm run build'"
+    "convex:deploy": "npx convex deploy --cmd 'npm run build'"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",

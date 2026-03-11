@@ -1,40 +1,29 @@
 # =============================================================================
-# Netlify Configuration — Staging & Production Environment
+# Netlify Configuration
 # =============================================================================
 #
-# PRODUCTION:  main branch    → https://apsahu.netlify.app
-# STAGING:     staging branch → https://staging--apsahu.netlify.app
+# Workflow:  feature branch → PR → Deploy Preview → test → merge do main
 #
 # ⚠️ Citlivé klíče (CONVEX_DEPLOY_KEY, RESEND_API_KEY apod.) NEPATŘÍ sem!
 #    Nastavte je v Netlify Dashboard → Site Settings → Environment variables.
 #
 # =============================================================================
 
-# --- Default build (production — branch main) --------------------------------
 [build]
   command = "npx convex deploy --cmd 'npm run build'"
   publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
+  NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
 
 # Next.js on Netlify requires the Next.js Runtime plugin
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# --- Production branch-specific overrides ------------------------------------
-[context.production]
+# Deploy Previews (PR branches) use the same build command and same Convex DB
+[context.deploy-preview]
   command = "npx convex deploy --cmd 'npm run build'"
-  [context.production.environment]
-    NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
-    NEXT_PUBLIC_ENVIRONMENT = "production"
-
-# --- Staging branch-specific overrides ----------------------------------------
-[context.staging]
-  command = "npx convex deploy --cmd 'npm run build'"
-  [context.staging.environment]
-    NEXT_PUBLIC_CONVEX_URL = "https://quirky-wolverine-818.convex.cloud"
-    NEXT_PUBLIC_ENVIRONMENT = "staging"
 
 # --- Headers -----------------------------------------------------------------
 [[headers]]
