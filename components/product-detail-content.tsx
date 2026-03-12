@@ -40,6 +40,7 @@ type InlineEdit =
   | "social"
   | "socialImages"
   | "materials"
+  | "video"
   | "eshop"
   | "presentation"
   | "referenceCard"
@@ -288,6 +289,29 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       console.error("Error saving inline edit:", error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Helper: convert various YouTube URLs to embeddable URL
+  const getYoutubeEmbedUrl = (url: string) => {
+    try {
+      if (!url) return "";
+      // Already an embed URL
+      if (url.includes("/embed/")) return url;
+      // Short url: https://youtu.be/VIDEO_ID
+      const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+      if (shortMatch?.[1]) {
+        return `https://www.youtube.com/embed/${shortMatch[1]}`;
+      }
+      // Standard url: https://www.youtube.com/watch?v=VIDEO_ID
+      const urlObj = new URL(url);
+      const vParam = urlObj.searchParams.get("v");
+      if (vParam) {
+        return `https://www.youtube.com/embed/${vParam}`;
+      }
+      return url;
+    } catch {
+      return url;
     }
   };
 
@@ -846,6 +870,22 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       ) : null;
                     })()}
+
+                    {/* Product video */}
+                    {product.videoUrl && (
+                      <div className="mt-6">
+                        <h3 className="text-sm font-semibold text-foreground mb-2">Produktové video</h3>
+                        <div className="aspect-video rounded-xl overflow-hidden bg-black">
+                          <iframe
+                            src={getYoutubeEmbedUrl(product.videoUrl)}
+                            title={product.name}
+                            className="w-full h-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1600,7 +1640,86 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
-                    {/* Promotion History - Fifth */}
+                    {/* Product video - Fifth */}
+                    <div className={`w-full rounded-xl transition-colors ${
+                        product.videoUrl
+                          ? "bg-red-50 border border-red-200"
+                          : "bg-gray-50 border-2 border-dashed border-gray-300"
+                      }`}>
+                      {inlineEdit === "video" ? (
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">
+                                  5
+                                </span>
+                                Produktové video (YouTube)
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Vložte odkaz na YouTube video (např.{" "}
+                                <code className="text-xs">https://www.youtube.com/watch?v=...</code> nebo{" "}
+                                <code className="text-xs">https://youtu.be/...</code>).
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => { setInlineEdit(null); setInlineValue(""); }}
+                              className="p-1 hover:bg-black/5 rounded-lg"
+                              title="Zavřít"
+                            >
+                              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            <Input
+                              placeholder="https://www.youtube.com/watch?v=..."
+                              value={inlineValue}
+                              onChange={(e) => setInlineValue(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Podporovány jsou standardní YouTube odkazy i zkrácené <code>youtu.be</code>. Video se zobrazí v horní části detailu produktu.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleInlineSave("videoUrl", inlineValue)}
+                            disabled={isSaving}
+                            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {isSaving ? "Ukládám..." : "Uložit video"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-4">
+                          <div className="flex items-center gap-4">
+                            <button
+                              onClick={() => { setInlineEdit("video"); setInlineValue(product.videoUrl || ""); }}
+                              className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            >
+                              <div className="relative flex-shrink-0">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                  product.videoUrl ? "bg-red-100" : "bg-gray-200"
+                                }`}>
+                                  <span className="text-2xl">▶️</span>
+                                </div>
+                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">5</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-foreground">Produktové video</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {product.videoUrl
+                                    ? "Video z YouTube je připojeno"
+                                    : "Přidejte odkaz na YouTube video k tomuto produktu"}
+                                </p>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Promotion History - Sixth */}
                     <div className={`w-full rounded-xl transition-colors ${
                         promotionLogs && promotionLogs.length > 0
                           ? "bg-indigo-50 border border-indigo-200"
@@ -1617,7 +1736,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             }`}>
                               <span className="text-2xl">📜</span>
                             </div>
-                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">5</span>
+                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
                           </div>
                           <div className="flex-1">
                             <p className="font-semibold text-foreground">Historie propagace</p>

@@ -138,6 +138,7 @@ export const updateMarketingData = mutation({
       title: v.string(),
       url: v.string(),
     }))),
+    videoUrl: v.optional(v.string()),
     pdfUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
