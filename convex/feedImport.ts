@@ -806,6 +806,138 @@ export const listMarketingBackups = query({
   },
 })
 
+// ===== Catalog-wide marketing snapshots (historical backups) =====
+
+// Create a new marketing snapshot of current catalog
+export const createMarketingSnapshot = mutation({
+  args: {
+    name: v.string(),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const products = await ctx.db.query("products").collect()
+
+    const snapshotProducts = products.map((p) => ({
+      productId: p._id,
+      externalId: p.externalId,
+      data: {
+        // Only marketing-related fields – feed data (price, availability, etc.) remain untouched
+        category: p.category,
+        salesClaim: p.salesClaim,
+        salesClaimSubtitle: p.salesClaimSubtitle,
+        whyBuy: p.whyBuy,
+        targetAudience: p.targetAudience,
+        pdfUrl: p.pdfUrl,
+        bannerUrls: p.bannerUrls,
+        socialFacebook: p.socialFacebook,
+        socialInstagram: p.socialInstagram,
+        socialFacebookImage: p.socialFacebookImage,
+        socialInstagramImage: p.socialInstagramImage,
+        hashtags: p.hashtags,
+        brandPillar: p.brandPillar,
+        tier: p.tier,
+        quickReferenceCard: p.quickReferenceCard,
+        faq: p.faq,
+        faqText: p.faqText,
+        salesForecast: p.salesForecast,
+        sensoryProfile: p.sensoryProfile,
+        seasonalOpportunities: p.seasonalOpportunities,
+        mainBenefits: p.mainBenefits,
+        herbComposition: p.herbComposition,
+        competitionComparison: p.competitionComparison,
+        articleUrls: p.articleUrls,
+        videoUrl: (p as any).videoUrl,
+        isTop: p.isTop,
+        topOrder: p.topOrder,
+      },
+    }))
+
+    const snapshotId = await ctx.db.insert("marketingSnapshots", {
+      name: args.name,
+      note: args.note,
+      createdAt: Date.now(),
+      createdBy: undefined,
+      products: snapshotProducts,
+    })
+
+    console.log(
+      `Created marketing snapshot "${args.name}" with ${snapshotProducts.length} products`,
+    )
+
+    return { snapshotId, products: snapshotProducts.length }
+  },
+})
+
+// List existing marketing snapshots (metadata only)
+export const listMarketingSnapshots = query({
+  args: {},
+  handler: async (ctx) => {
+    const snapshots = await ctx.db.query("marketingSnapshots").collect()
+
+    return snapshots
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((s) => ({
+        _id: s._id,
+        name: s.name,
+        note: s.note,
+        createdAt: s.createdAt,
+        createdBy: s.createdBy,
+        productCount: s.products.length,
+      }))
+  },
+})
+
+// Restore marketing data from a snapshot
+export const restoreMarketingSnapshot = mutation({
+  args: {
+    snapshotId: v.id("marketingSnapshots"),
+    mode: v.union(v.literal("all"), v.literal("selection")),
+    productIds: v.optional(v.array(v.id("products"))),
+  },
+  handler: async (ctx, args) => {
+    const snapshot = await ctx.db.get(args.snapshotId)
+    if (!snapshot) {
+      throw new Error("Snapshot not found")
+    }
+
+    const selection =
+      args.mode === "selection" && args.productIds
+        ? new Set(args.productIds.map((id) => id as unknown as string))
+        : null
+
+    let updated = 0
+    let missing = 0
+
+    for (const item of snapshot.products) {
+      if (selection && !selection.has(item.productId as unknown as string)) {
+        continue
+      }
+
+      const existing = await ctx.db.get(item.productId)
+      if (!existing) {
+        missing++
+        continue
+      }
+
+      const data = (item.data || {}) as Record<string, unknown>
+
+      // Build patch object – only marketing fields that exist in snapshot
+      const updates: Record<string, unknown> = { ...data }
+      updates.marketingLastUpdated = Date.now()
+      updates.lastUpdatedField = "restored_from_snapshot"
+
+      await ctx.db.patch(item.productId, updates)
+      updated++
+    }
+
+    console.log(
+      `Restored marketing snapshot ${args.snapshotId}: updated ${updated}, missing ${missing}`,
+    )
+
+    return { updated, missing }
+  },
+})
+
 // Restore backup to a product by providing the product ID and backup SKU
 export const restoreBackupToProduct = mutation({
   args: {
