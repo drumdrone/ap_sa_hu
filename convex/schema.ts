@@ -221,6 +221,20 @@ export default defineSchema({
     .index("by_product", ["productId"])
     .index("by_date", ["date"]),
   
+  // Historical snapshots of marketing data for the whole catalog
+  marketingSnapshots: defineTable({
+    name: v.string(), // human-friendly snapshot name
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+    createdBy: v.optional(v.string()),
+    products: v.array(v.object({
+      productId: v.id("products"),
+      externalId: v.optional(v.string()),
+      // Stored marketing fields for this product at snapshot time
+      data: v.any(),
+    })),
+  }).index("by_createdAt", ["createdAt"]),
+  
   // Marketing data backup (by SKU for recovery after product deletion)
   marketingBackup: defineTable({
     sku: v.string(), // externalId of the product
