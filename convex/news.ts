@@ -150,6 +150,37 @@ export const update = mutation({
   },
 });
 
+// Restore news from seed data
+export const restoreFromSeed = mutation({
+  args: {
+    newsItems: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const items = args.newsItems as Array<Record<string, unknown>>;
+    let restored = 0;
+
+    for (const item of items) {
+      const type = item.type as "product" | "company" | "materials";
+      const title = item.title as string;
+      if (!type || !title) continue;
+
+      const doc: Record<string, unknown> = {
+        type,
+        title,
+        createdAt: (item.createdAt as number) ?? Date.now(),
+      };
+      if (item.content) doc.content = item.content as string;
+      if (item.skus) doc.skus = item.skus as string[];
+      if (item.url) doc.url = item.url as string;
+
+      await ctx.db.insert("news", doc as any);
+      restored++;
+    }
+
+    return { restored };
+  },
+});
+
 // Find products by IDs or SKUs (externalId) - supports flexible matching
 export const findProductsBySkus = query({
   args: {

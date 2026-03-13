@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RefreshCw, Database, CheckCircle, AlertCircle, ExternalLink, Trash2, Archive, RotateCcw, Search, Link2 } from "lucide-react";
 import seedMarketingData from "@/lib/seed-marketing-data.json";
+import seedProductImages from "@/lib/seed-product-images.json";
+import seedNewsData from "@/lib/seed-news.json";
 
 const DEFAULT_FEED_URL = "https://www.apotheke.cz/xml-feeds/apotheke-luigisbox-products.xml";
 
@@ -31,6 +33,8 @@ export function FeedAdminContent() {
   const restoreBackup = useMutation(api.feedImport.restoreBackupToProduct);
   const restoreAllBackups = useMutation(api.feedImport.restoreAllBackups);
   const restoreMarketingFromSeed = useMutation(api.products.restoreMarketingFromSeed);
+  const restoreImagesFromSeed = useMutation(api.products.restoreImagesFromSeed);
+  const restoreNewsFromSeed = useMutation(api.news.restoreFromSeed);
 
   // State for restore all
   const [isRestoringAll, setIsRestoringAll] = useState(false);
@@ -39,6 +43,14 @@ export function FeedAdminContent() {
   // State for restore from seed
   const [isRestoringFromSeed, setIsRestoringFromSeed] = useState(false);
   const [restoreFromSeedResult, setRestoreFromSeedResult] = useState<string | null>(null);
+
+  // State for image restore
+  const [isRestoringImages, setIsRestoringImages] = useState(false);
+  const [restoreImagesResult, setRestoreImagesResult] = useState<string | null>(null);
+
+  // State for news restore
+  const [isRestoringNews, setIsRestoringNews] = useState(false);
+  const [restoreNewsResult, setRestoreNewsResult] = useState<string | null>(null);
 
   // State for orphaned products cleanup
   const [isCheckingOrphans, setIsCheckingOrphans] = useState(false);
@@ -178,7 +190,8 @@ export function FeedAdminContent() {
                     try {
                       // Known fields accepted by the mutation validator
                       const KNOWN_FIELDS = new Set([
-                        "externalId", "category", "salesClaim", "salesClaimSubtitle",
+                        "externalId", "image", "name", "description",
+                        "category", "salesClaim", "salesClaimSubtitle",
                         "whyBuy", "targetAudience", "pdfUrl", "bannerUrls",
                         "socialFacebook", "socialInstagram", "socialFacebookImage", "socialInstagramImage",
                         "hashtags", "brandPillar", "tier", "quickReferenceCard",
@@ -242,6 +255,103 @@ export function FeedAdminContent() {
                     : "bg-green-50 border border-green-200 text-green-800"
                 }`}>
                   {restoreFromSeedResult}
+                </div>
+              )}
+
+              {/* Restore images from seed */}
+              <div className="flex items-center gap-3 mt-4">
+                <Button
+                  onClick={async () => {
+                    if (!confirm("Obnovit obrázky produktů ze seed dat? (982 produktů)")) return;
+                    setIsRestoringImages(true);
+                    setRestoreImagesResult(null);
+                    try {
+                      const BATCH_SIZE = 50;
+                      let totalRestored = 0;
+                      let totalNotFound = 0;
+                      let totalInDb = 0;
+                      for (let i = 0; i < seedProductImages.length; i += BATCH_SIZE) {
+                        const batch = seedProductImages.slice(i, i + BATCH_SIZE);
+                        setRestoreImagesResult(`Zpracovávám ${i + 1}-${Math.min(i + BATCH_SIZE, seedProductImages.length)} z ${seedProductImages.length}...`);
+                        const result = await restoreImagesFromSeed({ products: batch as any });
+                        totalRestored += result.restored;
+                        totalNotFound += result.notFound;
+                        totalInDb = result.total;
+                      }
+                      setRestoreImagesResult(
+                        `Obnoveno obrázků u ${totalRestored} produktů (${totalInDb} v DB, ${totalNotFound} nenalezeno v seed)`
+                      );
+                    } catch (error) {
+                      setRestoreImagesResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
+                    } finally {
+                      setIsRestoringImages(false);
+                    }
+                  }}
+                  disabled={isRestoringImages}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {isRestoringImages ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji obrázky...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit obrázky produktů ({seedProductImages.length})
+                    </>
+                  )}
+                </Button>
+              </div>
+              {restoreImagesResult && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  restoreImagesResult.startsWith("Chyba")
+                    ? "bg-red-100 border border-red-300 text-red-800"
+                    : "bg-green-50 border border-green-200 text-green-800"
+                }`}>
+                  {restoreImagesResult}
+                </div>
+              )}
+
+              {/* Restore news from seed */}
+              <div className="flex items-center gap-3 mt-4">
+                <Button
+                  onClick={async () => {
+                    if (!confirm(`Obnovit ${seedNewsData.length} novinek ze seed dat?`)) return;
+                    setIsRestoringNews(true);
+                    setRestoreNewsResult(null);
+                    try {
+                      const result = await restoreNewsFromSeed({ newsItems: seedNewsData });
+                      setRestoreNewsResult(`Obnoveno ${result.restored} novinek`);
+                    } catch (error) {
+                      setRestoreNewsResult(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
+                    } finally {
+                      setIsRestoringNews(false);
+                    }
+                  }}
+                  disabled={isRestoringNews}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  {isRestoringNews ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Obnovuji novinky...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Obnovit novinky ({seedNewsData.length})
+                    </>
+                  )}
+                </Button>
+              </div>
+              {restoreNewsResult && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  restoreNewsResult.startsWith("Chyba")
+                    ? "bg-red-100 border border-red-300 text-red-800"
+                    : "bg-green-50 border border-green-200 text-green-800"
+                }`}>
+                  {restoreNewsResult}
                 </div>
               )}
             </CardContent>
