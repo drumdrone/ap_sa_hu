@@ -96,7 +96,7 @@ export function ProductImageSlider({
   // If no images at all, show placeholder
   if (allImages.length === 0 && !hasVideo) {
     return (
-      <div className={`bg-muted flex items-center justify-center ${className ?? ""}`}>
+      <div className={`bg-background flex items-center justify-center ${className ?? ""}`}>
         <span className="text-8xl">🍵</span>
       </div>
     );
@@ -106,7 +106,7 @@ export function ProductImageSlider({
   if (totalItems === 1 && allImages.length === 1 && !hasVideo) {
     return (
       <div
-        className={`relative bg-muted cursor-pointer group ${className ?? ""}`}
+        className={`relative bg-background cursor-pointer group ${className ?? ""}`}
         onClick={() => onImageClick?.(0)}
       >
         <Image
@@ -144,9 +144,9 @@ export function ProductImageSlider({
   };
 
   return (
-    <div className={`flex flex-row gap-2 ${className ?? ""}`}>
+    <div className={`flex flex-row gap-3 px-2 ${className ?? ""}`}>
       {/* Left: Vertical Thumbnails */}
-      <div className="flex flex-col gap-1.5 py-2 justify-center flex-shrink-0">
+      <div className="flex flex-col gap-2 py-4 justify-center flex-shrink-0">
         {visibleIndexes.map((idx) => {
           const isVideoThumb = hasVideo && idx === videoIndex;
           const isActive = idx === currentIndex;
@@ -155,7 +155,7 @@ export function ProductImageSlider({
               key={idx}
               onMouseEnter={() => setCurrentIndex(idx)}
               onClick={() => setCurrentIndex(idx)}
-              className={`w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
+              className={`w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
                 isActive
                   ? "border-primary ring-1 ring-primary/30 scale-105"
                   : "border-border opacity-70 hover:opacity-100 hover:border-muted-foreground"
@@ -201,7 +201,7 @@ export function ProductImageSlider({
       </div>
 
       {/* Right: Main Image with Navigation Arrows */}
-      <div className="relative flex-1 min-w-0 bg-muted overflow-hidden group">
+      <div className="relative flex-1 min-w-0 bg-background overflow-hidden group">
         {/* Main Image / Video */}
         <div
           className="w-full h-full cursor-pointer"

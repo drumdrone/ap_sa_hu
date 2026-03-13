@@ -823,7 +823,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     productName={product.name}
                     maxThumbnails={4}
                     onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
-                    className="w-full md:w-96 h-64 md:h-80 flex-shrink-0"
+                    className="w-full md:w-[420px] h-80 md:h-[460px] flex-shrink-0"
                   />
                   {/* Product Info */}
                   <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
@@ -871,22 +871,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       ) : null;
                     })()}
-
-                    {/* Product video */}
-                    {product.videoUrl && (
-                      <div className="mt-6">
-                        <h3 className="text-sm font-semibold text-foreground mb-2">Produktové video</h3>
-                        <div className="aspect-video rounded-xl overflow-hidden bg-black">
-                          <iframe
-                            src={getYoutubeEmbedUrl(product.videoUrl)}
-                            title={product.name}
-                            className="w-full h-full"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                          />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
