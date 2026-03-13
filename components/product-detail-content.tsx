@@ -819,6 +819,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   <ProductImageSlider
                     productImage={product.image}
                     galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
+                    videoUrl={product.videoUrl ?? undefined}
                     productName={product.name}
                     maxThumbnails={4}
                     onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
