@@ -95,6 +95,21 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const toggleTopProduct = useMutation(api.products.toggleTopProduct);
   const setTopOrder = useMutation(api.products.setTopOrder);
   const topProducts = useQuery(api.products.getTopProducts);
+
+  // Helper: detect if URL looks like přímý obrázek
+  const isImageUrl = (url?: string | null) => {
+    if (!url) return false;
+    return /\.(jpe?g|png|webp|gif)$/i.test(url.split("?")[0]);
+  };
+
+  // Helper: build Facebook embed URL from post link
+  const getFacebookEmbedUrl = (url: string) => {
+    try {
+      return `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(url)}&show_text=true&width=500`;
+    } catch {
+      return url;
+    }
+  };
   
   // Promotion logs
   const promotionLogs = useQuery(api.promotionLogs.getByProduct, { productId });
@@ -1440,13 +1455,38 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   </svg>
                                   Facebook
                                 </div>
-                                <a href={product.socialFacebookImage} target="_blank" rel="noopener noreferrer" className="block">
-                                  <img 
-                                    src={product.socialFacebookImage} 
-                                    alt="Facebook" 
-                                    className="w-full h-24 object-cover rounded-lg border hover:opacity-80 transition-opacity"
-                                  />
-                                </a>
+                                {isImageUrl(product.socialFacebookImage) ? (
+                                  <a
+                                    href={product.socialFacebookImage}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block"
+                                  >
+                                    <img 
+                                      src={product.socialFacebookImage} 
+                                      alt="Facebook" 
+                                      className="w-full h-24 object-cover rounded-lg border hover:opacity-80 transition-opacity"
+                                    />
+                                  </a>
+                                ) : (
+                                  <div className="w-full rounded-lg border border-blue-100 bg-blue-50 overflow-hidden">
+                                    <iframe
+                                      src={getFacebookEmbedUrl(product.socialFacebookImage)}
+                                      className="w-full h-40"
+                                      style={{ border: "none", overflow: "hidden" }}
+                                      scrolling="no"
+                                      frameBorder={0}
+                                      allow="encrypted-media; picture-in-picture"
+                                    />
+                                  </div>
+                                )}
+                                {product.socialFacebook && (
+                                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                                    {product.socialFacebook.length > 140
+                                      ? `${product.socialFacebook.slice(0, 140)}…`
+                                      : product.socialFacebook}
+                                  </p>
+                                )}
                               </div>
                             )}
                             {product.socialInstagramImage && (
@@ -1464,6 +1504,13 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     className="w-full h-24 object-cover rounded-lg border hover:opacity-80 transition-opacity"
                                   />
                                 </a>
+                                {product.socialInstagram && (
+                                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                                    {product.socialInstagram.length > 140
+                                      ? `${product.socialInstagram.slice(0, 140)}…`
+                                      : product.socialInstagram}
+                                  </p>
+                                )}
                               </div>
                             )}
                           </div>
