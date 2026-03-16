@@ -840,124 +840,167 @@ export function DashboardPageContent() {
           </div>
         ) : (
           <>
-          {/* News Tabs Panel */}
-          <div className="bg-card rounded-2xl border border-border shadow-sm mb-8 overflow-hidden">
-            <div className="p-5 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-white text-sm">📰</span>
+          {/* News + Last images (50/50 layout) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* News Tabs Panel */}
+            <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                    <span className="text-white text-sm">📰</span>
+                  </div>
+                  <h2 className="text-lg font-semibold text-foreground">Novinky</h2>
+                  <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-xs">
+                    {newsStats?.total ?? 0}
+                  </Badge>
                 </div>
-                <h2 className="text-lg font-semibold text-foreground">Novinky</h2>
-                <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-xs">
-                  {newsStats?.total ?? 0}
-                </Badge>
+                <Button
+                  onClick={() => setShowAddNews(true)}
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Přidat
+                </Button>
               </div>
-              <Button
-                onClick={() => setShowAddNews(true)}
-                size="sm"
-                className="bg-primary hover:bg-primary/90"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Přidat
-              </Button>
-            </div>
 
-            {/* Tag Filters */}
-            <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-border bg-muted/30">
-              <span className="text-sm text-muted-foreground mr-1">Filtr:</span>
-              <button
-                onClick={() => setActiveNewsFilter(null)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                  activeNewsFilter === null
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
-                }`}
-              >
-                Vše ({newsStats?.total ?? 0})
-              </button>
-              {(["product", "company", "materials"] as NewsType[]).map((type) => (
+              {/* Tag Filters */}
+              <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-border bg-muted/30">
+                <span className="text-sm text-muted-foreground mr-1">Filtr:</span>
                 <button
-                  key={type}
-                  onClick={() => setActiveNewsFilter(activeNewsFilter === type ? null : type)}
+                  onClick={() => setActiveNewsFilter(null)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                    activeNewsFilter === type
-                      ? getTagColor(type) + " border-current"
-                      : "bg-white text-muted-foreground border-border hover:border-current hover:" + getTagColor(type).split(" ")[1]
+                    activeNewsFilter === null
+                      ? "bg-primary text-white border-primary"
+                      : "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
                   }`}
                 >
-                  {getTagLabel(type)} ({getTagCount(type)})
+                  Vše ({newsStats?.total ?? 0})
                 </button>
-              ))}
-              
-              {/* Date separator */}
-              <div className="w-px h-5 bg-border mx-2" />
-              
-              {/* Date filter */}
-              {([
-                { days: 7, label: "7 dní" },
-                { days: 14, label: "14 dní" },
-                { days: 30, label: "30 dní" },
-              ] as const).map(({ days, label }) => (
+                {(["product", "company", "materials"] as NewsType[]).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setActiveNewsFilter(activeNewsFilter === type ? null : type)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                      activeNewsFilter === type
+                        ? getTagColor(type) + " border-current"
+                        : "bg-white text-muted-foreground border-border hover:border-current hover:" + getTagColor(type).split(" ")[1]
+                    }`}
+                  >
+                    {getTagLabel(type)} ({getTagCount(type)})
+                  </button>
+                ))}
+                
+                {/* Date separator */}
+                <div className="w-px h-5 bg-border mx-2" />
+                
+                {/* Date filter */}
+                {([
+                  { days: 7, label: "7 dní" },
+                  { days: 14, label: "14 dní" },
+                  { days: 30, label: "30 dní" },
+                ] as const).map(({ days, label }) => (
+                  <button
+                    key={days}
+                    onClick={() => setNewsDateFilter(newsDateFilter === days ? null : days)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                      newsDateFilter === days
+                        ? "bg-gray-800 text-white border-gray-800"
+                        : "bg-white text-muted-foreground border-border hover:border-gray-400 hover:text-gray-700"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
                 <button
-                  key={days}
-                  onClick={() => setNewsDateFilter(newsDateFilter === days ? null : days)}
+                  onClick={() => setNewsDateFilter(null)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                    newsDateFilter === days
+                    newsDateFilter === null
                       ? "bg-gray-800 text-white border-gray-800"
                       : "bg-white text-muted-foreground border-border hover:border-gray-400 hover:text-gray-700"
                   }`}
                 >
-                  {label}
+                  Vše
                 </button>
-              ))}
-              <button
-                onClick={() => setNewsDateFilter(null)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                  newsDateFilter === null
-                    ? "bg-gray-800 text-white border-gray-800"
-                    : "bg-white text-muted-foreground border-border hover:border-gray-400 hover:text-gray-700"
-                }`}
-              >
-                Vše
-              </button>
+              </div>
+
+              {/* News List */}
+              <div className="max-h-[500px] overflow-y-auto">
+                {getFilteredNews() === undefined ? (
+                  <div className="p-8 text-center">
+                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                  </div>
+                ) : getFilteredNews()?.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <div className="text-4xl mb-3">📭</div>
+                    <p className="text-muted-foreground">Zatím žádné novinky</p>
+                    <Button
+                      onClick={() => setShowAddNews(true)}
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                    >
+                      Přidat první novinku
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                    {getFilteredNews()?.map((item) => (
+                      <NewsItemCard
+                        key={item._id}
+                        item={item}
+                        formatRelativeTime={formatRelativeTime}
+                        onDelete={handleDeleteNews}
+                        onEdit={handleStartEdit}
+                        onImageClick={handleOpenLightbox}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* News List */}
-            <div className="max-h-[500px] overflow-y-auto">
-              {getFilteredNews() === undefined ? (
-                <div className="p-8 text-center">
-                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            {/* Last uploaded images – homepage column next to news */}
+            {recentImages && recentImages.length > 0 && (
+              <div className="bg-card rounded-2xl border border-border shadow-sm">
+                <div className="p-5 border-b border-border">
+                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    Poslední nahrané obrázky
+                  </h2>
                 </div>
-              ) : getFilteredNews()?.length === 0 ? (
-                <div className="p-8 text-center">
-                  <div className="text-4xl mb-3">📭</div>
-                  <p className="text-muted-foreground">Zatím žádné novinky</p>
-                  <Button
-                    onClick={() => setShowAddNews(true)}
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                  >
-                    Přidat první novinku
-                  </Button>
+                <div className="p-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {recentImages.map((image) => (
+                      <Link
+                        key={image._id}
+                        href={`/product/${image.productId}`}
+                        className="group relative aspect-square rounded-xl overflow-hidden bg-muted shadow-sm"
+                      >
+                        {image.url && (
+                          <img
+                            src={image.url}
+                            alt={image.filename}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute bottom-0 left-0 right-0 p-2">
+                            <p className="text-white text-xs truncate">{image.productName}</p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-                  {getFilteredNews()?.map((item) => (
-                    <NewsItemCard
-                      key={item._id}
-                      item={item}
-                      formatRelativeTime={formatRelativeTime}
-                      onDelete={handleDeleteNews}
-                      onEdit={handleStartEdit}
-                      onImageClick={handleOpenLightbox}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Top 10 Products */}
@@ -1170,45 +1213,6 @@ export function DashboardPageContent() {
                 </div>
               </div>
 
-              {/* Recent Images */}
-              {recentImages && recentImages.length > 0 && (
-                <div className="bg-card rounded-2xl border border-border shadow-sm">
-                  <div className="p-5 border-b border-border">
-                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                      <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                      Poslední nahrané obrázky
-                    </h2>
-                  </div>
-                  <div className="p-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {recentImages.map((image) => (
-                        <Link
-                          key={image._id}
-                          href={`/product/${image.productId}`}
-                          className="group relative aspect-square rounded-xl overflow-hidden bg-muted shadow-sm"
-                        >
-                          {image.url && (
-                            <img
-                              src={image.url}
-                              alt={image.filename}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="absolute bottom-0 left-0 right-0 p-2">
-                              <p className="text-white text-xs truncate">{image.productName}</p>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Right column - Stats & Todos */}
