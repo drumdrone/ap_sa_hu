@@ -15,18 +15,19 @@ export function EnvironmentBanner() {
     <div
       style={{
         position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
+        bottom: 16,
+        right: 16,
         zIndex: 9999,
         backgroundColor: "#f59e0b",
         color: "#000",
         textAlign: "center",
-        padding: "4px 0",
+        padding: "6px 10px",
         fontSize: "13px",
         fontWeight: 600,
         letterSpacing: "0.05em",
         textTransform: "uppercase",
+        borderRadius: 9999,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
       }}
     >
       {env} prostředí — změny zde neovlivní produkci
