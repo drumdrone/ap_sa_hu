@@ -1274,14 +1274,13 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               onClick={() => setOpenPanel("gallery")}
                               className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
                             >
-                              <div className="relative flex-shrink-0">
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                                  galleryImages && galleryImages.length > 0 ? "bg-purple-100" : "bg-gray-200"
-                                }`}>
-                                  <span className="text-2xl">🖼️</span>
-                                </div>
-                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">2</span>
+                            <div className="relative flex-shrink-0">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                galleryImages && galleryImages.length > 0 ? "bg-purple-100" : "bg-gray-200"
+                              }`}>
+                                <span className="text-2xl">🖼️</span>
                               </div>
+                            </div>
                               <div className="flex-1">
                                 <p className="font-semibold text-foreground flex items-center gap-2">
                                   Galerie
@@ -1536,14 +1535,14 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("socialImages"); setInlineValue("|||"); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("socialImages"); setInlineValue("|||"); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">📷</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">3</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Facebook a Instagram obrázky</p>
@@ -1637,7 +1636,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 }`}>
                                   <span className="text-2xl">📥</span>
                                 </div>
-                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">4</span>
                               </div>
                               <div className="flex-1">
                                 <p className="font-semibold text-foreground">Stáhnout materiály</p>
@@ -1754,7 +1752,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 }`}>
                                   <span className="text-2xl">▶️</span>
                                 </div>
-                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">5</span>
                               </div>
                               <div className="flex-1">
                                 <p className="font-semibold text-foreground">Produktové video</p>
@@ -1911,7 +1908,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               }`}>
                                 <span className="text-2xl">📜</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Historie propagace</p>
@@ -1949,7 +1945,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                             <span className="text-2xl">🛒</span>
                           </div>
-                          <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
                         </div>
                         <div className="flex-1">
                           <p className="font-semibold text-foreground">Zobrazit na e-shopu</p>
@@ -1983,7 +1978,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             }`}>
                               <span className="text-2xl">{hasMissing ? "⚠️" : "✏️"}</span>
                             </div>
-                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">7</span>
                           </div>
                           <div className="flex-1">
                             <p className="font-semibold text-foreground flex items-center gap-2">
@@ -2018,7 +2012,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
                           <span className="text-2xl">📊</span>
                         </div>
-                        <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
                       </div>
                       <div className="flex-1">
                         <p className="font-semibold text-foreground">Prezentace</p>
@@ -2088,7 +2081,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-gray-200 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">📋</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">7</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Quick Reference Card</p>
@@ -2239,7 +2231,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">📰</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">10</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Články</p>
@@ -2269,11 +2260,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               }`}>
                                 <span className="text-xl sm:text-2xl">{product.isTop ? "⭐" : "☆"}</span>
                               </div>
-                              {product.topOrder && (
-                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                                  {product.topOrder}
-                                </span>
-                              )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold text-foreground flex items-center gap-2 flex-wrap">
@@ -2535,7 +2521,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">🎯</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">0</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">3 hlavní benefity</p>
@@ -2629,7 +2614,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-lime-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">🌿</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">0</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Hlavní zastoupení bylinek</p>
@@ -2720,7 +2704,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">⚔️</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">0</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Srovnání s konkurencí</p>
@@ -2811,7 +2794,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">📊</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">1</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Křivka prodejů</p>
@@ -2905,7 +2887,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">💬</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">2</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">FAQ</p>
