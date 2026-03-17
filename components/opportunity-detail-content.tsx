@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import Image from "next/image";
+import { useAccess } from "@/components/access-context";
 
 interface EventSalesKitItem {
   id: string;
@@ -79,6 +80,9 @@ export function OpportunityDetailContent({ slug }: { slug: string }) {
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [isUploadingFlyer, setIsUploadingFlyer] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const { role } = useAccess();
+  const canEdit = role === "editor";
   
   // Event Sales Kit state
   const [salesKitItems, setSalesKitItems] = useState<EventSalesKitItem[]>([]);

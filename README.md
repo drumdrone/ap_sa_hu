@@ -260,6 +260,28 @@ npm run dev
 ```
 Aplikace běží na `http://localhost:3000`
 
+## Přístupová hesla (demo ochrana)
+
+Na produkční i lokální verzi je zapnutá jednoduchá heslová ochrana přímo ve frontend aplikaci:
+
+- **Režim prohlížení (viewer)**  
+  - Heslo: `view5678`  
+  - Po přihlášení jsou **skryté všechny editační prvky** (ikony tužek, inline editace), aplikace je pouze pro čtení.
+
+- **Editorský režim (editor)**  
+  - Heslo: `edit5678`  
+  - Zobrazí se všechny editační prvky (tužky, formuláře, tlačítka „Uložit“), aplikaci lze plně upravovat.
+
+Technicky je to řešené čistě na klientu:
+
+- Komponenta `AccessGate` se zobrazuje hned v `RootLayout` a blokuje aplikaci, dokud není zadáno heslo.
+- Po zadání správného hesla se zvolená role (`viewer` / `editor`) uloží do `localStorage` pod klíčem `apotheke_sales_hub_role`.
+- Komponenty jako `ProductDetailContent` a `OpportunityDetailContent` používají hook `useAccess()` a podle role:
+  - **viewer**: skrývají ikony tužek a blokují akce, které vedou k editaci,
+  - **editor**: chovají se stejně jako dříve (plná editace).
+
+Tento mechanismus slouží jako jednoduchý „demo lock“ a **nenahrazuje skutečnou autentizaci** (tu zajišťuje Convex Auth).
+
 ## Struktura exportovaných dat
 
 ```
