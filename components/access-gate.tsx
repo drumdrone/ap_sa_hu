@@ -52,7 +52,7 @@ export function AccessGate({ children }: Props) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              placeholder="view5678 nebo edit5678"
+              placeholder="Zadejte heslo"
             />
           </label>
           {error && <p className="text-xs text-red-500">{error}</p>}
@@ -63,17 +63,6 @@ export function AccessGate({ children }: Props) {
             Přihlásit
           </button>
         </form>
-        <div className="border-t border-border pt-3 mt-2">
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            <span className="font-semibold">Režimy:</span>{" "}
-            <span className="block">
-              <strong>view5678</strong> – prezentační režim (bez editace, skryté tužky).
-            </span>
-            <span className="block">
-              <strong>edit5678</strong> – editorský režim (všechny editační prvky viditelné).
-            </span>
-          </p>
-        </div>
       </div>
     </div>
   );
