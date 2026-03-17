@@ -34,13 +34,14 @@ const todoItems = [
   { id: "review-materials", label: "Zkontrolovat marketingové materiály", priority: "low" },
 ];
 
-type QuickActionPanel = "social" | "materials" | "edit" | "gallery" | "referenceCard" | "promotionHistory" | null;
+type QuickActionPanel = "social" | "materials" | "edit" | "gallery" | "referenceCard" | null;
 type InlineEdit =
   | "gallery"
   | "social"
   | "socialImages"
   | "materials"
   | "video"
+  | "promotionHistory"
   | "eshop"
   | "presentation"
   | "referenceCard"
@@ -1084,24 +1085,79 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 {/* Add to Sales Kit button */}
                                 <button
                                   onClick={() => {
-                                    const getKitItem = (): { id: string; type: "claim" | "reference" | "gallery" | "social" | "materials" | "whybuy"; label: string; content: string } | null => {
+                                    const getKitItem = (): {
+                                      id: string;
+                                      type: "claim" | "reference" | "gallery" | "social" | "materials" | "whybuy";
+                                      label: string;
+                                      content: string;
+                                    } | null => {
                                       if (alert.id === "has-claim" && product.salesClaim) {
-                                        return { id: "sales-claim", type: "claim", label: "Prodejní claim", content: product.salesClaim + (product.salesClaimSubtitle ? `\n${product.salesClaimSubtitle}` : "") };
+                                        return {
+                                          id: "sales-claim",
+                                          type: "claim",
+                                          label: "Prodejní claim",
+                                          content:
+                                            product.salesClaim +
+                                            (product.salesClaimSubtitle ? `\n${product.salesClaimSubtitle}` : ""),
+                                        };
                                       }
                                       if (alert.id === "has-reference-card" && product.quickReferenceCard) {
-                                        return { id: "reference-card", type: "reference", label: "Quick Reference Card", content: product.quickReferenceCard };
+                                        return {
+                                          id: "reference-card",
+                                          type: "reference",
+                                          label: "Quick Reference Card",
+                                          content: product.quickReferenceCard,
+                                        };
                                       }
                                       if (alert.id === "has-fb" && product.socialFacebook) {
-                                        return { id: "fb-post", type: "social", label: "Facebook post", content: product.socialFacebook };
+                                        return {
+                                          id: "fb-post",
+                                          type: "social",
+                                          label: "Facebook post",
+                                          content: product.socialFacebook,
+                                        };
                                       }
                                       if (alert.id === "has-ig" && product.socialInstagram) {
-                                        return { id: "ig-post", type: "social", label: "Instagram post", content: product.socialInstagram };
+                                        return {
+                                          id: "ig-post",
+                                          type: "social",
+                                          label: "Instagram post",
+                                          content: product.socialInstagram,
+                                        };
+                                      }
+                                      if (alert.id === "has-gallery" && galleryImages && galleryImages.length > 0) {
+                                        const urls =
+                                          galleryImages
+                                            .map((img) => img.url)
+                                            .filter((url): url is string => !!url) ?? [];
+                                        const content =
+                                          urls.length > 0
+                                            ? `Obrázky v galerii: ${galleryImages.length}\n\nOdkazy:\n${urls
+                                                .slice(0, 5)
+                                                .join("\n")}${urls.length > 5 ? "\n..." : ""}`
+                                            : `Obrázky v galerii: ${galleryImages.length}`;
+                                        return {
+                                          id: "gallery-images",
+                                          type: "gallery",
+                                          label: `Galerie (${galleryImages.length} obr.)`,
+                                          content,
+                                        };
                                       }
                                       if (alert.id === "has-pdf" && product.pdfUrl) {
-                                        return { id: "pdf-link", type: "materials", label: "PDF odkaz", content: product.pdfUrl };
+                                        return {
+                                          id: "pdf-link",
+                                          type: "materials",
+                                          label: "PDF odkaz",
+                                          content: product.pdfUrl,
+                                        };
                                       }
                                       if (alert.id === "has-whybuy" && product.whyBuy) {
-                                        return { id: "why-buy", type: "whybuy", label: "Proč koupit", content: product.whyBuy.join("\n• ") };
+                                        return {
+                                          id: "why-buy",
+                                          type: "whybuy",
+                                          label: "Proč koupit",
+                                          content: product.whyBuy.join("\n• "),
+                                        };
                                       }
                                       return null;
                                     };
@@ -1109,13 +1165,15 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     if (item) addToSalesKit(item);
                                   }}
                                   className={`px-2 py-1.5 rounded text-xs font-bold transition-colors ${
-                                    salesKitItems.find(i => 
-                                      (alert.id === "has-claim" && i.id === "sales-claim") ||
-                                      (alert.id === "has-reference-card" && i.id === "reference-card") ||
-                                      (alert.id === "has-fb" && i.id === "fb-post") ||
-                                      (alert.id === "has-ig" && i.id === "ig-post") ||
-                                      (alert.id === "has-pdf" && i.id === "pdf-link") ||
-                                      (alert.id === "has-whybuy" && i.id === "why-buy")
+                                    salesKitItems.find(
+                                      (i) =>
+                                        (alert.id === "has-claim" && i.id === "sales-claim") ||
+                                        (alert.id === "has-reference-card" && i.id === "reference-card") ||
+                                        (alert.id === "has-fb" && i.id === "fb-post") ||
+                                        (alert.id === "has-ig" && i.id === "ig-post") ||
+                                        (alert.id === "has-gallery" && i.id === "gallery-images") ||
+                                        (alert.id === "has-pdf" && i.id === "pdf-link") ||
+                                        (alert.id === "has-whybuy" && i.id === "why-buy"),
                                     )
                                       ? "bg-primary text-primary-foreground"
                                       : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"
@@ -1152,66 +1210,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     </h2>
                   </div>
                   <div className="p-4 space-y-3">
-                    {/* Quick Reference Card - First */}
-                    <div className={`w-full rounded-xl transition-colors ${
-                        product.quickReferenceCard
-                          ? "bg-gray-800 border border-gray-700"
-                          : "bg-gray-50 border-2 border-dashed border-gray-300"
-                      }`}>
-                      <div className="flex items-center gap-4 p-4">
-                        <button
-                          onClick={() => setOpenPanel("referenceCard")}
-                          className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                        >
-                          <div className="relative flex-shrink-0">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              product.quickReferenceCard ? "bg-gray-700" : "bg-gray-200"
-                            }`}>
-                              <span className="text-2xl">📋</span>
-                            </div>
-                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-green-500 text-white text-xs font-bold rounded-full flex items-center justify-center">1</span>
-                          </div>
-                          <div className="flex-1">
-                            <p className={`font-semibold flex items-center gap-2 ${product.quickReferenceCard ? "text-green-400" : "text-foreground"}`}>
-                              Quick Reference Card
-                              {product.quickReferenceCard && (
-                                <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full">✓</span>
-                              )}
-                            </p>
-                            <p className={`text-sm ${product.quickReferenceCard ? "text-gray-400" : "text-muted-foreground"}`}>
-                              {product.quickReferenceCard 
-                                ? "Zobrazit kartu pro prodejce" 
-                                : "Karta není vyplněna"}
-                            </p>
-                          </div>
-                          <svg className={`w-5 h-5 ${product.quickReferenceCard ? "text-gray-500" : "text-muted-foreground"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                        {product.quickReferenceCard && (
-                          <button
-                            onClick={() => addToSalesKit({
-                              id: "reference-card",
-                              type: "reference",
-                              label: "Quick Reference Card",
-                              content: product.quickReferenceCard || ""
-                            })}
-                            className={`p-2 rounded-lg transition-colors ${
-                              salesKitItems.find(i => i.id === "reference-card")
-                                ? "bg-green-500 text-white"
-                                : "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                            }`}
-                            title="Přidat do Sales Kit"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Gallery - Second */}
+                    {/* Gallery - First */}
                     <div className={`w-full rounded-xl transition-colors ${
                         galleryImages && galleryImages.length > 0
                           ? "bg-purple-50 border border-purple-200"
@@ -1299,12 +1298,23 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {galleryImages && galleryImages.length > 0 && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); addToSalesKit({
-                                    id: "gallery-images",
-                                    type: "gallery",
-                                    label: `Galerie (${galleryImages.length} obr.)`,
-                                    content: `Obrázky v galerii: ${galleryImages.length}\n\nOdkazy:\n${galleryImages.slice(0, 5).map(img => img.url).join("\n")}${galleryImages.length > 5 ? "\n..." : ""}`
-                                  }); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const urls = galleryImages
+                                      .map(img => img.url)
+                                      .filter((url): url is string => !!url);
+                                    if (urls.length === 0) {
+                                      return;
+                                    }
+                                    addToSalesKit({
+                                      id: "gallery-images",
+                                      type: "gallery",
+                                      label: `Galerie (${galleryImages.length} obr.)`,
+                                      content: `Obrázky v galerii: ${galleryImages.length}\n\nOdkazy:\n${urls.slice(0, 5).join("\n")}${urls.length > 5 ? "\n..." : ""}`,
+                                    });
+                                    setSaveMessage("Galerie přidána do Sales Kit");
+                                    setTimeout(() => setSaveMessage(null), 2000);
+                                  }}
                                   className={`p-2 rounded-lg transition-colors ${
                                     salesKitItems.find(i => i.id === "gallery-images")
                                       ? "bg-green-500 text-white"
@@ -1746,6 +1756,15 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </p>
                               </div>
                             </button>
+                            <button
+                              onClick={() => { setInlineEdit("video"); setInlineValue(product.videoUrl || ""); }}
+                              className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                              title="Upravit produktové video"
+                            >
+                              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       )}
@@ -1757,32 +1776,151 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           ? "bg-indigo-50 border border-indigo-200"
                           : "bg-gray-50 border-2 border-dashed border-gray-300"
                       }`}>
-                      <div className="flex items-center gap-4 p-4">
-                        <button
-                          onClick={() => setOpenPanel("promotionHistory")}
-                          className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                        >
-                          <div className="relative flex-shrink-0">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              promotionLogs && promotionLogs.length > 0 ? "bg-indigo-100" : "bg-gray-200"
-                            }`}>
-                              <span className="text-2xl">📜</span>
-                            </div>
-                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-foreground">Historie propagace</p>
-                            <p className="text-sm text-muted-foreground">
-                              {promotionLogs && promotionLogs.length > 0
-                                ? `${promotionLogs.length} ${promotionLogs.length === 1 ? "záznam" : promotionLogs.length < 5 ? "záznamy" : "záznamů"}`
-                                : "Zatím žádné záznamy"}
+                      {inlineEdit === "promotionHistory" ? (
+                        <div className="p-4 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-foreground flex items-center gap-2">
+                              <span>📜</span>
+                              Historie propagace
                             </p>
+                            <button
+                              onClick={() => setInlineEdit(null)}
+                              className="p-1 hover:bg-black/5 rounded-lg"
+                              title="Zavřít"
+                            >
+                              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           </div>
-                          <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
+
+                          {/* Add new log form */}
+                          <div className="bg-muted/40 border border-border rounded-lg p-3 space-y-2">
+                            <p className="font-semibold text-xs text-muted-foreground mb-1">Přidat záznam</p>
+                            <Input
+                              placeholder="Název (např. TV Reklama, Facebook Ads)"
+                              value={newLogTitle}
+                              onChange={(e) => setNewLogTitle(e.target.value)}
+                              className="w-full text-sm"
+                            />
+                            <Input
+                              type="date"
+                              value={newLogDate}
+                              onChange={(e) => setNewLogDate(e.target.value)}
+                              className="w-full text-sm"
+                            />
+                            <Input
+                              placeholder="URL odkaz (volitelné)"
+                              value={newLogUrl}
+                              onChange={(e) => setNewLogUrl(e.target.value)}
+                              className="w-full text-sm"
+                            />
+                            <button
+                              onClick={async () => {
+                                if (!newLogTitle.trim() || !newLogDate) return;
+                                await addPromotionLog({
+                                  productId,
+                                  title: newLogTitle.trim(),
+                                  date: new Date(newLogDate).getTime(),
+                                  url: newLogUrl.trim() || undefined,
+                                });
+                                setNewLogTitle("");
+                                setNewLogDate("");
+                                setNewLogUrl("");
+                              }}
+                              disabled={!newLogTitle.trim() || !newLogDate}
+                              className="w-full px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                              Přidat záznam
+                            </button>
+                          </div>
+
+                          {/* Log list */}
+                          <div className="space-y-1 max-h-64 overflow-y-auto">
+                            {promotionLogs && promotionLogs.length > 0 ? (
+                              promotionLogs.map((log) => (
+                                <div
+                                  key={log._id}
+                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/40"
+                                >
+                                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-foreground truncate">{log.title}</p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      {new Date(log.date).toLocaleDateString("cs-CZ", {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                      })}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {log.url && (
+                                      <a
+                                        href={log.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-1 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground"
+                                        title="Otevřít odkaz"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => removePromotionLog({ id: log._id })}
+                                      className="p-1 hover:bg-red-100 rounded-lg text-muted-foreground hover:text-red-600"
+                                      title="Smazat"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-muted-foreground text-center py-2">
+                                Zatím žádné záznamy.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4 p-4">
+                          <button
+                            onClick={() => setInlineEdit("promotionHistory")}
+                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                          >
+                            <div className="relative flex-shrink-0">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                promotionLogs && promotionLogs.length > 0 ? "bg-indigo-100" : "bg-gray-200"
+                              }`}>
+                                <span className="text-2xl">📜</span>
+                              </div>
+                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-foreground">Historie propagace</p>
+                              <p className="text-sm text-muted-foreground">
+                                {promotionLogs && promotionLogs.length > 0
+                                  ? `${promotionLogs.length} ${promotionLogs.length === 1 ? "záznam" : promotionLogs.length < 5 ? "záznamy" : "záznamů"}`
+                                  : "Zatím žádné záznamy"}
+                              </p>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => setInlineEdit("promotionHistory")}
+                            className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                            title="Upravit historii propagace"
+                          >
+                            <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* View on e-shop */}
