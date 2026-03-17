@@ -4,11 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useAccess } from "@/components/access-context";
 
 export function Header() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
   const syncStatus = useQuery(api.feedImport.getSyncStatus);
+  const { role, logout } = useAccess();
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -38,15 +40,37 @@ export function Header() {
     <header className="sticky top-0 z-50 bg-white border-b border-border shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md">
-              <span className="text-xl">🍵</span>
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Apotheke</h1>
-              <p className="text-xs text-blue-500 -mt-0.5 font-medium">Sales Hub</p>
-            </div>
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md">
+                <span className="text-xl">🍵</span>
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Apotheke</h1>
+                <p className="text-xs text-blue-500 -mt-0.5 font-medium">Sales Hub</p>
+              </div>
+            </Link>
+            {role && (
+              <div className="flex items-center gap-2">
+                <div
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wide uppercase border ${
+                    role === "editor"
+                      ? "bg-red-50 border-red-300 text-red-700"
+                      : "bg-emerald-50 border-emerald-300 text-emerald-700"
+                  }`}
+                >
+                  {role === "editor" ? "Editor" : "Návštěvník"}
+                </div>
+                <button
+                  onClick={logout}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-muted/40 hover:bg-muted transition-colors"
+                  title="Odhlásit"
+                >
+                  Odhlásit
+                </button>
+              </div>
+            )}
+          </div>
           
           <div className="flex items-center gap-4">
             {/* Sync Status */}

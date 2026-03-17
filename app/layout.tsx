@@ -4,6 +4,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { EnvironmentBanner } from "@/components/environment-banner";
+import { AccessProvider } from "@/components/access-context";
+import { AccessGate } from "@/components/access-gate";
+import { Header } from "@/components/header";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -28,7 +31,12 @@ export default function RootLayout({
       >
         <EnvironmentBanner />
         <ConvexClientProvider>
-          {children}
+          <AccessProvider>
+            <AccessGate>
+              <Header />
+              {children}
+            </AccessGate>
+          </AccessProvider>
         </ConvexClientProvider>
       </body>
     </html>
