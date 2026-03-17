@@ -2494,6 +2494,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </button>
                               <CopyButton text={product.mainBenefits || ""} />
                               {canEdit && (
+                              {canEdit && (
                                 <button
                                   onClick={() => { setInlineEdit("mainBenefits"); setInlineValue(product.mainBenefits || ""); }}
                                   className="p-2 hover:bg-black/10 rounded-lg transition-colors"
@@ -2503,6 +2504,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                   </svg>
                                 </button>
+                              )}
                               )}
                             </div>
                           </div>
@@ -2587,6 +2589,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </button>
                               <CopyButton text={product.herbComposition || ""} />
                               {canEdit && (
+                              {canEdit && (
                                 <button
                                   onClick={() => { setInlineEdit("herbComposition"); setInlineValue(product.herbComposition || ""); }}
                                   className="p-2 hover:bg-black/10 rounded-lg transition-colors"
@@ -2596,6 +2599,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                   </svg>
                                 </button>
+                              )}
                               )}
                             </div>
                           </div>
@@ -2680,7 +2684,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </button>
                               <CopyButton text={product.competitionComparison || ""} />
                               <button
-                                onClick={() => { setInlineEdit("competitionComparison"); setInlineValue(product.competitionComparison || ""); }}
+                                onClick={() => { if (!canEdit) return; setInlineEdit("competitionComparison"); setInlineValue(product.competitionComparison || ""); }}
                                 className="p-2 hover:bg-black/10 rounded-lg transition-colors"
                                 title="Upravit"
                               >
@@ -2697,8 +2701,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("competitionComparison"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("competitionComparison"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
@@ -2770,7 +2775,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </button>
                               <CopyButton text={product.salesForecast} />
                               <button
-                                onClick={() => { setInlineEdit("salesForecast"); setInlineValue(product.salesForecast || ""); }}
+                                onClick={() => { if (!canEdit) return; setInlineEdit("salesForecast"); setInlineValue(product.salesForecast || ""); }}
                                 className="p-2 hover:bg-black/10 rounded-lg transition-colors"
                                 title="Upravit graf"
                               >
@@ -2787,8 +2792,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("salesForecast"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("salesForecast"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -2862,15 +2868,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.faqText} />
-                              <button
-                                onClick={() => { setInlineEdit("faq"); setInlineValue(product.faqText || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit FAQ"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("faq"); setInlineValue(product.faqText || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit FAQ"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
@@ -2880,8 +2888,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("faq"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("faq"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -2952,15 +2961,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.seasonalOpportunities} />
-                              <button
-                                onClick={() => { setInlineEdit("seasonalOpportunities"); setInlineValue(product.seasonalOpportunities || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("seasonalOpportunities"); setInlineValue(product.seasonalOpportunities || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
@@ -2970,8 +2981,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("seasonalOpportunities"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("seasonalOpportunities"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -3043,15 +3055,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.sensoryProfile} />
-                              <button
-                                onClick={() => { setInlineEdit("sensoryProfile"); setInlineValue(product.sensoryProfile || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("sensoryProfile"); setInlineValue(product.sensoryProfile || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
@@ -3061,8 +3075,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("sensoryProfile"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("sensoryProfile"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
