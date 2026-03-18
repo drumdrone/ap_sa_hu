@@ -1958,51 +1958,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       </a>
                     )}
 
-                    {/* Edit Marketing Data */}
-                    {(() => {
-                      const missingFields: string[] = [];
-                      if (!product.salesClaim) missingFields.push("claim");
-                      if (!product.tier) missingFields.push("tier");
-                      if (!product.brandPillar) missingFields.push("pillar");
-                      const hasMissing = missingFields.length > 0;
-                      return (
-                        <button
-                          onClick={() => setOpenPanel("edit")}
-                          className={`w-full flex items-center gap-4 p-4 rounded-xl transition-colors text-left ${
-                            hasMissing
-                              ? "bg-red-50 hover:bg-red-100 border-2 border-dashed border-red-300"
-                              : "bg-amber-50 hover:bg-amber-100 border border-amber-200"
-                          }`}
-                        >
-                          <div className="relative flex-shrink-0">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              hasMissing ? "bg-red-100" : "bg-amber-100"
-                            }`}>
-                              <span className="text-2xl">{hasMissing ? "⚠️" : "✏️"}</span>
-                            </div>
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-foreground flex items-center gap-2">
-                              Upravit data
-                              {hasMissing && (
-                                <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded-full">
-                                  {missingFields.length} chybí
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {hasMissing
-                                ? "Doplňte chybějící marketingové údaje!"
-                                : "Editovat marketingové informace"}
-                            </p>
-                          </div>
-                          <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      );
-                    })()}
-
                     {/* Presentation */}
                     <a
                       href="https://notebooklm.google.com/notebook/8e4b446d-d801-44d3-a6cb-4f5ea37760e8?artifactId=3e6d9eb6-b181-4b66-904f-12f224eb5235"
@@ -2632,97 +2587,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
-                    {/* Competition Comparison */}
-                    <div className={`w-full rounded-xl transition-colors ${
-                      product.competitionComparison
-                        ? "bg-orange-50 border border-orange-200"
-                        : "bg-gray-50 border-2 border-dashed border-gray-300"
-                    }`}>
-                      {inlineEdit === "competitionComparison" ? (
-                        <div className="p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-foreground">⚔️ Srovnání s konkurencí</p>
-                            <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
-                          </div>
-                          <textarea
-                            value={inlineValue}
-                            onChange={(e) => setInlineValue(e.target.value)}
-                            placeholder="Vložte srovnání s konkurencí..."
-                            className="w-full p-3 border rounded-lg text-xs font-mono min-h-[300px] resize-none bg-gray-900 text-orange-300"
-                          />
-                          <button
-                            onClick={() => handleInlineSave("competitionComparison", inlineValue)}
-                            disabled={isSaving}
-                            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
-                          >
-                            {isSaving ? "Ukládám..." : "Uložit"}
-                          </button>
-                        </div>
-                      ) : product.competitionComparison ? (
-                        <div className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <p className="font-semibold text-foreground flex items-center gap-2">
-                              <span>⚔️</span> Srovnání s konkurencí
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => addToSalesKit({
-                                  id: "competitionComparison",
-                                  type: "materials",
-                                  label: "Srovnání s konkurencí",
-                                  content: product.competitionComparison || ""
-                                })}
-                                className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "competitionComparison")
-                                    ? "bg-green-500 text-white"
-                                    : "bg-orange-100 hover:bg-orange-200 text-orange-700"
-                                }`}
-                                title="Přidat do Sales Kit"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                              </button>
-                              <CopyButton text={product.competitionComparison || ""} />
-                              <button
-                                onClick={() => { if (!canEdit) return; setInlineEdit("competitionComparison"); setInlineValue(product.competitionComparison || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                          <pre className="text-xs font-mono whitespace-pre-wrap bg-gray-900 text-orange-300 p-4 rounded-lg overflow-x-auto">
-                            {product.competitionComparison}
-                          </pre>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 p-4">
-                          <button
-                            onClick={() => { if (!canEdit) return; setInlineEdit("competitionComparison"); setInlineValue(""); }}
-                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                            disabled={!canEdit}
-                          >
-                            <div className="relative flex-shrink-0">
-                              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                                <span className="text-2xl">⚔️</span>
-                              </div>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-foreground">Srovnání s konkurencí</p>
-                              <p className="text-sm text-muted-foreground">Přidejte srovnání produktu vs. konkurence</p>
-                            </div>
-                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
                     {/* Sales Forecast */}
                     <div className={`w-full rounded-xl transition-colors ${
                       product.salesForecast
@@ -2775,15 +2639,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.salesForecast} />
-                              <button
-                                onClick={() => { if (!canEdit) return; setInlineEdit("salesForecast"); setInlineValue(product.salesForecast || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit graf"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("salesForecast"); setInlineValue(product.salesForecast || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit graf"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">

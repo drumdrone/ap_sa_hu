@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { Id, Doc } from "@/convex/_generated/dataModel";
+import { useAccess } from "@/components/access-context";
 
 // Business Opportunities data
 const businessOpportunities = [
@@ -419,6 +420,9 @@ export function DashboardPageContent() {
   const recentActivity = useQuery(api.products.getRecentActivity, { limit: 10 });
   const recentImages = useQuery(api.gallery.getRecentImages, { limit: 6 });
   const recentUploads = useQuery(api.uploadLogs.getRecent, { limit: 3 });
+  const removeUploadLog = useMutation(api.uploadLogs.remove);
+  const { role } = useAccess();
+  const canEdit = role === "editor";
   const productsNeedingAttention = useQuery(api.products.getProductsNeedingAttention);
   const topProducts = useQuery(api.products.getTopProducts);
   const searchResults = useQuery(api.products.list, {
@@ -1021,18 +1025,31 @@ export function DashboardPageContent() {
                         const productId = (log as any).productId as string | undefined;
 
                         return (
-                          <div key={log._id} className="text-xs text-muted-foreground">
+                          <div key={log._id} className="text-xs text-muted-foreground flex items-center gap-2">
                             <span className="mr-2">⬆️</span>
-                            {when}
-                            <span className="mx-2">—</span>
-                            <span className="font-medium text-foreground">{where}</span>
-                            <span className="mx-2">—</span>
-                            {productId ? (
-                              <Link href={`/product/${productId}`} className="text-primary hover:underline font-medium">
-                                {productName}
-                              </Link>
-                            ) : (
-                              <span className="font-medium">{productName}</span>
+                            <span className="flex-1 min-w-0">
+                              {when}
+                              <span className="mx-2">—</span>
+                              <span className="font-medium text-foreground">{where}</span>
+                              <span className="mx-2">—</span>
+                              {productId ? (
+                                <Link href={`/product/${productId}`} className="text-primary hover:underline font-medium">
+                                  {productName}
+                                </Link>
+                              ) : (
+                                <span className="font-medium">{productName}</span>
+                              )}
+                            </span>
+                            {canEdit && (
+                              <button
+                                onClick={async () => {
+                                  await removeUploadLog({ id: log._id });
+                                }}
+                                className="ml-auto w-5 h-5 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground"
+                                title="Smazat záznam"
+                              >
+                                ×
+                              </button>
                             )}
                           </div>
                         );
