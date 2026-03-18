@@ -20,6 +20,7 @@ import type * as posm from "../posm.js";
 import type * as products from "../products.js";
 import type * as promotionLogs from "../promotionLogs.js";
 import type * as seed_import from "../seed/import.js";
+import type * as uploadLogs from "../uploadLogs.js";
 
 import type {
   ApiFromModules,
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   products: typeof products;
   promotionLogs: typeof promotionLogs;
   "seed/import": typeof seed_import;
+  uploadLogs: typeof uploadLogs;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 

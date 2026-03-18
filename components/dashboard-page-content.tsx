@@ -418,6 +418,7 @@ export function DashboardPageContent() {
   const stats = useQuery(api.products.getStats);
   const recentActivity = useQuery(api.products.getRecentActivity, { limit: 10 });
   const recentImages = useQuery(api.gallery.getRecentImages, { limit: 6 });
+  const recentUploads = useQuery(api.uploadLogs.getRecent, { limit: 3 });
   const productsNeedingAttention = useQuery(api.products.getProductsNeedingAttention);
   const topProducts = useQuery(api.products.getTopProducts);
   const searchResults = useQuery(api.products.list, {
@@ -995,6 +996,48 @@ export function DashboardPageContent() {
                         </div>
                       </Link>
                     ))}
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-50 text-blue-700">
+                        📄
+                      </span>
+                      Poslední nahrané dokumenty
+                    </p>
+                    <div className="space-y-1">
+                      {recentUploads?.map((log) => {
+                        const where =
+                          log.kind === "product_pdf"
+                            ? "Produktový list"
+                            : log.kind === "gallery_image"
+                            ? "Galerie"
+                            : "Soubor";
+                        const when = new Date(log.createdAt).toLocaleDateString("cs-CZ", {
+                          day: "numeric",
+                          month: "numeric",
+                          year: "numeric",
+                        });
+                        const productName = log.productName ?? "Produkt";
+                        const productId = (log as any).productId as string | undefined;
+
+                        return (
+                          <div key={log._id} className="text-xs text-muted-foreground">
+                            <span className="mr-2">⬆️</span>
+                            {when}
+                            <span className="mx-2">—</span>
+                            <span className="font-medium text-foreground">{where}</span>
+                            <span className="mx-2">—</span>
+                            {productId ? (
+                              <Link href={`/product/${productId}`} className="text-primary hover:underline font-medium">
+                                {productName}
+                              </Link>
+                            ) : (
+                              <span className="font-medium">{productName}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>

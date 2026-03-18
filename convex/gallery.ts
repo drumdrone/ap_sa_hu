@@ -21,7 +21,7 @@ export const saveImage = mutation({
   },
   handler: async (ctx, args) => {
     console.log("Saving image:", args.filename, "for product:", args.productId, "with tags:", args.tags);
-    return await ctx.db.insert("gallery", {
+    const id = await ctx.db.insert("gallery", {
       productId: args.productId,
       storageId: args.storageId,
       filename: args.filename,
@@ -30,6 +30,16 @@ export const saveImage = mutation({
       tags: args.tags,
       uploadedAt: Date.now(),
     });
+    await ctx.db.insert("uploadLogs", {
+      kind: "gallery_image",
+      productId: args.productId,
+      storageId: args.storageId,
+      filename: args.filename,
+      contentType: args.contentType,
+      size: args.size,
+      createdAt: Date.now(),
+    });
+    return id;
   },
 });
 
@@ -159,6 +169,12 @@ export const savePdfToProduct = mutation({
       });
       console.log("Saved PDF URL to product:", args.productId, "URL:", url);
     }
+    await ctx.db.insert("uploadLogs", {
+      kind: "product_pdf",
+      productId: args.productId,
+      storageId: args.storageId,
+      createdAt: Date.now(),
+    });
     return { url };
   },
 });

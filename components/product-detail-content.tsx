@@ -1673,15 +1673,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   </svg>
                                 </button>
                               )}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setInlineEdit("materials"); setInlineValue(product.pdfUrl || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Přidat PDF odkaz"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setInlineEdit("materials"); setInlineValue(product.pdfUrl || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Přidat PDF odkaz"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2056,15 +2058,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             </p>
                             <div className="flex items-center gap-2">
                               <CopyButton text={product.quickReferenceCard} />
-                              <button
-                                onClick={() => { setInlineEdit("referenceCard"); setInlineValue(product.quickReferenceCard || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit kartu"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("referenceCard"); setInlineValue(product.quickReferenceCard || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit kartu"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
@@ -2074,8 +2078,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("referenceCard"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("referenceCard"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-gray-200 rounded-xl flex items-center justify-center">
