@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 
 interface ProductImageSliderProps {
@@ -84,6 +84,14 @@ export function ProductImageSlider({
   const totalItems = hasVideo ? allImages.length + 1 : allImages.length;
 
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Keep index in bounds when images/video change (e.g. video removed)
+  useEffect(() => {
+    setCurrentIndex((prev) => {
+      if (totalItems <= 0) return 0;
+      return Math.min(prev, totalItems - 1);
+    });
+  }, [totalItems]);
 
   const handlePrev = useCallback(() => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));

@@ -49,3 +49,13 @@ export const log = mutation({
   },
 });
 
+export const remove = mutation({
+  args: {
+    id: v.id("uploadLogs"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+    return { ok: true };
+  },
+});
+
