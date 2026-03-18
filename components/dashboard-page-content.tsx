@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Header } from "@/components/header";
@@ -111,17 +111,20 @@ function NewsItemCard({
   onDelete,
   onEdit,
   onImageClick,
+  matchedProducts,
 }: { 
   item: NewsItemWithImage; 
   formatRelativeTime: (ts: number) => string;
   onDelete: (id: Id<"news">) => void;
   onEdit: (item: NewsItemWithImage) => void;
   onImageClick?: (imageUrl: string) => void;
+  matchedProducts?: Array<{ _id: string; name: string; image?: string | undefined | null; externalId?: string | undefined | null }>;
 }) {
-  const matchedProducts = useQuery(
-    api.news.findProductsBySkus, 
-    item.skus && item.skus.length > 0 ? { skus: item.skus } : "skip"
-  );
+  const productsForItem = useMemo(() => {
+    if (!matchedProducts || !item.skus || item.skus.length === 0) return [];
+    const wanted = new Set(item.skus);
+    return matchedProducts.filter((p) => wanted.has(p._id) || (p.externalId ? wanted.has(p.externalId) : false));
+  }, [matchedProducts, item.skus]);
 
   // Extract tag prefix from title if exists (e.g., "Upgrade: Nové obrázky")
   const titleParts = item.title.split(": ");
@@ -216,30 +219,16 @@ function NewsItemCard({
         {item.content || formatRelativeTime(item.createdAt)}
       </p>
 
-      {/* Matched products with all gallery images */}
-      {matchedProducts && matchedProducts.length > 0 && (() => {
-        // Collect all images: product main image + all gallery images
+      {/* Matched products (lightweight: main product images only) */}
+      {productsForItem && productsForItem.length > 0 && (() => {
         const allImages: { url: string; productName: string; productId: string }[] = [];
-        
-        matchedProducts.forEach((product) => {
-          // Add main product image
+
+        productsForItem.forEach((product) => {
           if (product.image) {
-            allImages.push({ 
-              url: product.image, 
+            allImages.push({
+              url: product.image,
               productName: product.name,
-              productId: product._id 
-            });
-          }
-          // Add all gallery images
-          if (product.galleryImages) {
-            product.galleryImages.forEach((img: { url?: string | null }) => {
-              if (img.url) {
-                allImages.push({ 
-                  url: img.url, 
-                  productName: product.name,
-                  productId: product._id 
-                });
-              }
+              productId: product._id,
             });
           }
         });
@@ -657,6 +646,24 @@ export function DashboardPageContent() {
     return news;
   };
 
+  const filteredNews = getFilteredNews();
+  const newsSkusForLookup = useMemo(() => {
+    if (!filteredNews) return [];
+    const set = new Set<string>();
+    for (const item of filteredNews) {
+      if (item.skus && item.skus.length > 0) {
+        for (const sku of item.skus) set.add(sku);
+      }
+    }
+    return Array.from(set);
+  }, [filteredNews]);
+
+  // Resolve all products for visible news in a single Convex call (cheaper than per-card).
+  const matchedProductsForNews = useQuery(
+    api.news.findProductsBySkusLite,
+    newsSkusForLookup.length > 0 ? { skus: newsSkusForLookup } : "skip"
+  );
+
   const getTagLabel = (type: NewsType) => {
     switch (type) {
       case "product": return "📦 Produkty";
@@ -931,11 +938,11 @@ export function DashboardPageContent() {
 
               {/* News List */}
               <div className="max-h-[500px] overflow-y-auto">
-                {getFilteredNews() === undefined ? (
+                {filteredNews === undefined ? (
                   <div className="p-8 text-center">
                     <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
                   </div>
-                ) : getFilteredNews()?.length === 0 ? (
+                ) : filteredNews?.length === 0 ? (
                   <div className="p-8 text-center">
                     <div className="text-4xl mb-3">📭</div>
                     <p className="text-muted-foreground">Zatím žádné novinky</p>
@@ -950,7 +957,7 @@ export function DashboardPageContent() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-                    {getFilteredNews()?.map((item) => (
+                    {filteredNews?.map((item) => (
                       <NewsItemCard
                         key={item._id}
                         item={item}
@@ -958,6 +965,7 @@ export function DashboardPageContent() {
                         onDelete={handleDeleteNews}
                         onEdit={handleStartEdit}
                         onImageClick={handleOpenLightbox}
+                        matchedProducts={matchedProductsForNews}
                       />
                     ))}
                   </div>

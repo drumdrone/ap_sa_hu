@@ -259,3 +259,58 @@ export const findProductsBySkus = query({
     return productsWithGallery;
   },
 });
+
+// Lightweight variant for UI: resolve products from IDs / exact externalId only.
+// Avoids gallery fetches and "collect all products" fallback (expensive in prod).
+export const findProductsBySkusLite = query({
+  args: {
+    skus: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const products: Array<Pick<Doc<"products">, "_id" | "name" | "image" | "externalId">> = [];
+    const foundIds = new Set<string>();
+
+    for (const sku of args.skus) {
+      // Try direct product ID first
+      try {
+        const productById = await ctx.db.get(sku as Id<"products">);
+        if (productById && !foundIds.has(productById._id)) {
+          products.push({
+            _id: productById._id,
+            name: productById.name,
+            image: productById.image,
+            externalId: productById.externalId,
+          });
+          foundIds.add(productById._id);
+          continue;
+        }
+      } catch {
+        // Not a valid ID, continue with externalId matching
+      }
+
+      const cleanSku = sku
+        .replace(/^.*[\\\\/]/, "")
+        .replace(/\.(jpg|jpeg|png|gif|webp)$/i, "")
+        .trim();
+
+      if (!cleanSku) continue;
+
+      const product = await ctx.db
+        .query("products")
+        .withIndex("by_externalId", (q) => q.eq("externalId", cleanSku))
+        .first();
+
+      if (product && !foundIds.has(product._id)) {
+        products.push({
+          _id: product._id,
+          name: product.name,
+          image: product.image,
+          externalId: product.externalId,
+        });
+        foundIds.add(product._id);
+      }
+    }
+
+    return products;
+  },
+});
