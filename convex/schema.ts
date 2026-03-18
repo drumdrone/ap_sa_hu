@@ -39,6 +39,16 @@ export default defineSchema({
   })
     .index("by_product", ["productId"])
     .index("by_uploadedAt", ["uploadedAt"]),
+
+  uploadLogs: defineTable({
+    kind: v.union(v.literal("gallery_image"), v.literal("product_pdf")),
+    productId: v.optional(v.id("products")),
+    storageId: v.optional(v.id("_storage")),
+    filename: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+    size: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
   
   products: defineTable({
     // Feed data (from XML feed - auto-updated)
