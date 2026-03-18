@@ -4,6 +4,8 @@ set -euo pipefail
 echo "Netlify build script starting..."
 echo "COMMIT_REF=${COMMIT_REF:-}"
 echo "CACHED_COMMIT_REF=${CACHED_COMMIT_REF:-}"
+echo "NEXT_PUBLIC_CONVEX_URL=${NEXT_PUBLIC_CONVEX_URL:-}"
+echo "NEXT_PUBLIC_ENVIRONMENT=${NEXT_PUBLIC_ENVIRONMENT:-}"
 
 should_deploy_convex="false"
 
