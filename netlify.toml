@@ -22,22 +22,19 @@
 [build.environment]
   # Default environment (production)
   NODE_VERSION = "20"
-  NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
 
 # --- Staging branch-specific overrides ---------------------------------------
 [context.staging]
   command = "bash scripts/netlify-build.sh"
   [context.staging.environment]
-    # Staging shares the PROD Convex database (same data as production)
-    NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
+    # Set NEXT_PUBLIC_CONVEX_URL in Netlify UI per-site.
     NEXT_PUBLIC_ENVIRONMENT = "staging"
 
 # --- Production branch-specific overrides ------------------------------------
 [context.production]
   command = "bash scripts/netlify-build.sh"
   [context.production.environment]
-    # Production uses the PROD Convex deployment
-    NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
+    # Set NEXT_PUBLIC_CONVEX_URL in Netlify UI per-site.
     NEXT_PUBLIC_ENVIRONMENT = "production"
 
 # --- Headers -----------------------------------------------------------------
