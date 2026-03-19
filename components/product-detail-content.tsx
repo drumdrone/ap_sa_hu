@@ -73,12 +73,19 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [editingFaq, setEditingFaq] = useState<{ question: string; answer: string }[]>([]);
   const [editingArticles, setEditingArticles] = useState<{ title: string; url: string }[]>([]);
   
-  // Gallery state
+  // Helper: detect if URL looks like přímý obrázek
+  const isImageUrl = (url?: string | null) => {
+    if (!url) return false;
+    return /\.(jpe?g|png|webp|gif)$/i.test(url.split("?")[0]);
+  };
+
+  // Gallery & video state
   const [isUploading, setIsUploading] = useState(false);
   const [newImageTags, setNewImageTags] = useState("");
   const [selectedGalleryTag, setSelectedGalleryTag] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
   
   // Lightbox state for gallery
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -96,17 +103,20 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const deleteImage = useMutation(api.gallery.deleteImage);
   const savePdfToProduct = useMutation(api.gallery.savePdfToProduct);
   
+  // Build lightbox image list:
+  //  - index 0: hlavní produktový obrázek (pokud existuje)
+  //  - další indexy: všechny URL z galerie (stejné jako pro slider), bez deduplikace
+  const galleryImageUrls = galleryImages?.filter(img => img.url).map(img => img.url!) ?? [];
+  const hasMainImageInLightbox = !!product?.image;
+  const lightboxImages: string[] = hasMainImageInLightbox
+    ? [product!.image!, ...galleryImageUrls]
+    : [...galleryImageUrls];
+  
   // Top product mutations
   const toggleTopProduct = useMutation(api.products.toggleTopProduct);
   const setTopOrder = useMutation(api.products.setTopOrder);
   const topProducts = useQuery(api.products.getTopProducts);
-
-  // Helper: detect if URL looks like přímý obrázek
-  const isImageUrl = (url?: string | null) => {
-    if (!url) return false;
-    return /\.(jpe?g|png|webp|gif)$/i.test(url.split("?")[0]);
-  };
-
+  
   // Helper: build Facebook embed URL from post link
   const getFacebookEmbedUrl = (url: string) => {
     try {
@@ -139,11 +149,21 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   
   const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
   
-  // Lightbox functions for gallery
-  const lightboxImages = galleryImages?.filter(img => img.url).map(img => img.url!) || [];
+  // Lightbox functions
+  const mapGalleryIndexToLightboxIndex = (galleryIndex: number) => {
+    return hasMainImageInLightbox ? galleryIndex + 1 : galleryIndex;
+  };
   
-  const handleOpenLightbox = (index: number) => {
-    setLightboxIndex(index);
+  // Otevření lightboxu ze slideru – index odpovídá přímo pořadí v lightboxImages
+  const openLightboxFromSlider = (sliderIndex: number) => {
+    setLightboxIndex(sliderIndex);
+    setLightboxOpen(true);
+  };
+  
+  // Otevření lightboxu z galerie (správné mapování indexu)
+  const openLightboxFromGallery = (galleryIndex: number) => {
+    const targetIndex = mapGalleryIndexToLightboxIndex(galleryIndex);
+    setLightboxIndex(targetIndex);
     setLightboxOpen(true);
   };
   
@@ -613,12 +633,37 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               <div className="bg-card border border-border rounded-xl overflow-hidden">
                 <ProductImageSlider
                   productImage={product.image}
-                  galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
+                  galleryImageUrls={galleryImageUrls}
                   productName={product.name}
                   maxThumbnails={3}
-                  onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
+                  onImageClick={openLightboxFromSlider}
                   className="aspect-square max-h-72"
                 />
+                {/* Mobile: Video badge under slider */}
+                {product.videoUrl && (
+                  <div className="px-4 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setVideoOpen(true)}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded bg-transparent text-red-600 hover:text-red-700"
+                      aria-label="Přehrát produktové video"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3" y="4" width="18" height="16" rx="1.5" className="fill-red-600" />
+                        <rect x="5" y="6" width="14" height="10" rx="0.8" className="fill-white" />
+                        <path d="M11 9.5v3l3-1.5-3-1.5z" className="fill-red-600" />
+                        <rect x="6" y="5" width="2" height="1" className="fill-red-500" />
+                        <rect x="9" y="5" width="2" height="1" className="fill-red-500" />
+                        <rect x="12" y="5" width="2" height="1" className="fill-red-500" />
+                        <rect x="15" y="5" width="2" height="1" className="fill-red-500" />
+                        <rect x="6" y="17" width="2" height="1" className="fill-red-500" />
+                        <rect x="9" y="17" width="2" height="1" className="fill-red-500" />
+                        <rect x="12" y="17" width="2" height="1" className="fill-red-500" />
+                        <rect x="15" y="17" width="2" height="1" className="fill-red-500" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 <div className="p-4">
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {product.category && <CategoryBadge category={product.category} />}
@@ -836,15 +881,40 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="flex flex-col md:flex-row">
                   {/* Product Image Slider */}
-                  <ProductImageSlider
-                    productImage={product.image}
-                    galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
-                    videoUrl={product.videoUrl ?? undefined}
-                    productName={product.name}
-                    maxThumbnails={4}
-                    onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
-                    className="w-full md:w-[420px] h-80 md:h-[460px] flex-shrink-0"
-                  />
+                  <div className="flex flex-col gap-3 md:gap-4">
+                    <ProductImageSlider
+                      productImage={product.image}
+                      galleryImageUrls={galleryImageUrls}
+                      productName={product.name}
+                      maxThumbnails={4}
+                      onImageClick={openLightboxFromSlider}
+                      className="w-full md:w-[420px] h-80 md:h-[460px] flex-shrink-0"
+                    />
+                    {product.videoUrl && (
+                      <div className="px-4 pb-4 md:px-0 md:pb-6">
+                        <button
+                          type="button"
+                          onClick={() => setVideoOpen(true)}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded bg-transparent text-red-600 hover:text-red-700"
+                          aria-label="Přehrát produktové video"
+                        >
+                          <svg className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="3" y="4" width="18" height="16" rx="1.5" className="fill-red-600" />
+                            <rect x="5" y="6" width="14" height="10" rx="0.8" className="fill-white" />
+                            <path d="M11 9.5v3l3-1.5-3-1.5z" className="fill-red-600" />
+                            <rect x="6" y="5" width="2" height="1" className="fill-red-500" />
+                            <rect x="9" y="5" width="2" height="1" className="fill-red-500" />
+                            <rect x="12" y="5" width="2" height="1" className="fill-red-500" />
+                            <rect x="15" y="5" width="2" height="1" className="fill-red-500" />
+                            <rect x="6" y="17" width="2" height="1" className="fill-red-500" />
+                            <rect x="9" y="17" width="2" height="1" className="fill-red-500" />
+                            <rect x="12" y="17" width="2" height="1" className="fill-red-500" />
+                            <rect x="15" y="17" width="2" height="1" className="fill-red-500" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   {/* Product Info */}
                   <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
                     <div className="flex flex-wrap gap-2 mb-3">
@@ -2344,7 +2414,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             <div 
                               key={img._id} 
                               className="aspect-square rounded-lg overflow-hidden bg-white border cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                              onClick={() => img.url && handleOpenLightbox(index)}
+                              onClick={() => img.url && openLightboxFromGallery(index)}
                             >
                               {img.url ? (
                                 <Image
@@ -4085,7 +4155,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       <div
                         key={image._id}
                         className="relative group rounded-xl overflow-hidden bg-muted aspect-square cursor-pointer"
-                        onClick={() => image.url && handleOpenLightbox(index)}
+                        onClick={() => image.url && openLightboxFromGallery(index)}
                       >
                         {image.url ? (
                           <img
@@ -4441,6 +4511,42 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Video Modal */}
+      {videoOpen && product?.videoUrl && (
+        <div
+          className="fixed inset-0 z-[110] bg-black/90 flex items-center justify-center"
+          onClick={() => setVideoOpen(false)}
+        >
+          {/* Close button */}
+          <button
+            onClick={() => setVideoOpen(false)}
+            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <div
+            className="w-full max-w-3xl px-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative w-full pt-[56.25%] rounded-xl overflow-hidden shadow-2xl bg-black">
+              <iframe
+                src={getYoutubeEmbedUrl(product.videoUrl)}
+                title={product.name}
+                className="absolute inset-0 w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+            <div className="mt-3 text-center text-sm text-white/80">
+              {product.name} – produktové video
+            </div>
+          </div>
         </div>
       )}
     </div>
