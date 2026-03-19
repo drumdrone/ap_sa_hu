@@ -8,8 +8,6 @@ interface ProductImageSliderProps {
   productImage?: string;
   /** Gallery image URLs */
   galleryImageUrls: string[];
-  /** Optional product video URL (YouTube) */
-  videoUrl?: string;
   /** Product name for alt text */
   productName: string;
   /** Max visible thumbnails before showing +N */
@@ -23,7 +21,6 @@ interface ProductImageSliderProps {
 export function ProductImageSlider({
   productImage,
   galleryImageUrls,
-  videoUrl,
   productName,
   maxThumbnails = 4,
   onImageClick,
@@ -40,48 +37,7 @@ export function ProductImageSlider({
       allImages.push(url);
     }
   }
-
-  // Helper: derive YouTube embed and thumbnail URLs
-  const getYoutubeIds = (url: string | undefined) => {
-    if (!url) return { embedUrl: "", thumbUrl: "" };
-    try {
-      // Already embed url
-      if (url.includes("/embed/")) {
-        const id = url.split("/embed/")[1]?.split(/[?&]/)[0] ?? "";
-        return {
-          embedUrl: url,
-          thumbUrl: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "",
-        };
-      }
-      // Short youtu.be
-      const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
-      const videoIdFromShort = shortMatch?.[1];
-      if (videoIdFromShort) {
-        return {
-          embedUrl: `https://www.youtube.com/embed/${videoIdFromShort}`,
-          thumbUrl: `https://img.youtube.com/vi/${videoIdFromShort}/hqdefault.jpg`,
-        };
-      }
-      // Standard watch URL
-      const urlObj = new URL(url);
-      const v = urlObj.searchParams.get("v");
-      if (v) {
-        return {
-          embedUrl: `https://www.youtube.com/embed/${v}`,
-          thumbUrl: `https://img.youtube.com/vi/${v}/hqdefault.jpg`,
-        };
-      }
-    } catch {
-      // ignore parsing errors
-    }
-    return { embedUrl: url ?? "", thumbUrl: "" };
-  };
-
-  const { embedUrl: videoEmbedUrl, thumbUrl: videoThumbUrl } = getYoutubeIds(videoUrl);
-
-  const hasVideo = !!videoEmbedUrl;
-  const videoIndex = hasVideo ? allImages.length : -1;
-  const totalItems = hasVideo ? allImages.length + 1 : allImages.length;
+  const totalItems = allImages.length;
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -102,7 +58,7 @@ export function ProductImageSlider({
   }, [totalItems]);
 
   // If no images at all, show placeholder
-  if (allImages.length === 0 && !hasVideo) {
+  if (allImages.length === 0) {
     return (
       <div className={`bg-background flex items-center justify-center ${className ?? ""}`}>
         <span className="text-8xl">🍵</span>
@@ -110,8 +66,8 @@ export function ProductImageSlider({
     );
   }
 
-  // If only one item (single image and no video), show it without slider controls
-  if (totalItems === 1 && allImages.length === 1 && !hasVideo) {
+  // If only one item, show it without slider controls
+  if (totalItems === 1 && allImages.length === 1) {
     return (
       <div
         className={`relative bg-background cursor-pointer group ${className ?? ""}`}
@@ -133,22 +89,17 @@ export function ProductImageSlider({
   const visibleIndexes = itemIndexes.slice(0, maxThumbnails);
   const remainingCount = totalItems - maxThumbnails;
 
-  // When clicking the main image, map current index to lightbox index
-  // The lightbox uses galleryImages only (no product.image), so offset accordingly
+  // Helper to open image in parent lightbox.
+  // Předáváme přímo index v rámci slideru (stejné pořadí jako v lightboxu).
+  const openAtIndex = (index: number) => {
+    setCurrentIndex(index);
+    if (!onImageClick) return;
+    onImageClick(index);
+  };
+
+  // When clicking the main image, open lightbox at the mapped index
   const handleMainImageClick = () => {
-    if (onImageClick) {
-      // If current is video, do nothing (or could open lightbox with video later)
-      if (hasVideo && currentIndex === videoIndex) return;
-      // Find index in gallery images for lightbox
-      const currentUrl = allImages[currentIndex];
-      const galleryIndex = galleryImageUrls.indexOf(currentUrl);
-      if (galleryIndex >= 0) {
-        onImageClick(galleryIndex);
-      } else {
-        // If it's the product image (not in gallery), open first gallery image or index 0
-        onImageClick(0);
-      }
-    }
+    openAtIndex(currentIndex);
   };
 
   return (
@@ -156,43 +107,23 @@ export function ProductImageSlider({
       {/* Left: Vertical Thumbnails */}
       <div className="flex flex-col gap-2 py-4 justify-center flex-shrink-0">
         {visibleIndexes.map((idx) => {
-          const isVideoThumb = hasVideo && idx === videoIndex;
           const isActive = idx === currentIndex;
           return (
             <button
               key={idx}
               onMouseEnter={() => setCurrentIndex(idx)}
-              onClick={() => setCurrentIndex(idx)}
+              onClick={() => openAtIndex(idx)}
               className={`w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
                 isActive
                   ? "border-primary ring-1 ring-primary/30 scale-105"
                   : "border-border opacity-70 hover:opacity-100 hover:border-muted-foreground"
               }`}
             >
-              {isVideoThumb ? (
-                <div className="w-full h-full relative bg-black flex items-center justify-center">
-                  {videoThumbUrl ? (
-                    <img
-                      src={videoThumbUrl}
-                      alt={`${productName} video`}
-                      className="w-full h-full object-cover opacity-70"
-                    />
-                  ) : null}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-white/90 flex items-center justify-center shadow">
-                      <svg className="w-3 h-3 text-red-600" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <img
-                  src={allImages[idx]}
-                  alt={`${productName} ${idx + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              )}
+              <img
+                src={allImages[idx]}
+                alt={`${productName} ${idx + 1}`}
+                className="w-full h-full object-cover"
+              />
             </button>
           );
         })}
@@ -200,7 +131,7 @@ export function ProductImageSlider({
         {remainingCount > 0 && (
           <button
             onMouseEnter={() => setCurrentIndex(maxThumbnails)}
-            onClick={() => setCurrentIndex(maxThumbnails)}
+            onClick={() => openAtIndex(maxThumbnails)}
             className="w-12 h-12 md:w-14 md:h-14 rounded-lg border-2 border-border bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground hover:border-muted-foreground hover:text-foreground transition-all flex-shrink-0"
           >
             +{remainingCount}
@@ -210,30 +141,18 @@ export function ProductImageSlider({
 
       {/* Right: Main Image with Navigation Arrows */}
       <div className="relative flex-1 min-w-0 bg-background overflow-hidden group">
-        {/* Main Image / Video */}
+        {/* Main Image */}
         <div
           className="w-full h-full cursor-pointer"
           onClick={handleMainImageClick}
         >
-          {hasVideo && currentIndex === videoIndex ? (
-            <div className="w-full h-full">
-              <iframe
-                src={videoEmbedUrl}
-                title={productName}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          ) : (
-            <Image
-              src={allImages[currentIndex]}
-              alt={`${productName} - ${currentIndex + 1}/${allImages.length}`}
-              width={400}
-              height={400}
-              className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300"
-            />
-          )}
+          <Image
+            src={allImages[currentIndex]}
+            alt={`${productName} - ${currentIndex + 1}/${allImages.length}`}
+            width={400}
+            height={400}
+            className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300"
+          />
         </div>
 
         {/* Left Arrow */}
