@@ -133,22 +133,26 @@ export function ProductImageSlider({
   const visibleIndexes = itemIndexes.slice(0, maxThumbnails);
   const remainingCount = totalItems - maxThumbnails;
 
-  // When clicking the main image, map current index to lightbox index
-  // The lightbox uses galleryImages only (no product.image), so offset accordingly
-  const handleMainImageClick = () => {
-    if (onImageClick) {
-      // If current is video, do nothing (or could open lightbox with video later)
-      if (hasVideo && currentIndex === videoIndex) return;
-      // Find index in gallery images for lightbox
-      const currentUrl = allImages[currentIndex];
-      const galleryIndex = galleryImageUrls.indexOf(currentUrl);
-      if (galleryIndex >= 0) {
-        onImageClick(galleryIndex);
-      } else {
-        // If it's the product image (not in gallery), open first gallery image or index 0
-        onImageClick(0);
-      }
+  // Helper to open image in parent lightbox.
+  // Maps slider index to the corresponding index in galleryImageUrls.
+  const openAtIndex = (index: number) => {
+    setCurrentIndex(index);
+    if (!onImageClick) return;
+    // If current is video, do nothing (lightbox currently works only with images)
+    if (hasVideo && index === videoIndex) return;
+    const currentUrl = allImages[index];
+    const galleryIndex = galleryImageUrls.indexOf(currentUrl);
+    if (galleryIndex >= 0) {
+      onImageClick(galleryIndex);
+    } else if (galleryImageUrls.length > 0) {
+      // Fallback: open first gallery image
+      onImageClick(0);
     }
+  };
+
+  // When clicking the main image, open lightbox at the mapped index
+  const handleMainImageClick = () => {
+    openAtIndex(currentIndex);
   };
 
   return (
@@ -162,7 +166,7 @@ export function ProductImageSlider({
             <button
               key={idx}
               onMouseEnter={() => setCurrentIndex(idx)}
-              onClick={() => setCurrentIndex(idx)}
+              onClick={() => openAtIndex(idx)}
               className={`w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
                 isActive
                   ? "border-primary ring-1 ring-primary/30 scale-105"
@@ -200,7 +204,7 @@ export function ProductImageSlider({
         {remainingCount > 0 && (
           <button
             onMouseEnter={() => setCurrentIndex(maxThumbnails)}
-            onClick={() => setCurrentIndex(maxThumbnails)}
+            onClick={() => openAtIndex(maxThumbnails)}
             className="w-12 h-12 md:w-14 md:h-14 rounded-lg border-2 border-border bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground hover:border-muted-foreground hover:text-foreground transition-all flex-shrink-0"
           >
             +{remainingCount}
