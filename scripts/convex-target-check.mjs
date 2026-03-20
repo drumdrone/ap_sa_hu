@@ -96,8 +96,17 @@ async function main() {
 
   console.log("Status: MISMATCH (or CONVEX_DEPLOYMENT not set).");
   console.log("Use:");
-  console.log(`  export CONVEX_DEPLOYMENT=${suggestedDeployment}`);
-  console.log('  npx convex deploy --deployment "${CONVEX_DEPLOYMENT}" --cmd "npm run build"');
+  if (process.platform === "win32") {
+    console.log("  CMD:");
+    console.log(`    set CONVEX_DEPLOYMENT=${suggestedDeployment}`);
+    console.log('    npx convex deploy --deployment %CONVEX_DEPLOYMENT% --cmd "npm run build"');
+    console.log("  PowerShell:");
+    console.log(`    $env:CONVEX_DEPLOYMENT=\"${suggestedDeployment}\"`);
+    console.log('    npx convex deploy --deployment $env:CONVEX_DEPLOYMENT --cmd "npm run build"');
+  } else {
+    console.log(`  export CONVEX_DEPLOYMENT=${suggestedDeployment}`);
+    console.log('  npx convex deploy --deployment "${CONVEX_DEPLOYMENT}" --cmd "npm run build"');
+  }
 }
 
 main().catch((err) => {
