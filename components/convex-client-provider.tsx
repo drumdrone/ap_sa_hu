@@ -4,6 +4,10 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react"
 import { ConvexReactClient } from "convex/react"
 import { ReactNode, useMemo } from "react"
 
+function normalizeConvexUrl(url?: string) {
+  return url?.trim().replace(/\/+$/, "")
+}
+
 function MissingConvexConfig({ url }: { url?: string }) {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#0b1920] text-foreground">
@@ -33,7 +37,7 @@ function MissingConvexConfig({ url }: { url?: string }) {
 }
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
-  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
+  const convexUrl = normalizeConvexUrl(process.env.NEXT_PUBLIC_CONVEX_URL)
   const convex = useMemo(() => {
     if (!convexUrl) return null
     try {
