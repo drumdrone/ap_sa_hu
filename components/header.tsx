@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAccess } from "@/components/access-context";
@@ -9,7 +10,9 @@ import { useAccess } from "@/components/access-context";
 export function Header() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
-  const syncStatus = useQuery(api.feedImport.getSyncStatus);
+  const pathname = usePathname();
+  const showSyncStatus = pathname?.startsWith("/admin/feed");
+  const syncStatus = useQuery(api.feedImport.getSyncStatus, showSyncStatus ? {} : "skip");
   const { role, logout } = useAccess();
 
   const handleSync = async () => {

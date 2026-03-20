@@ -185,12 +185,28 @@ export const restoreFromSeed = mutation({
 export const findProductsBySkus = query({
   args: {
     skus: v.array(v.string()),
+    includeGallery: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const products: Doc<"products">[] = [];
     const foundIds = new Set<string>();
-    
-    for (const sku of args.skus) {
+    const includeGallery = args.includeGallery ?? false;
+
+    // Normalize + dedupe incoming identifiers and cap worst-case work.
+    const normalizedSkus = Array.from(
+      new Set(
+        args.skus
+          .map((sku) =>
+            sku
+              .replace(/^.*[\\\\/]/, "")
+              .replace(/\.(jpg|jpeg|png|gif|webp)$/i, "")
+              .trim(),
+          )
+          .filter((sku) => sku.length > 0),
+      ),
+    ).slice(0, 200);
+
+    for (const sku of normalizedSkus) {
       // First, try to get by direct ID (for new format where we store product IDs)
       try {
         const productById = await ctx.db.get(sku as Id<"products">);
@@ -202,60 +218,50 @@ export const findProductsBySkus = query({
       } catch {
         // Not a valid ID, continue with SKU matching
       }
-      
-      // Clean up SKU - remove file paths, extract just the code
-      const cleanSku = sku
-        .replace(/^.*[\\\\/]/, '') // Remove path (g:\...\)
-        .replace(/\.(jpg|jpeg|png|gif|webp)$/i, '') // Remove image extension
-        .trim();
-      
-      if (!cleanSku || foundIds.has(cleanSku)) continue;
-      
+
       // Try exact match first
       let product = await ctx.db
         .query("products")
-        .withIndex("by_externalId", (q) => q.eq("externalId", cleanSku))
+        .withIndex("by_externalId", (q) => q.eq("externalId", sku))
         .first();
-      
-      // If not found, try case-insensitive match on all products
-      if (!product) {
-        const allProducts = await ctx.db.query("products").collect();
-        product = allProducts.find(p => 
-          p.externalId?.toLowerCase() === cleanSku.toLowerCase() ||
-          // Also match if image URL contains the SKU
-          p.image?.toLowerCase().includes(cleanSku.toLowerCase())
-        ) || null;
-      }
-      
+
       if (product && !foundIds.has(product._id)) {
         products.push(product);
         foundIds.add(product._id);
       }
     }
-    
-    // Get gallery images for all matched products
+
+    // Default to a lightweight response to reduce database + file bandwidth.
+    if (!includeGallery) {
+      return products.map((product) => ({
+        ...product,
+        galleryImages: [],
+      }));
+    }
+
+    // Gallery mode remains available for legacy callers but is bounded.
     const productsWithGallery = await Promise.all(
       products.map(async (product) => {
         const galleryImages = await ctx.db
           .query("gallery")
           .withIndex("by_product", (q) => q.eq("productId", product._id))
           .order("desc")
-          .collect();
-        
+          .take(8);
+
         const galleryWithUrls = await Promise.all(
           galleryImages.map(async (img) => ({
             ...img,
             url: await ctx.storage.getUrl(img.storageId),
-          }))
+          })),
         );
-        
+
         return {
           ...product,
           galleryImages: galleryWithUrls,
         };
-      })
+      }),
     );
-    
+
     return productsWithGallery;
   },
 });
