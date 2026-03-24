@@ -96,26 +96,28 @@ export function Header() {
               </div>
             )}
             
-            {/* Sync Button */}
-            <button
-              onClick={handleSync}
-              disabled={isSyncing}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSyncing ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  <span>Synchronizuji...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span className="hidden sm:inline">Sync Feed</span>
-                </>
-              )}
-            </button>
+            {/* Sync Feed — pouze editor */}
+            {role === "editor" && (
+              <button
+                onClick={handleSync}
+                disabled={isSyncing}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSyncing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                    <span>Synchronizuji...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span className="hidden sm:inline">Sync Feed</span>
+                  </>
+                )}
+              </button>
+            )}
             
             <nav className="hidden md:flex items-center gap-6">
               <Link 
@@ -136,24 +138,28 @@ export function Header() {
               >
                 POSM
               </Link>
-              <Link 
-                href="/sprava" 
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Správa
-              </Link>
-              <Link 
-                href="/hromadna-sprava" 
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Hromadná
-              </Link>
-              <Link 
-                href="/admin/feed" 
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Feed
-              </Link>
+              {role === "editor" && (
+                <>
+                  <Link 
+                    href="/sprava" 
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Správa
+                  </Link>
+                  <Link 
+                    href="/hromadna-sprava" 
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Hromadná
+                  </Link>
+                  <Link 
+                    href="/admin/feed" 
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Feed
+                  </Link>
+                </>
+              )}
             </nav>
           </div>
         </div>
