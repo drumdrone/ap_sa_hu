@@ -44,7 +44,6 @@ type InlineEdit =
   | "video"
   | "promotionHistory"
   | "eshop"
-  | "presentation"
   | "referenceCard"
   | "faq"
   | "salesForecast"
@@ -2027,27 +2026,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </svg>
                       </a>
                     )}
-
-                    {/* Presentation */}
-                    <a
-                      href="https://notebooklm.google.com/notebook/8e4b446d-d801-44d3-a6cb-4f5ea37760e8?artifactId=3e6d9eb6-b181-4b66-904f-12f224eb5235"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center gap-4 p-4 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors"
-                    >
-                      <div className="relative flex-shrink-0">
-                        <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                          <span className="text-2xl">📊</span>
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-foreground">Prezentace</p>
-                        <p className="text-sm text-muted-foreground">Otevřít AI prezentaci produktu</p>
-                      </div>
-                      <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
 
                     {/* Quick Reference Card */}
                     <div className={`w-full rounded-xl transition-colors ${
