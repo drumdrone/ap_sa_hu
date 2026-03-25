@@ -1625,6 +1625,30 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           >
                             {isSaving ? "Ukládám..." : "Uložit odkaz"}
                           </button>
+                          {canEdit && product.pdfUrl && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Opravdu smazat produktový list (PDF) z tohoto produktu?")) return;
+                                setIsSaving(true);
+                                try {
+                                  await updateMarketingData({ id: productId, pdfUrl: null });
+                                  setInlineValue("");
+                                  setInlineEdit(null);
+                                  setSaveMessage("Produktový list smazán.");
+                                  setTimeout(() => setSaveMessage(null), 2000);
+                                } catch (error) {
+                                  console.error("Error deleting PDF:", error);
+                                  alert("Chyba při mazání PDF");
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                              disabled={isSaving}
+                              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                            >
+                              Smazat produktový list
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="p-4">
