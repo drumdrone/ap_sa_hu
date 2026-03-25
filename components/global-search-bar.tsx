@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -20,6 +20,7 @@ export function GlobalSearchBar() {
   const [value, setValue] = useState("");
   const [debouncedValue, setDebouncedValue] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
 
   // Initialize from last stored value
   useEffect(() => {
@@ -54,23 +55,14 @@ export function GlobalSearchBar() {
     return raw.length ? raw : [];
   }, [tickerText]);
 
-  const [tickerIdx, setTickerIdx] = useState(0);
   const [tickerPlaying, setTickerPlaying] = useState(true);
   const [tickerEditOpen, setTickerEditOpen] = useState(false);
   const [tickerDraft, setTickerDraft] = useState("");
 
-  useEffect(() => {
-    setTickerIdx(0);
-  }, [tickerText]);
-
-  useEffect(() => {
-    if (!tickerPlaying) return;
-    if (tickerItems.length <= 1) return;
-    const t = setInterval(() => {
-      setTickerIdx((i) => (i + 1) % tickerItems.length);
-    }, 4500);
-    return () => clearInterval(t);
-  }, [tickerItems.length, tickerPlaying]);
+  const tickerLine = useMemo(() => {
+    if (!tickerItems.length) return "";
+    return tickerItems.join("   •   ");
+  }, [tickerItems]);
 
   // Persist current value so it stays visible on detail pages too
   useEffect(() => {
@@ -81,13 +73,34 @@ export function GlobalSearchBar() {
     }
   }, [value]);
 
+  // Close dropdown only on outside click (not on input blur)
+  useEffect(() => {
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const el = searchBoxRef.current;
+      if (!el) return;
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (el.contains(target)) return;
+      setIsOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, []);
+
   if (shouldHide) return null;
 
   return (
     <div className="sticky top-16 z-40 border-b border-border bg-background/80 backdrop-blur">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex flex-col md:flex-row gap-3 md:items-center">
-          <div className="relative w-full md:max-w-xl">
+          <div
+            ref={searchBoxRef}
+            className="relative w-full md:w-1/3 md:flex-none"
+          >
             <svg
               className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-700"
               fill="none"
@@ -105,7 +118,6 @@ export function GlobalSearchBar() {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onFocus={() => setIsOpen(true)}
-              onBlur={() => setTimeout(() => setIsOpen(false), 150)}
               onKeyDown={(e) => {
                 if (e.key === "Escape") setIsOpen(false);
                 if (e.key === "Enter" && debouncedValue.length >= 2) {
@@ -165,47 +177,31 @@ export function GlobalSearchBar() {
           </div>
 
           {/* News ticker */}
-          <div className="w-full md:flex-1">
+          <div className="w-full md:w-2/3 md:flex-1 min-w-0">
             <div className="h-12 rounded-xl border border-border bg-card shadow-sm flex items-center gap-2 px-3 overflow-hidden">
               <div className="flex items-center gap-2 text-xs font-semibold text-amber-800 whitespace-nowrap">
                 <span className="px-2 py-1 rounded-full bg-amber-100 border border-amber-200">NEWS</span>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-foreground truncate">
-                  {tickerItems.length ? tickerItems[tickerIdx] : "—"}
-                </div>
+                {tickerLine ? (
+                  <div className="relative overflow-hidden">
+                    <div
+                      className={`apsa-marquee text-sm text-foreground whitespace-nowrap ${
+                        tickerPlaying ? "" : "apsa-marquee--paused"
+                      }`}
+                      aria-label={tickerLine}
+                    >
+                      <div className="flex items-center">
+                        <span className="pr-10">{tickerLine}</span>
+                        <span className="pr-10">{tickerLine}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">—</div>
+                )}
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTickerPlaying(false);
-                    setTickerIdx((i) => (tickerItems.length ? (i - 1 + tickerItems.length) % tickerItems.length : 0));
-                  }}
-                  className="h-8 w-8 rounded-lg hover:bg-muted transition-colors grid place-items-center"
-                  title="Předchozí"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTickerPlaying((p) => !p)}
-                  className="h-8 w-8 rounded-lg hover:bg-muted transition-colors grid place-items-center"
-                  title={tickerPlaying ? "Pozastavit" : "Spustit"}
-                >
-                  {tickerPlaying ? "❚❚" : "▶"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTickerPlaying(false);
-                    setTickerIdx((i) => (tickerItems.length ? (i + 1) % tickerItems.length : 0));
-                  }}
-                  className="h-8 w-8 rounded-lg hover:bg-muted transition-colors grid place-items-center"
-                  title="Další"
-                >
-                  ›
-                </button>
                 {canEditTicker && (
                   <button
                     type="button"
