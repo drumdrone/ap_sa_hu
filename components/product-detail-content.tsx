@@ -88,6 +88,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const adjacentProducts = useQuery(api.products.getAdjacentProducts, { currentId: productId });
   const updateMarketingData = useMutation(api.products.updateMarketingData);
   const clearPdfUrl = useMutation(api.products.clearPdfUrl);
+  const clearVideoUrl = useMutation(api.products.clearVideoUrl);
   
   // Gallery queries and mutations
   const galleryImages = useQuery(api.gallery.listByProduct, { productId, tag: selectedGalleryTag });
@@ -143,11 +144,23 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   
   const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
   
-  // Lightbox functions for gallery
-  const lightboxImages = galleryImages?.filter(img => img.url).map(img => img.url!) || [];
+  // Lightbox images: use same ordering as slider (main image first, then gallery)
+  const galleryImageUrls = galleryImages?.filter(img => img.url).map(img => img.url!) ?? [];
+  const hasMainImageInLightbox = !!product?.image;
+  const lightboxImages: string[] = hasMainImageInLightbox
+    ? [product!.image!, ...galleryImageUrls]
+    : [...galleryImageUrls];
   
-  const handleOpenLightbox = (index: number) => {
-    setLightboxIndex(index);
+  // Open from slider: index matches lightboxImages
+  const openLightboxFromSlider = (sliderIndex: number) => {
+    setLightboxIndex(sliderIndex);
+    setLightboxOpen(true);
+  };
+  
+  // Open from gallery grid: map gallery index to lightbox index (+1 if main image exists)
+  const openLightboxFromGallery = (galleryIndex: number) => {
+    const targetIndex = hasMainImageInLightbox ? galleryIndex + 1 : galleryIndex;
+    setLightboxIndex(targetIndex);
     setLightboxOpen(true);
   };
   
@@ -620,7 +633,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
                   productName={product.name}
                   maxThumbnails={3}
-                  onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
+                  onImageClick={openLightboxFromSlider}
                   className="aspect-square max-h-72"
                 />
                 <div className="p-4">
@@ -846,7 +859,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     videoUrl={product.videoUrl ?? undefined}
                     productName={product.name}
                     maxThumbnails={4}
-                    onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
+                    onImageClick={openLightboxFromSlider}
                     className="w-full md:w-[420px] h-80 md:h-[460px] flex-shrink-0"
                   />
                   {/* Product Info */}
@@ -1767,6 +1780,30 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           >
                             {isSaving ? "Ukládám..." : "Uložit video"}
                           </button>
+                          {canEdit && product.videoUrl && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Opravdu smazat odkaz na produktové video?")) return;
+                                setIsSaving(true);
+                                try {
+                                  await clearVideoUrl({ id: productId });
+                                  setInlineValue("");
+                                  setInlineEdit(null);
+                                  setSaveMessage("Video odkaz smazán.");
+                                  setTimeout(() => setSaveMessage(null), 2000);
+                                } catch (error) {
+                                  console.error("Error deleting video URL:", error);
+                                  alert("Chyba při mazání video odkazu");
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                              disabled={isSaving}
+                              className="w-full px-4 py-2 bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-800 disabled:opacity-50"
+                            >
+                              Smazat video odkaz
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="p-4">
@@ -2196,7 +2233,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             <div 
                               key={img._id} 
                               className="aspect-square rounded-lg overflow-hidden bg-white border cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                              onClick={() => img.url && handleOpenLightbox(index)}
+                              onClick={() => img.url && openLightboxFromGallery(index)}
                             >
                               {img.url ? (
                                 <Image
@@ -3819,7 +3856,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       <div
                         key={image._id}
                         className="relative group rounded-xl overflow-hidden bg-muted aspect-square cursor-pointer"
-                        onClick={() => image.url && handleOpenLightbox(index)}
+                        onClick={() => image.url && openLightboxFromGallery(index)}
                       >
                         {image.url ? (
                           <img

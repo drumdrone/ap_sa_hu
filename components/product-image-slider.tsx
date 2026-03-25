@@ -53,6 +53,15 @@ export function ProductImageSlider({
           thumbUrl: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "",
         };
       }
+      // Shorts url: https://www.youtube.com/shorts/VIDEO_ID
+      const shortsMatch = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/);
+      const videoIdFromShorts = shortsMatch?.[1];
+      if (videoIdFromShorts) {
+        return {
+          embedUrl: `https://www.youtube.com/embed/${videoIdFromShorts}`,
+          thumbUrl: `https://img.youtube.com/vi/${videoIdFromShorts}/hqdefault.jpg`,
+        };
+      }
       // Short youtu.be
       const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
       const videoIdFromShort = shortMatch?.[1];
@@ -81,7 +90,8 @@ export function ProductImageSlider({
 
   const hasVideo = !!videoEmbedUrl;
   const videoIndex = hasVideo ? allImages.length : -1;
-  const totalItems = hasVideo ? allImages.length + 1 : allImages.length;
+  const imageCount = allImages.length;
+  const totalItems = hasVideo ? imageCount + 1 : imageCount;
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -128,26 +138,20 @@ export function ProductImageSlider({
     );
   }
 
-  // Multiple items (images and optionally video) - show slider with thumbnails
-  const itemIndexes = Array.from({ length: totalItems }, (_, i) => i);
+  // Multiple items (images and optionally video) - show slider with thumbnails.
+  // Thumbnails (+N) count ONLY images; video is not part of the thumbnail strip.
+  const itemIndexes = Array.from({ length: imageCount }, (_, i) => i);
   const visibleIndexes = itemIndexes.slice(0, maxThumbnails);
-  const remainingCount = totalItems - maxThumbnails;
+  const remainingCount = imageCount - maxThumbnails;
 
   // Helper to open image in parent lightbox.
-  // Maps slider index to the corresponding index in galleryImageUrls.
+  // Pass slider index directly (same ordering as lightbox).
   const openAtIndex = (index: number) => {
     setCurrentIndex(index);
     if (!onImageClick) return;
     // If current is video, do nothing (lightbox currently works only with images)
     if (hasVideo && index === videoIndex) return;
-    const currentUrl = allImages[index];
-    const galleryIndex = galleryImageUrls.indexOf(currentUrl);
-    if (galleryIndex >= 0) {
-      onImageClick(galleryIndex);
-    } else if (galleryImageUrls.length > 0) {
-      // Fallback: open first gallery image
-      onImageClick(0);
-    }
+    onImageClick(index);
   };
 
   // When clicking the main image, open lightbox at the mapped index
@@ -240,6 +244,24 @@ export function ProductImageSlider({
           )}
         </div>
 
+        {/* Video indicator under main image */}
+        {hasVideo && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCurrentIndex(videoIndex);
+            }}
+            className="absolute left-3 bottom-3 inline-flex items-center justify-center w-9 h-9 rounded-full bg-red-600 text-white shadow-md hover:bg-red-700 transition-colors"
+            title="Přehrát produktové video"
+            aria-label="Přehrát produktové video"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+        )}
+
         {/* Left Arrow */}
         <button
           onClick={(e) => {
@@ -270,7 +292,7 @@ export function ProductImageSlider({
 
         {/* Image Counter (bottom right) */}
         <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 rounded-md text-white text-xs font-medium">
-          {currentIndex + 1} / {totalItems}
+          {hasVideo && currentIndex === videoIndex ? "Video" : `${currentIndex + 1} / ${imageCount}`}
         </div>
       </div>
     </div>
