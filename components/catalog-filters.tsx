@@ -12,6 +12,8 @@ interface CatalogFiltersProps {
   onFeedSubcategoryChange: (value: string) => void;
   brand: string;
   onBrandChange: (value: string) => void;
+  withPdf: boolean;
+  onWithPdfChange: (value: boolean) => void;
   viewMode: "grid" | "list";
   onViewModeChange: (mode: "grid" | "list") => void;
 }
@@ -25,6 +27,8 @@ export function CatalogFilters({
   onFeedSubcategoryChange,
   brand,
   onBrandChange,
+  withPdf,
+  onWithPdfChange,
   viewMode,
   onViewModeChange,
 }: CatalogFiltersProps) {
@@ -125,6 +129,23 @@ export function CatalogFilters({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* With PDF filter */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Produktový list</label>
+            <button
+              type="button"
+              onClick={() => onWithPdfChange(!withPdf)}
+              className={`px-3 py-2.5 border rounded-lg text-sm min-w-[220px] text-left transition-colors ${
+                withPdf
+                  ? "bg-sky-100 text-sky-950 border-sky-200 hover:bg-sky-700 hover:text-white hover:border-sky-700"
+                  : "bg-sky-50 text-sky-900 border-sky-200 hover:bg-sky-100"
+              }`}
+              title="Zobrazí jen produkty s nahraným produktovým listem"
+            >
+              {withPdf ? "✓ Zobraz s produktovým listem" : "Zobraz s produktovým listem"}
+            </button>
           </div>
 
           {/* View Mode Toggle */}
