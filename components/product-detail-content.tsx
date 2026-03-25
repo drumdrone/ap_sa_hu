@@ -87,6 +87,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const product = useQuery(api.products.getById, { id: productId });
   const adjacentProducts = useQuery(api.products.getAdjacentProducts, { currentId: productId });
   const updateMarketingData = useMutation(api.products.updateMarketingData);
+  const clearPdfUrl = useMutation(api.products.clearPdfUrl);
   
   // Gallery queries and mutations
   const galleryImages = useQuery(api.gallery.listByProduct, { productId, tag: selectedGalleryTag });
@@ -1631,7 +1632,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 if (!confirm("Opravdu smazat produktový list (PDF) z tohoto produktu?")) return;
                                 setIsSaving(true);
                                 try {
-                                  await updateMarketingData({ id: productId, pdfUrl: null });
+                                  await clearPdfUrl({ id: productId });
                                   setInlineValue("");
                                   setInlineEdit(null);
                                   setSaveMessage("Produktový list smazán.");

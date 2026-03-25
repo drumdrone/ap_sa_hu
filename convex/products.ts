@@ -172,6 +172,21 @@ export const updateMarketingData = mutation({
   },
 });
 
+// Clear product PDF (product sheet)
+export const clearPdfUrl = mutation({
+  args: {
+    id: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      pdfUrl: undefined,
+      marketingLastUpdated: Date.now(),
+      lastUpdatedField: "pdfUrl",
+    });
+    return { success: true };
+  },
+});
+
 // Dismiss an alert for a product
 export const dismissAlert = mutation({
   args: {
