@@ -77,6 +77,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [selectedGalleryTag, setSelectedGalleryTag] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
+  const mainContentRef = useRef<HTMLMainElement>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
   
   // Lightbox state for gallery
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -93,6 +95,15 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const saveImage = useMutation(api.gallery.saveImage);
   const deleteImage = useMutation(api.gallery.deleteImage);
   const savePdfToProduct = useMutation(api.gallery.savePdfToProduct);
+
+  // Při navigaci na jiný produkt obnov scroll (main je overflow-auto → jinak zůstane „uprostřed“)
+  // a zobraz sekci s fotkami (dashboard / mobilní záložka Produkt).
+  useEffect(() => {
+    setActiveSection("dashboard");
+    setMobileView("product");
+    mainContentRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [productId]);
   
   // Top product mutations
   const toggleTopProduct = useMutation(api.products.toggleTopProduct);
@@ -595,7 +606,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main ref={mainContentRef} className="flex-1 overflow-auto">
         <div className="p-4 lg:p-6 xl:p-8 max-w-full 2xl:max-w-[1600px]">
           {/* Mobile View: Product Tab */}
           <div className={`lg:hidden ${mobileView !== "product" ? "hidden" : ""}`}>
