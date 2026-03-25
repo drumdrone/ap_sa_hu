@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Header } from "@/components/header";
@@ -58,6 +59,8 @@ const CatalogResults = memo(function CatalogResults({
 });
 
 export function CatalogPageContent() {
+  const searchParams = useSearchParams();
+  const searchFromUrl = useMemo(() => searchParams.get("search") ?? "", [searchParams]);
   const [searchInput, setSearchInput] = useState("");
   const [feedCategory, setFeedCategory] = useState("");
   const [feedSubcategory, setFeedSubcategory] = useState("");
@@ -68,6 +71,12 @@ export function CatalogPageContent() {
   
   // Keep reference to last loaded products to prevent flickering
   const lastProducts = useRef<typeof products>(undefined);
+
+  // Sync search from URL (used by the global sticky search bar)
+  useEffect(() => {
+    setSearchInput(searchFromUrl);
+    setDebouncedSearch(searchFromUrl);
+  }, [searchFromUrl]);
 
   // Debounce search
   useEffect(() => {

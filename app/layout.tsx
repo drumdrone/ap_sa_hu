@@ -7,6 +7,7 @@ import { EnvironmentBanner } from "@/components/environment-banner";
 import { AccessProvider } from "@/components/access-context";
 import { AccessGate } from "@/components/access-gate";
 import { Header } from "@/components/header";
+import { GlobalSearchBar } from "@/components/global-search-bar";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -56,6 +57,7 @@ export default function RootLayout({
           <AccessProvider>
             <AccessGate>
               <Header />
+              <GlobalSearchBar />
               {children}
             </AccessGate>
           </AccessProvider>

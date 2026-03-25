@@ -50,7 +50,6 @@ type InlineEdit =
   | "mainBenefits"
   | "herbComposition"
   | "competitionComparison"
-  | "seasonalOpportunities"
   | "sensoryProfile"
   | null;
 
@@ -312,13 +311,20 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     });
   };
 
+  const normalizeLeadingBlankLines = (text: string) =>
+    text.replace(/^\uFEFF?(?:\r?\n)+/, "");
+
   // Inline edit save handler
   const handleInlineSave = async (field: string, value: string) => {
     setIsSaving(true);
     try {
+      const normalizedValue =
+        field === "salesForecast"
+          ? normalizeLeadingBlankLines(value)
+          : value;
       await updateMarketingData({
         id: productId,
-        [field]: value || undefined,
+        [field]: normalizedValue || undefined,
       });
       setInlineEdit(null);
       setInlineValue("");
@@ -387,6 +393,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       setIsSaving(false);
     }
   };
+
+  const seasonalOpportunitiesText = product?.salesForecast
+    ? normalizeLeadingBlankLines(product.salesForecast)
+    : "";
 
   // Inline image upload handler
   const handleInlineImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -467,7 +477,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const hasSocialData = !!(product.socialFacebook || product.socialInstagram);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Mobile Top Bar */}
       <div className="lg:hidden sticky top-0 z-50 bg-card border-b border-border">
         {/* Header with back button and product info */}
@@ -527,97 +537,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
           </button>
         </div>
       </div>
-
-      {/* Left Sidebar Menu - Hidden on mobile */}
-      <aside className="hidden lg:flex w-64 bg-card border-r border-border flex-col">
-        {/* Logo / Back */}
-        <div className="p-4 border-b border-border">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-primary font-semibold hover:opacity-80 transition-opacity"
-          >
-            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-primary-foreground text-sm">🍃</span>
-            </div>
-            <span>Apotheke Hub</span>
-          </Link>
-        </div>
-
-        {/* Product Mini Card */}
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-              {product.image ? (
-                <Image
-                  src={product.image}
-                  alt={product.name}
-                  width={48}
-                  height={48}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
-                  🍵
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="font-medium text-foreground text-sm truncate">{product.name}</p>
-              <p className="text-xs text-muted-foreground">{product.price} Kč</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Menu */}
-        <nav className="flex-1 p-2">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                activeSection === item.id
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Product Navigation */}
-        <div className="p-4 border-t border-border">
-          <div className="flex gap-2">
-            {adjacentProducts?.prevProduct ? (
-              <Link
-                href={`/product/${adjacentProducts.prevProduct._id}`}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-xs text-muted-foreground hover:text-foreground bg-muted rounded-lg transition-colors"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Předchozí
-              </Link>
-            ) : (
-              <div className="flex-1" />
-            )}
-            {adjacentProducts?.nextProduct ? (
-              <Link
-                href={`/product/${adjacentProducts.nextProduct._id}`}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-xs text-muted-foreground hover:text-foreground bg-muted rounded-lg transition-colors"
-              >
-                Další
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-            ) : (
-              <div className="flex-1" />
-            )}
-          </div>
-        </div>
-      </aside>
 
       {/* Main Content */}
       <main ref={mainContentRef} className="flex-1 overflow-auto">
@@ -1829,17 +1748,42 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </p>
                               </div>
                             </button>
-                            {canEdit && (
-                              <button
-                                onClick={() => { setInlineEdit("video"); setInlineValue(product.videoUrl || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit produktové video"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
-                            )}
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {product.videoUrl && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    addToSalesKit({
+                                      id: "product-video",
+                                      type: "materials",
+                                      label: "Produktové video",
+                                      content: `Video: ${product.videoUrl}`,
+                                    });
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    salesKitItems.find(i => i.id === "product-video")
+                                      ? "bg-green-500 text-white"
+                                      : "bg-red-100 hover:bg-red-200 text-red-700"
+                                  }`}
+                                  title="Přidat do Sales Kit"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+                              )}
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("video"); setInlineValue(product.videoUrl || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit produktové video"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -2476,22 +2420,22 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
-                    {/* Sales Forecast */}
+                    {/* Seasonal Opportunities (formerly Sales Forecast) */}
                     <div className={`w-full rounded-xl transition-colors ${
-                      product.salesForecast
+                      seasonalOpportunitiesText
                         ? "bg-purple-50 border border-purple-200"
                         : "bg-gray-50 border-2 border-dashed border-gray-300"
                     }`}>
                       {inlineEdit === "salesForecast" ? (
                         <div className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
-                            <p className="font-semibold text-foreground">📊 Předpokládaná křivka prodejů</p>
+                            <p className="font-semibold text-foreground">📅 Sezónní příležitosti</p>
                             <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
                           </div>
                           <textarea
                             value={inlineValue}
                             onChange={(e) => setInlineValue(e.target.value)}
-                            placeholder="Vložte graf prodejů (ASCII art)..."
+                            placeholder="Přidejte předpokládané prodeje po měsících"
                             className="w-full p-3 border rounded-lg text-xs font-mono min-h-[250px] resize-none bg-gray-900 text-purple-300"
                           />
                           <button
@@ -2506,15 +2450,15 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         <div className="p-4">
                           <div className="flex items-center justify-between mb-3">
                             <p className="font-semibold text-foreground flex items-center gap-2">
-                              <span>📊</span> Předpokládaná křivka prodejů
+                              <span>📅</span> Sezónní příležitosti
                             </p>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => addToSalesKit({
                                   id: "salesForecast",
                                   type: "materials",
-                                  label: "Křivka prodejů",
-                                  content: product.salesForecast || ""
+                                  label: "Sezónní příležitosti",
+                                  content: seasonalOpportunitiesText
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
                                   salesKitItems.find(i => i.id === "salesForecast")
@@ -2527,12 +2471,12 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
                               </button>
-                              <CopyButton text={product.salesForecast} />
+                              <CopyButton text={seasonalOpportunitiesText} />
                               {canEdit && (
                                 <button
-                                  onClick={() => { setInlineEdit("salesForecast"); setInlineValue(product.salesForecast || ""); }}
+                                  onClick={() => { setInlineEdit("salesForecast"); setInlineValue(seasonalOpportunitiesText); }}
                                   className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                  title="Upravit graf"
+                                  title="Upravit"
                                 >
                                   <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -2542,7 +2486,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                            <pre className="text-xs text-purple-300 font-mono whitespace-pre">{product.salesForecast}</pre>
+                            <pre className="text-xs text-purple-300 font-mono whitespace-pre">{seasonalOpportunitiesText}</pre>
                           </div>
                         </div>
                       ) : (
@@ -2554,11 +2498,11 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                                <span className="text-2xl">📊</span>
+                                <span className="text-2xl">📅</span>
                               </div>
                             </div>
                             <div className="flex-1">
-                              <p className="font-semibold text-foreground">Křivka prodejů</p>
+                              <p className="font-semibold text-foreground">Sezónní příležitosti</p>
                               <p className="text-sm text-muted-foreground">Přidejte předpokládané prodeje po měsících</p>
                             </div>
                             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2656,100 +2600,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">FAQ</p>
                               <p className="text-sm text-muted-foreground">Přidejte časté dotazy a odpovědi</p>
-                            </div>
-                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Sezónní příležitosti Section - Editable */}
-                    <div className={`w-full rounded-xl transition-colors ${
-                      product.seasonalOpportunities
-                        ? "bg-[#f0f8f0] border border-green-200"
-                        : "bg-gray-50 border-2 border-dashed border-gray-300"
-                    }`}>
-                      {inlineEdit === "seasonalOpportunities" ? (
-                        <div className="p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-foreground">📅 SEZÓNNÍ PŘÍLEŽITOSTI</p>
-                            <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
-                          </div>
-                          <textarea
-                            value={inlineValue}
-                            onChange={(e) => setInlineValue(e.target.value)}
-                            placeholder="Vložte tabulku sezónních příležitostí (ASCII art)..."
-                            className="w-full p-3 border rounded-lg text-xs font-mono min-h-[250px] resize-none bg-gray-900 text-green-400"
-                          />
-                          <button
-                            onClick={() => handleInlineSave("seasonalOpportunities", inlineValue)}
-                            disabled={isSaving}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-                          >
-                            {isSaving ? "Ukládám..." : "Uložit"}
-                          </button>
-                        </div>
-                      ) : product.seasonalOpportunities ? (
-                        <div className="p-5">
-                          <div className="flex items-center justify-between mb-4">
-                            <p className="font-semibold text-foreground flex items-center gap-2 text-lg">
-                              <span>📅</span> SEZÓNNÍ PŘÍLEŽITOSTI
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => addToSalesKit({
-                                  id: "seasonal-opportunities",
-                                  type: "whybuy",
-                                  label: "Sezónní příležitosti",
-                                  content: product.seasonalOpportunities || ""
-                                })}
-                                className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "seasonal-opportunities")
-                                    ? "bg-green-500 text-white"
-                                    : "bg-green-100 hover:bg-green-200 text-green-700"
-                                }`}
-                                title="Přidat do Sales Kit"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                              </button>
-                              <CopyButton text={product.seasonalOpportunities} />
-                              {canEdit && (
-                                <button
-                                  onClick={() => { setInlineEdit("seasonalOpportunities"); setInlineValue(product.seasonalOpportunities || ""); }}
-                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                  title="Upravit"
-                                >
-                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
-                            <pre className="text-[10px] text-green-400 font-mono whitespace-pre leading-tight">{product.seasonalOpportunities}</pre>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 p-4">
-                          <button
-                            onClick={() => { if (!canEdit) return; setInlineEdit("seasonalOpportunities"); setInlineValue(""); }}
-                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                            disabled={!canEdit}
-                          >
-                            <div className="relative flex-shrink-0">
-                              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                                <span className="text-2xl">📅</span>
-                              </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">3</span>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-foreground">Sezónní příležitosti</p>
-                              <p className="text-sm text-muted-foreground">Přidejte tabulku sezónních prodejních příležitostí</p>
                             </div>
                             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

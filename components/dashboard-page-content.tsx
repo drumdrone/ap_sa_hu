@@ -781,66 +781,6 @@ export function DashboardPageContent() {
   return (
     <div className="min-h-screen bg-background">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search bar */}
-        <div className="mb-8">
-          <div className="relative max-w-xl">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <Input
-              type="text"
-              placeholder="Hledat produkty..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-12 text-base"
-            />
-          </div>
-          
-          {/* Search Results */}
-          {debouncedSearch && searchResults && (
-            <div className="mt-4 bg-card rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                Výsledky vyhledávání ({searchResults.length})
-              </h3>
-              {searchResults.length === 0 ? (
-                <p className="text-muted-foreground">Žádné produkty nenalezeny</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {searchResults.slice(0, 9).map((product) => (
-                    <Link
-                      key={product._id}
-                      href={`/product/${product._id}`}
-                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
-                    >
-                      {product.image && (
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">{product.name}</p>
-                        <p className="text-sm text-muted-foreground">{product.price} Kč</p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="flex flex-col items-center gap-3">
