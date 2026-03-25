@@ -8,5 +8,9 @@ interface ProductPageProps {
 export default async function ProductPage({ params }: ProductPageProps) {
   const { id } = await params;
   
-  return <ProductDetailContent productId={id as Id<"products">} />;
+  return (
+    <main className="w-full py-6">
+      <ProductDetailContent productId={id as Id<"products">} />
+    </main>
+  );
 }
