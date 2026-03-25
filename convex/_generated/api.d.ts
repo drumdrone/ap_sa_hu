@@ -15,6 +15,7 @@ import type * as feedImport from "../feedImport.js";
 import type * as gallery from "../gallery.js";
 import type * as http from "../http.js";
 import type * as news from "../news.js";
+import type * as newsTicker from "../newsTicker.js";
 import type * as opportunities from "../opportunities.js";
 import type * as posm from "../posm.js";
 import type * as products from "../products.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   gallery: typeof gallery;
   http: typeof http;
   news: typeof news;
+  newsTicker: typeof newsTicker;
   opportunities: typeof opportunities;
   posm: typeof posm;
   products: typeof products;

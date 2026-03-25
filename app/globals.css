@@ -91,3 +91,22 @@ body > nextjs-portal {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+@keyframes apsa-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.apsa-marquee {
+  display: flex;
+  width: max-content;
+  animation: apsa-marquee 22s linear infinite;
+}
+
+.apsa-marquee--paused {
+  animation-play-state: paused;
+}
