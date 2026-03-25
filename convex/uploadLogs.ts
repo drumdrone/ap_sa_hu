@@ -16,9 +16,12 @@ export const getRecent = query({
     const withProduct = await Promise.all(
       logs.map(async (log) => {
         const product = log.productId ? await ctx.db.get(log.productId) : null;
+        const fileUrl =
+          log.storageId ? await ctx.storage.getUrl(log.storageId) : null;
         return {
           ...log,
           productName: product?.name ?? null,
+          fileUrl,
         };
       }),
     );

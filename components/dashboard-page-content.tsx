@@ -1031,6 +1031,7 @@ export function DashboardPageContent() {
                         });
                         const productName = log.productName ?? "Produkt";
                         const productId = (log as any).productId as string | undefined;
+                        const fileUrl = (log as any).fileUrl as string | null | undefined;
 
                         return (
                           <div key={log._id} className="text-xs text-muted-foreground flex items-center gap-2">
@@ -1040,7 +1041,16 @@ export function DashboardPageContent() {
                               <span className="mx-2">—</span>
                               <span className="font-medium text-foreground">{where}</span>
                               <span className="mx-2">—</span>
-                              {productId ? (
+                              {fileUrl ? (
+                                <a
+                                  href={fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-medium"
+                                >
+                                  {productName}
+                                </a>
+                              ) : productId ? (
                                 <Link href={`/product/${productId}`} className="text-primary hover:underline font-medium">
                                   {productName}
                                 </Link>
