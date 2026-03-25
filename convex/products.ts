@@ -187,6 +187,21 @@ export const clearPdfUrl = mutation({
   },
 });
 
+// Clear product video link
+export const clearVideoUrl = mutation({
+  args: {
+    id: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      videoUrl: undefined,
+      marketingLastUpdated: Date.now(),
+      lastUpdatedField: "videoUrl",
+    });
+    return { success: true };
+  },
+});
+
 // Dismiss an alert for a product
 export const dismissAlert = mutation({
   args: {
