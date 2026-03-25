@@ -18,6 +18,7 @@ interface ProductListItemProps {
   salesClaim?: string;
   availability?: string;
   brand?: string;
+  pdfUrl?: string;
 }
 
 export function ProductListItem({ 
@@ -30,7 +31,8 @@ export function ProductListItem({
   brandPillar,
   salesClaim,
   availability,
-  brand
+  brand,
+  pdfUrl
 }: ProductListItemProps) {
   const isOutOfStock = availability === "out_of_stock";
   
@@ -80,6 +82,28 @@ export function ProductListItem({
         <div className="flex items-center gap-3">
           {brandPillar && <BrandPillarBadge pillar={brandPillar} className="text-xs" />}
         </div>
+      </div>
+      <div className="hidden sm:flex w-16 items-center justify-center">
+        {pdfUrl ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.open(pdfUrl, "_blank", "noopener,noreferrer");
+            }}
+            className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-600/20 hover:shadow-lg hover:shadow-indigo-600/30 hover:brightness-110 transition-all"
+            title="Produktový list (PDF)"
+            aria-label="Otevřít produktový list (PDF)"
+          >
+            <div className="flex flex-col items-center leading-none">
+              <span className="text-[11px] font-extrabold tracking-wide">PL</span>
+              <span className="text-[9px] font-semibold opacity-90">PDF</span>
+            </div>
+          </button>
+        ) : (
+          <div className="w-11 h-11" />
+        )}
       </div>
       <div className="flex flex-col items-end justify-between">
         <span className="text-lg font-bold text-primary">{price} Kč</span>

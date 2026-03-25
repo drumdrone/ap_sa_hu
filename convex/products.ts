@@ -7,6 +7,7 @@ export const list = query({
     feedSubcategory: v.optional(v.string()),
     brand: v.optional(v.string()),
     search: v.optional(v.string()),
+    withPdf: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     let products;
@@ -30,6 +31,9 @@ export const list = query({
     }
     if (args.brand) {
       products = products.filter((p) => p.brand === args.brand);
+    }
+    if (args.withPdf) {
+      products = products.filter((p) => !!p.pdfUrl);
     }
     
     return products;

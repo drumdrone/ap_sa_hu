@@ -42,9 +42,7 @@ type InlineEdit =
   | "socialImages"
   | "materials"
   | "video"
-  | "promotionHistory"
   | "eshop"
-  | "presentation"
   | "referenceCard"
   | "faq"
   | "salesForecast"
@@ -116,13 +114,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     }
   };
   
-  // Promotion logs
-  const promotionLogs = useQuery(api.promotionLogs.getByProduct, { productId });
-  const addPromotionLog = useMutation(api.promotionLogs.add);
-  const removePromotionLog = useMutation(api.promotionLogs.remove);
-  const [newLogTitle, setNewLogTitle] = useState("");
-  const [newLogDate, setNewLogDate] = useState("");
-  const [newLogUrl, setNewLogUrl] = useState("");
+  // Promotion logs section removed
   
   // Sales Kit - items to export
   type SalesKitItem = {
@@ -1780,161 +1772,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
-                    {/* Promotion History - Sixth */}
-                    <div className={`w-full rounded-xl transition-colors ${
-                        promotionLogs && promotionLogs.length > 0
-                          ? "bg-indigo-50 border border-indigo-200"
-                          : "bg-gray-50 border-2 border-dashed border-gray-300"
-                      }`}>
-                      {inlineEdit === "promotionHistory" ? (
-                        <div className="p-4 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-foreground flex items-center gap-2">
-                              <span>📜</span>
-                              Historie propagace
-                            </p>
-                            <button
-                              onClick={() => setInlineEdit(null)}
-                              className="p-1 hover:bg-black/5 rounded-lg"
-                              title="Zavřít"
-                            >
-                              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-
-                          {/* Add new log form */}
-                          <div className="bg-muted/40 border border-border rounded-lg p-3 space-y-2">
-                            <p className="font-semibold text-xs text-muted-foreground mb-1">Přidat záznam</p>
-                            <Input
-                              placeholder="Název (např. TV Reklama, Facebook Ads)"
-                              value={newLogTitle}
-                              onChange={(e) => setNewLogTitle(e.target.value)}
-                              className="w-full text-sm"
-                            />
-                            <Input
-                              type="date"
-                              value={newLogDate}
-                              onChange={(e) => setNewLogDate(e.target.value)}
-                              className="w-full text-sm"
-                            />
-                            <Input
-                              placeholder="URL odkaz (volitelné)"
-                              value={newLogUrl}
-                              onChange={(e) => setNewLogUrl(e.target.value)}
-                              className="w-full text-sm"
-                            />
-                            <button
-                              onClick={async () => {
-                                if (!newLogTitle.trim() || !newLogDate) return;
-                                await addPromotionLog({
-                                  productId,
-                                  title: newLogTitle.trim(),
-                                  date: new Date(newLogDate).getTime(),
-                                  url: newLogUrl.trim() || undefined,
-                                });
-                                setNewLogTitle("");
-                                setNewLogDate("");
-                                setNewLogUrl("");
-                              }}
-                              disabled={!newLogTitle.trim() || !newLogDate}
-                              className="w-full px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
-                            >
-                              Přidat záznam
-                            </button>
-                          </div>
-
-                          {/* Log list */}
-                          <div className="space-y-1 max-h-64 overflow-y-auto">
-                            {promotionLogs && promotionLogs.length > 0 ? (
-                              promotionLogs.map((log) => (
-                                <div
-                                  key={log._id}
-                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/40"
-                                >
-                                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-foreground truncate">{log.title}</p>
-                                    <p className="text-[11px] text-muted-foreground">
-                                      {new Date(log.date).toLocaleDateString("cs-CZ", {
-                                        day: "numeric",
-                                        month: "short",
-                                        year: "numeric",
-                                      })}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                    {log.url && (
-                                      <a
-                                        href={log.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="p-1 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground"
-                                        title="Otevřít odkaz"
-                                      >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                        </svg>
-                                      </a>
-                                    )}
-                                    <button
-                                      onClick={() => removePromotionLog({ id: log._id })}
-                                      className="p-1 hover:bg-red-100 rounded-lg text-muted-foreground hover:text-red-600"
-                                      title="Smazat"
-                                    >
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-xs text-muted-foreground text-center py-2">
-                                Zatím žádné záznamy.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 p-4">
-                          <button
-                            onClick={() => { if (!canEdit) return; setInlineEdit("promotionHistory"); }}
-                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                            disabled={!canEdit}
-                          >
-                            <div className="relative flex-shrink-0">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                                promotionLogs && promotionLogs.length > 0 ? "bg-indigo-100" : "bg-gray-200"
-                              }`}>
-                                <span className="text-2xl">📜</span>
-                              </div>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-foreground">Historie propagace</p>
-                              <p className="text-sm text-muted-foreground">
-                                {promotionLogs && promotionLogs.length > 0
-                                  ? `${promotionLogs.length} ${promotionLogs.length === 1 ? "záznam" : promotionLogs.length < 5 ? "záznamy" : "záznamů"}`
-                                  : "Zatím žádné záznamy"}
-                              </p>
-                            </div>
-                          </button>
-                          {canEdit && (
-                            <button
-                              onClick={() => setInlineEdit("promotionHistory")}
-                              className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                              title="Upravit historii propagace"
-                            >
-                              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
                     {/* View on e-shop */}
                     {product.productUrl && (
                       <a
@@ -1957,27 +1794,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </svg>
                       </a>
                     )}
-
-                    {/* Presentation */}
-                    <a
-                      href="https://notebooklm.google.com/notebook/8e4b446d-d801-44d3-a6cb-4f5ea37760e8?artifactId=3e6d9eb6-b181-4b66-904f-12f224eb5235"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center gap-4 p-4 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors"
-                    >
-                      <div className="relative flex-shrink-0">
-                        <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                          <span className="text-2xl">📊</span>
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-foreground">Prezentace</p>
-                        <p className="text-sm text-muted-foreground">Otevřít AI prezentaci produktu</p>
-                      </div>
-                      <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
 
                     {/* Quick Reference Card */}
                     <div className={`w-full rounded-xl transition-colors ${
@@ -3345,124 +3161,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     >
                       Otevřít plnou galerii →
                     </button>
-                  </div>
-                </SheetContent>
-              </Sheet>
-
-              {/* Promotion History Panel Sheet */}
-              <Sheet open={openPanel === "promotionHistory"} onOpenChange={(open) => !open && setOpenPanel(null)}>
-                <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-                  <SheetHeader className="mb-6">
-                    <SheetTitle className="flex items-center gap-2 text-xl">
-                      <span>📜</span>
-                      Historie propagace
-                    </SheetTitle>
-                  </SheetHeader>
-                  
-                  {/* Add new log form */}
-                  <div className="bg-muted/30 border border-border rounded-xl p-4 mb-6">
-                    <h3 className="font-semibold text-sm mb-3">Přidat záznam</h3>
-                    <div className="space-y-3">
-                      <Input
-                        placeholder="Název (např. TV Reklama, Facebook Ads)"
-                        value={newLogTitle}
-                        onChange={(e) => setNewLogTitle(e.target.value)}
-                        className="w-full"
-                      />
-                      <Input
-                        type="date"
-                        value={newLogDate}
-                        onChange={(e) => setNewLogDate(e.target.value)}
-                        className="w-full"
-                      />
-                      <Input
-                        placeholder="URL odkaz (volitelné)"
-                        value={newLogUrl}
-                        onChange={(e) => setNewLogUrl(e.target.value)}
-                        className="w-full"
-                      />
-                      <button
-                        onClick={async () => {
-                          if (!newLogTitle.trim() || !newLogDate) return;
-                          await addPromotionLog({
-                            productId,
-                            title: newLogTitle.trim(),
-                            date: new Date(newLogDate).getTime(),
-                            url: newLogUrl.trim() || undefined,
-                          });
-                          setNewLogTitle("");
-                          setNewLogDate("");
-                          setNewLogUrl("");
-                        }}
-                        disabled={!newLogTitle.trim() || !newLogDate}
-                        className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-                      >
-                        Přidat záznam
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Log list - GitHub style */}
-                  <div className="space-y-0">
-                    {promotionLogs && promotionLogs.length > 0 ? (
-                      <div className="border border-border rounded-xl overflow-hidden">
-                        {promotionLogs.map((log, index) => (
-                          <div 
-                            key={log._id}
-                            className={`flex items-center gap-3 p-3 ${
-                              index !== promotionLogs.length - 1 ? "border-b border-border" : ""
-                            } hover:bg-muted/30`}
-                          >
-                            {/* Commit dot */}
-                            <div className="w-3 h-3 rounded-full bg-indigo-500 flex-shrink-0" />
-                            
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm text-foreground truncate">{log.title}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(log.date).toLocaleDateString("cs-CZ", { 
-                                  day: "numeric", 
-                                  month: "short", 
-                                  year: "numeric" 
-                                })}
-                              </p>
-                            </div>
-                            
-                            {/* Actions */}
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {log.url && (
-                                <a
-                                  href={log.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground"
-                                  title="Otevřít odkaz"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                              )}
-                              <button
-                                onClick={() => removePromotionLog({ id: log._id })}
-                                className="p-1.5 hover:bg-red-100 rounded-lg text-muted-foreground hover:text-red-600"
-                                title="Smazat"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <span className="text-4xl mb-3 block">📭</span>
-                        <p className="text-sm">Zatím žádné záznamy propagace.</p>
-                        <p className="text-xs mt-1">Přidejte první záznam výše.</p>
-                      </div>
-                    )}
                   </div>
                 </SheetContent>
               </Sheet>
