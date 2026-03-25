@@ -53,6 +53,15 @@ export function ProductImageSlider({
           thumbUrl: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "",
         };
       }
+      // Shorts url: https://www.youtube.com/shorts/VIDEO_ID
+      const shortsMatch = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/);
+      const videoIdFromShorts = shortsMatch?.[1];
+      if (videoIdFromShorts) {
+        return {
+          embedUrl: `https://www.youtube.com/embed/${videoIdFromShorts}`,
+          thumbUrl: `https://img.youtube.com/vi/${videoIdFromShorts}/hqdefault.jpg`,
+        };
+      }
       // Short youtu.be
       const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
       const videoIdFromShort = shortMatch?.[1];
