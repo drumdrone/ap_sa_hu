@@ -332,4 +332,10 @@ export default defineSchema({
   })
     .index("by_type", ["type"])
     .index("by_createdAt", ["createdAt"]),
+
+  // Global news ticker message (single-row table)
+  newsTicker: defineTable({
+    text: v.string(),
+    updatedAt: v.number(),
+  }).index("by_updatedAt", ["updatedAt"]),
 })
