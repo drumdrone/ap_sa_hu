@@ -36,6 +36,8 @@
   [context.production.environment]
     # Set NEXT_PUBLIC_CONVEX_URL in Netlify UI per-site.
     NEXT_PUBLIC_ENVIRONMENT = "production"
+    # Needed by scripts/netlify-build.sh to deploy Convex during build.
+    CONVEX_DEPLOYMENT = "prod:efficient-basilisk-904"
 
 # --- Headers -----------------------------------------------------------------
 [[headers]]
