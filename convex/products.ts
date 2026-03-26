@@ -144,6 +144,7 @@ export const updateMarketingData = mutation({
     }))),
     videoUrl: v.optional(v.string()),
     pdfUrl: v.optional(v.string()),
+    rating: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -153,7 +154,13 @@ export const updateMarketingData = mutation({
     let lastField = "";
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) {
-        cleanUpdates[key] = value === null ? undefined : value;
+        if (key === "rating" && value !== null) {
+          const n = typeof value === "number" ? value : Number(value);
+          const clamped = Number.isFinite(n) ? Math.max(0, Math.min(5, Math.round(n))) : 0;
+          cleanUpdates[key] = clamped;
+        } else {
+          cleanUpdates[key] = value === null ? undefined : value;
+        }
         if (value !== null) {
           lastField = key;
         }
