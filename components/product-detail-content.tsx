@@ -60,6 +60,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<QuickActionPanel>(null);
+  const [dashboardTab, setDashboardTab] = useState<"materials" | "data">("materials");
 
   const { role } = useAccess();
   const canEdit = role === "editor";
@@ -832,9 +833,36 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               </div>
 
               {/* Three Column Layout: Alerts + Quick Actions + Pro prodejce */}
-              <div className="grid 2xl:grid-cols-[1fr_1fr_minmax(500px,1.5fr)] xl:grid-cols-3 lg:grid-cols-2 gap-6">
+              <div className="mb-4">
+                <div className="inline-flex w-full rounded-xl border border-border bg-card p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setDashboardTab("materials")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      dashboardTab === "materials"
+                        ? "bg-amber-100 text-amber-900"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    Dostupné materiály
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardTab("data")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      dashboardTab === "data"
+                        ? "bg-amber-100 text-amber-900"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    Data
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6">
                 {/* Left Column - Alerts */}
-                <div className="space-y-4">
+                <div className={`space-y-4 ${dashboardTab === "materials" ? "" : "hidden"}`}>
                   {(() => {
                     const dismissedAlerts = product.dismissedAlerts || [];
                     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -939,7 +967,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             {alertCount > 0 && <span className="text-green-600">({alertCount})</span>}
                           </h2>
                         </div>
-                        <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
                           {visibleAlerts.length > 0 ? visibleAlerts.map((alert) => (
                             <div 
                               key={alert.id}
@@ -1125,7 +1153,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </div>
                             </div>
                           )) : (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <div className="md:col-span-2 flex flex-col items-center justify-center py-8 text-center">
                               <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -1142,6 +1170,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                 </div>
 
                 {/* Right Column - Quick Actions */}
+                <div className={`${dashboardTab === "data" ? "grid grid-cols-1 xl:grid-cols-2 gap-6" : "hidden"}`}>
                 <div className="bg-card border border-border rounded-xl overflow-hidden h-full">
                   <div className="p-4 border-b border-border bg-muted/30">
                     <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
@@ -2703,6 +2732,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
 
