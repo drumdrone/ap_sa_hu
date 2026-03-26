@@ -73,10 +73,13 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   
   // Gallery state
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [bannerTagsInput, setBannerTagsInput] = useState("banner e-shop, banner facebook");
   const [newImageTags, setNewImageTags] = useState("");
   const [selectedGalleryTag, setSelectedGalleryTag] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
+  const bannerFileInputRef = useRef<HTMLInputElement>(null);
   const mainContentRef = useRef<HTMLMainElement>(null);
   const [videoOpen, setVideoOpen] = useState(false);
   
@@ -97,6 +100,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const saveImage = useMutation(api.gallery.saveImage);
   const deleteImage = useMutation(api.gallery.deleteImage);
   const savePdfToProduct = useMutation(api.gallery.savePdfToProduct);
+  const productBanners = useQuery(api.productBanners.listByProduct, { productId });
+  const saveProductBanner = useMutation(api.productBanners.save);
+  const deleteProductBanner = useMutation(api.productBanners.remove);
 
   // Při navigaci na jiný produkt obnov scroll (main je overflow-auto → jinak zůstane „uprostřed“)
   // a zobraz sekci s fotkami (dashboard / mobilní záložka Produkt).
@@ -429,6 +435,61 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       setIsSaving(false);
       if (inlineFileInputRef.current) {
         inlineFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const getImageDimensions = (file: File): Promise<{ width: number; height: number }> =>
+    new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new window.Image();
+      img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        URL.revokeObjectURL(objectUrl);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Image dimension read failed"));
+      };
+      img.src = objectUrl;
+    });
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBanner(true);
+    try {
+      const tags = bannerTagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const { width, height } = await getImageDimensions(file);
+
+      const uploadUrl = await generateUploadUrl();
+      const result = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await result.json();
+
+      await saveProductBanner({
+        productId,
+        storageId,
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+        width,
+        height,
+        tags,
+      });
+    } catch (error) {
+      console.error("Error uploading banner:", error);
+    } finally {
+      setIsUploadingBanner(false);
+      if (bannerFileInputRef.current) {
+        bannerFileInputRef.current.value = "";
       }
     }
   };
@@ -942,6 +1003,18 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         action: "Stáhnout"
                       });
                     }
+
+                    // Product banners available
+                    if (productBanners && productBanners.length > 0) {
+                      alerts.push({
+                        id: "has-banners",
+                        icon: "check",
+                        type: "new",
+                        message: `${productBanners.length} ${productBanners.length === 1 ? "banner" : "bannerů"} je k dispozici.`,
+                        action: "Zobrazit",
+                        date: productBanners[0]?.uploadedAt,
+                      });
+                    }
                     
                     // Why Buy points available
                     if (product.whyBuy && product.whyBuy.length > 0) {
@@ -1036,6 +1109,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                       setOpenPanel("gallery");
                                     } else if (alert.id === "has-pdf" && product.pdfUrl) {
                                       window.open(product.pdfUrl, "_blank");
+                                    } else if (alert.id === "has-banners") {
+                                      setDashboardTab("data");
                                     } else if (alert.id === "has-whybuy") {
                                       setActiveSection("marketing");
                                     }
@@ -1119,6 +1194,21 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                           content: product.pdfUrl,
                                         };
                                       }
+                                      if (alert.id === "has-banners" && productBanners && productBanners.length > 0) {
+                                        const content = productBanners
+                                          .map((b) => {
+                                            const tags = b.tags?.length ? ` [${b.tags.join(", ")}]` : "";
+                                            const link = b.url ? ` - ${b.url}` : "";
+                                            return `${b.filename} (${b.width}x${b.height})${tags}${link}`;
+                                          })
+                                          .join("\n");
+                                        return {
+                                          id: "product-banners",
+                                          type: "materials",
+                                          label: `Bannery (${productBanners.length})`,
+                                          content,
+                                        };
+                                      }
                                       if (alert.id === "has-whybuy" && product.whyBuy) {
                                         return {
                                           id: "why-buy",
@@ -1141,6 +1231,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                         (alert.id === "has-ig" && i.id === "ig-post") ||
                                         (alert.id === "has-gallery" && i.id === "gallery-images") ||
                                         (alert.id === "has-pdf" && i.id === "pdf-link") ||
+                                        (alert.id === "has-banners" && i.id === "product-banners") ||
                                         (alert.id === "has-whybuy" && i.id === "why-buy"),
                                     )
                                       ? "bg-primary text-primary-foreground"
@@ -1310,6 +1401,153 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Banners */}
+                    <div
+                      className={`w-full rounded-xl transition-colors ${
+                        productBanners && productBanners.length > 0
+                          ? "bg-cyan-50 border border-cyan-200"
+                          : "bg-gray-50 border-2 border-dashed border-gray-300"
+                      }`}
+                    >
+                      <div className="p-4">
+                        <div className="flex items-center gap-4">
+                          <div className="relative flex-shrink-0">
+                            <div
+                              className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                productBanners && productBanners.length > 0 ? "bg-cyan-100" : "bg-gray-200"
+                              }`}
+                            >
+                              <span className="text-2xl">🪧</span>
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-foreground flex items-center gap-2">
+                              Bannery
+                              {productBanners && productBanners.length > 0 && (
+                                <span className="text-xs bg-cyan-200 text-cyan-800 px-2 py-0.5 rounded-full">
+                                  {productBanners.length}
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Přehled bannerů včetně rozměrů a tagů.
+                            </p>
+                          </div>
+                          {productBanners && productBanners.length > 0 && (
+                            <button
+                              onClick={() => {
+                                const urls = productBanners
+                                  .map((b) => b.url)
+                                  .filter((url): url is string => !!url);
+                                const content = productBanners
+                                  .map((b) => {
+                                    const tags = b.tags?.length ? ` [${b.tags.join(", ")}]` : "";
+                                    const link = b.url ? ` - ${b.url}` : "";
+                                    return `${b.filename} (${b.width}x${b.height})${tags}${link}`;
+                                  })
+                                  .join("\n");
+                                addToSalesKit({
+                                  id: "product-banners",
+                                  type: "materials",
+                                  label: `Bannery (${productBanners.length})`,
+                                  content:
+                                    urls.length > 0
+                                      ? `Bannery (${productBanners.length}):\n${content}`
+                                      : `Bannery (${productBanners.length})`,
+                                });
+                                setSaveMessage("Bannery přidány do Sales Kit");
+                                setTimeout(() => setSaveMessage(null), 2000);
+                              }}
+                              className={`p-2 rounded-lg transition-colors ${
+                                salesKitItems.find(i => i.id === "product-banners")
+                                  ? "bg-green-500 text-white"
+                                  : "bg-cyan-100 hover:bg-cyan-200 text-cyan-700"
+                              }`}
+                              title="Přidat bannery do Sales Kit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+
+                        {canEdit && (
+                          <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                            <input
+                              value={bannerTagsInput}
+                              onChange={(e) => setBannerTagsInput(e.target.value)}
+                              placeholder="Tagy (např. banner e-shop, banner facebook)"
+                              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                            />
+                            <label className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 cursor-pointer">
+                              {isUploadingBanner ? "Nahrávám..." : "Nahrát banner"}
+                              <input
+                                ref={bannerFileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleBannerUpload}
+                                disabled={isUploadingBanner}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        )}
+
+                        {productBanners && productBanners.length > 0 ? (
+                          <div className="mt-4 space-y-2">
+                            {productBanners.map((banner) => (
+                              <div
+                                key={banner._id}
+                                className="flex items-center gap-3 p-3 bg-white/80 rounded-lg border border-cyan-100"
+                              >
+                                <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex-shrink-0">
+                                  {banner.url ? (
+                                    <img src={banner.url} alt={banner.filename} className="w-full h-full object-cover" />
+                                  ) : null}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">{banner.filename}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {banner.width} x {banner.height}px • {(banner.size / 1024).toFixed(0)} KB
+                                  </p>
+                                  {banner.tags?.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {banner.tags.map((tag, idx) => (
+                                        <span key={`${banner._id}-${tag}-${idx}`} className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800">
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                {banner.url && (
+                                  <a
+                                    href={banner.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2 py-1.5 text-xs rounded-md bg-cyan-100 hover:bg-cyan-200 text-cyan-800"
+                                  >
+                                    Otevřít
+                                  </a>
+                                )}
+                                {canEdit && (
+                                  <button
+                                    onClick={() => deleteProductBanner({ id: banner._id })}
+                                    className="px-2 py-1.5 text-xs rounded-md bg-red-100 hover:bg-red-200 text-red-700"
+                                  >
+                                    Smazat
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-sm text-muted-foreground">Zatím nejsou nahrané žádné bannery.</p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Facebook & Instagram Images */}
