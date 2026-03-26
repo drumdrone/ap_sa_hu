@@ -850,6 +850,41 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       {product.tier && <TierBadge tier={product.tier} />}
                       {product.brandPillar && <BrandPillarBadge pillar={product.brandPillar} />}
                     </div>
+                    <div className="flex items-center gap-1 mb-2">
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const value = i + 1;
+                        const filled = (product.rating ?? 0) >= value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={async () => {
+                              if (!canEdit) return;
+                              await updateMarketingData({ id: productId, rating: value });
+                              setSaveMessage("Hodnocení uloženo");
+                              setTimeout(() => setSaveMessage(null), 1500);
+                            }}
+                            className={`p-0.5 rounded ${
+                              canEdit ? "cursor-pointer hover:bg-amber-50" : "cursor-default"
+                            }`}
+                            title={canEdit ? `Nastavit hodnocení ${value}/5` : `Hodnocení ${product.rating ?? 0}/5`}
+                            aria-label={`${value} z 5`}
+                            disabled={!canEdit}
+                          >
+                            <svg
+                              className={`w-5 h-5 ${filled ? "text-amber-400" : "text-gray-300"}`}
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.966a1 1 0 00.95.69h4.172c.969 0 1.371 1.24.588 1.81l-3.375 2.453a1 1 0 00-.364 1.118l1.287 3.966c.3.921-.755 1.688-1.539 1.118l-3.375-2.453a1 1 0 00-1.176 0l-3.375 2.453c-.783.57-1.838-.197-1.539-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.393c-.783-.57-.38-1.81.588-1.81h4.172a1 1 0 00.95-.69l1.286-3.966z" />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {(product.rating ?? 0)}/5
+                      </span>
+                    </div>
                     <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">{product.name}</h1>
                     <p className="text-2xl font-bold text-primary mb-4">{product.price} Kč</p>
                     {product.productUrl && (

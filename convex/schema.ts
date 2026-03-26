@@ -95,6 +95,7 @@ export default defineSchema({
       text: v.string(),
     }))),
     targetAudience: v.optional(v.string()),
+    rating: v.optional(v.number()), // 0-5 stars (editor-set)
     pdfUrl: v.optional(v.string()),
     bannerUrls: v.optional(v.array(v.object({
       size: v.string(),
