@@ -36,7 +36,7 @@ const BULK_SECTIONS = [
   { id: "hashtags", label: "Hashtagy", description: "Hashtagy oddělené čárkou", icon: "#️⃣" },
   
   // Materiály
-  { id: "pdfUrl", label: "PDF materiál URL", description: "URL na PDF produktový list", icon: "📄" },
+  { id: "pdfUrl", label: "Produktový list (PDF)", description: "URL na PDF produktový list", icon: "📄" },
   
   // Prodejní data
   { id: "mainBenefits", label: "3 hlavní benefity", description: "Klíčové prodejní argumenty", icon: "✨" },
@@ -274,9 +274,18 @@ export default function BulkEditContent() {
                             )}
                           </div>
                         </div>
-                        {product.quickReferenceCard && (
-                          <span className="text-xs text-green-600" title="Má Quick Reference Card">✓</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {product.pdfUrl && (
+                            <span className="text-xs text-blue-600" title="Má produktový list (PDF)">
+                              📄
+                            </span>
+                          )}
+                          {product.quickReferenceCard && (
+                            <span className="text-xs text-green-600" title="Má Quick Reference Card">
+                              ✓
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

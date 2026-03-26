@@ -619,7 +619,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                 />
                 <div className="p-4">
                   <div className="flex flex-wrap gap-1.5 mb-2">
-                    {product.category && <CategoryBadge category={product.category} />}
                     {product.tier && <TierBadge tier={product.tier} />}
                     {product.brandPillar && <BrandPillarBadge pillar={product.brandPillar} />}
                   </div>
@@ -846,7 +845,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   {/* Product Info */}
                   <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
                     <div className="flex flex-wrap gap-2 mb-3">
-                      {product.category && <CategoryBadge category={product.category} />}
                       {product.tier && <TierBadge tier={product.tier} />}
                       {product.brandPillar && <BrandPillarBadge pillar={product.brandPillar} />}
                     </div>
@@ -1900,7 +1898,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </div>
                               </div>
                               <div className="flex-1">
-                                <p className="font-semibold text-foreground">Stáhnout materiály</p>
+                                <p className="font-semibold text-foreground">Produktové listy</p>
                                 <p className="text-sm text-muted-foreground">
                                   {product.pdfUrl || (product.bannerUrls && product.bannerUrls.length > 0)
                                     ? "PDF listy a bannery ke stažení"
@@ -1917,7 +1915,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   onClick={(e) => { e.stopPropagation(); addToSalesKit({
                                     id: "download-materials",
                                     type: "materials",
-                                    label: "Materiály ke stažení",
+                                    label: "Produktové listy",
                                     content: [
                                       product.pdfUrl ? `PDF: ${product.pdfUrl}` : "",
                                       product.bannerUrls?.length ? `Bannery:\n${product.bannerUrls.join("\n")}` : ""
