@@ -40,6 +40,21 @@ export default defineSchema({
     .index("by_product", ["productId"])
     .index("by_uploadedAt", ["uploadedAt"]),
 
+  // Product banners (separate from gallery)
+  productBanners: defineTable({
+    productId: v.id("products"),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    width: v.number(),
+    height: v.number(),
+    tags: v.array(v.string()),
+    uploadedAt: v.number(),
+  })
+    .index("by_product", ["productId"])
+    .index("by_uploadedAt", ["uploadedAt"]),
+
   uploadLogs: defineTable({
     kind: v.union(v.literal("gallery_image"), v.literal("product_pdf")),
     productId: v.optional(v.id("products")),

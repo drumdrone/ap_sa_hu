@@ -158,115 +158,64 @@ function NewsItemCard({
   };
 
   return (
-    <div className={`group relative p-4 rounded-xl ${getCardStyle()} hover:shadow-md transition-all`}>
-      {/* Action buttons - top right */}
-      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-        <button
-          onClick={() => onEdit(item)}
-          className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-white/80 rounded-lg transition-all"
-          title="Upravit"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-        </button>
-        <button
-          onClick={() => onDelete(item._id)}
-          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white/80 rounded-lg transition-all"
-          title="Smazat"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+    <div className={`group p-3 rounded-xl ${getCardStyle()} border border-border/40 hover:shadow-sm transition-all`}>
+      <div className="flex items-center gap-3">
+        {item.imageUrl ? (
+          <button
+            type="button"
+            onClick={() => onImageClick?.(item.imageUrl!)}
+            className="w-10 h-10 rounded-lg overflow-hidden bg-muted flex-shrink-0"
+            title="Zvětšit obrázek"
+          >
+            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+          </button>
+        ) : null}
 
-      {/* Custom image or Icon */}
-      {item.imageUrl ? (
-        <div 
-          className="relative w-full h-24 rounded-xl overflow-visible bg-muted mb-3 -mt-1 -mx-1 group/image cursor-pointer" 
-          style={{ width: 'calc(100% + 8px)' }}
-          onClick={() => onImageClick?.(item.imageUrl!)}
-        >
-          <img
-            src={item.imageUrl}
-            alt=""
-            className="w-full h-full object-cover rounded-xl"
-          />
-          {/* Click hint */}
-          <div className="absolute inset-0 rounded-xl bg-black/0 group-hover/image:bg-black/20 transition-all flex items-center justify-center">
-            <svg className="w-8 h-8 text-white opacity-0 group-hover/image:opacity-100 transition-opacity drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground truncate">{displayTitle}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {tagPrefix ? `${tagPrefix} • ` : ""}{item.content || formatRelativeTime(item.createdAt)}
+          </p>
+          {productsForItem && productsForItem.length > 0 && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              {productsForItem
+                .filter((p) => !!p.image)
+                .slice(0, 5)
+                .map((p) => (
+                  <Link
+                    key={p._id}
+                    href={`/product/${p._id}`}
+                    className="block w-7 h-7 rounded-md overflow-hidden bg-white border border-border hover:scale-105 transition-transform"
+                    title={p.name}
+                  >
+                    <img src={p.image || ""} alt={p.name} className="w-full h-full object-cover" />
+                  </Link>
+                ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => onEdit(item)}
+            className="p-1.5 text-gray-500 hover:text-blue-500 hover:bg-white/80 rounded-md transition-all"
+            title="Upravit"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
             </svg>
-          </div>
+          </button>
+          <button
+            onClick={() => onDelete(item._id)}
+            className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-white/80 rounded-md transition-all"
+            title="Smazat"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-      ) : (
-        <div className={`w-10 h-10 rounded-xl ${getIconStyle()} flex items-center justify-center text-lg mb-3`}>
-          {getCategoryIcon()}
-        </div>
-      )}
-
-      {/* Title with tag */}
-      <div className="mb-1">
-        <h3 className="font-semibold text-foreground text-sm leading-tight">{displayTitle}</h3>
-        {tagPrefix && (
-          <span className="text-xs text-muted-foreground">{tagPrefix}</span>
-        )}
       </div>
-
-      {/* Content/Description or date */}
-      <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
-        {item.content || formatRelativeTime(item.createdAt)}
-      </p>
-
-      {/* Matched products (lightweight: main product images only) */}
-      {productsForItem && productsForItem.length > 0 && (() => {
-        const allImages: { url: string; productName: string; productId: string }[] = [];
-
-        productsForItem.forEach((product) => {
-          if (product.image) {
-            allImages.push({
-              url: product.image,
-              productName: product.name,
-              productId: product._id,
-            });
-          }
-        });
-        
-        return allImages.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-black/5">
-            {allImages.map((img, idx) => (
-              <div
-                key={`${img.productId}-${idx}`}
-                className="relative group/img"
-              >
-                <Link
-                  href={`/product/${img.productId}`}
-                  className="block w-8 h-8 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md hover:scale-105 transition-all"
-                  title={img.productName}
-                >
-                  <img
-                    src={img.url}
-                    alt={img.productName}
-                    className="w-full h-full object-cover"
-                  />
-                </Link>
-                {/* Hover preview */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity z-50">
-                  <div className="bg-white rounded-xl shadow-xl border border-border p-1 w-40">
-                    <img
-                      src={img.url}
-                      alt={img.productName}
-                      className="w-full h-32 object-cover rounded-lg"
-                    />
-                    <p className="text-xs text-center text-muted-foreground mt-1 truncate px-1">{img.productName}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null;
-      })()}
     </div>
   );
 }
@@ -896,7 +845,7 @@ export function DashboardPageContent() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                  <div className="space-y-2 p-4">
                     {filteredNews?.map((item) => (
                       <NewsItemCard
                         key={item._id}

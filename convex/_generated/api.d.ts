@@ -18,6 +18,7 @@ import type * as news from "../news.js";
 import type * as newsTicker from "../newsTicker.js";
 import type * as opportunities from "../opportunities.js";
 import type * as posm from "../posm.js";
+import type * as productBanners from "../productBanners.js";
 import type * as products from "../products.js";
 import type * as promotionLogs from "../promotionLogs.js";
 import type * as seed_import from "../seed/import.js";
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   newsTicker: typeof newsTicker;
   opportunities: typeof opportunities;
   posm: typeof posm;
+  productBanners: typeof productBanners;
   products: typeof products;
   promotionLogs: typeof promotionLogs;
   "seed/import": typeof seed_import;
