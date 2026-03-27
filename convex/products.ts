@@ -697,6 +697,7 @@ export const bulkUpdate = mutation({
     hashtags: v.optional(v.array(v.string())),
     // Materiály
     pdfUrl: v.optional(v.string()),
+    pdfStorageId: v.optional(v.id("_storage")),
     // Prodejní data
     mainBenefits: v.optional(v.string()),
     herbComposition: v.optional(v.string()),
@@ -710,11 +711,33 @@ export const bulkUpdate = mutation({
     // Filter out undefined values
     const cleanUpdates: Record<string, unknown> = {};
     let lastField = "";
+    let resolvedPdfUrl: string | undefined;
+
+    if (updates.pdfStorageId) {
+      const url = await ctx.storage.getUrl(updates.pdfStorageId);
+      if (url) {
+        resolvedPdfUrl = url;
+      }
+    }
+
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) {
+        if (key === "pdfStorageId") {
+          continue;
+        }
+        if (key === "pdfUrl" && resolvedPdfUrl) {
+          cleanUpdates[key] = resolvedPdfUrl;
+          lastField = key;
+          continue;
+        }
         cleanUpdates[key] = value;
         lastField = key;
       }
+    }
+
+    if (resolvedPdfUrl && cleanUpdates.pdfUrl === undefined) {
+      cleanUpdates.pdfUrl = resolvedPdfUrl;
+      lastField = "pdfUrl";
     }
     
     if (Object.keys(cleanUpdates).length === 0) {
