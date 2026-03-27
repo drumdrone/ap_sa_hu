@@ -134,8 +134,14 @@ export default function BulkEditContent() {
     }
     
     const value = sectionValues[activeSection];
-    if (!value.trim()) {
+    const isPdfSection = activeSection === "pdfUrl";
+    const hasPdfUpload = !!uploadedPdfStorageId;
+    if (!isPdfSection && !value.trim()) {
       alert("Vyplňte obsah pro vybranou sekci");
+      return;
+    }
+    if (isPdfSection && !value.trim() && !hasPdfUpload) {
+      alert("Nahrajte PDF soubor nebo zadejte URL");
       return;
     }
     
@@ -369,45 +375,44 @@ export default function BulkEditContent() {
                   {BULK_SECTIONS.find(s => s.id === activeSection)?.icon} Obsah pro {BULK_SECTIONS.find(s => s.id === activeSection)?.label}
                 </label>
                 {/* Use Input for URL fields, Textarea for text content */}
-                {["socialFacebookImage", "socialInstagramImage", "pdfUrl"].includes(activeSection) ? (
+                {["socialFacebookImage", "socialInstagramImage"].includes(activeSection) ? (
                   <div className="space-y-3">
                     <Input
                       type="url"
-                      placeholder={activeSection === "pdfUrl" 
-                        ? "https://example.com/material.pdf" 
-                        : "https://example.com/image.jpg"}
+                      placeholder="https://example.com/image.jpg"
                       value={sectionValues[activeSection]}
                       onChange={(e) => setSectionValues(prev => ({ ...prev, [activeSection]: e.target.value }))}
                       className="font-mono text-sm"
                     />
-                    {activeSection === "pdfUrl" && (
-                      <div className="rounded-lg border border-dashed border-border p-3 bg-muted/20">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground">Nahrát PDF z disku</p>
-                            <p className="text-xs text-muted-foreground">
-                              Nahrajte jeden soubor, použije se pro všechny vybrané produkty.
-                            </p>
-                            {uploadedPdfName && (
-                              <p className="text-xs text-emerald-700 mt-1 truncate">Nahráno: {uploadedPdfName}</p>
-                            )}
-                          </div>
-                          <label className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm cursor-pointer hover:bg-primary/90">
-                            {uploadingPdf ? "Nahrávám..." : "Vybrat PDF"}
-                            <input
-                              type="file"
-                              accept="application/pdf,.pdf"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handlePdfUpload(file);
-                                e.currentTarget.value = "";
-                              }}
-                            />
-                          </label>
+                  </div>
+                ) : activeSection === "pdfUrl" ? (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-dashed border-border p-3 bg-muted/20">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">Nahrát PDF z disku</p>
+                          <p className="text-xs text-muted-foreground">
+                            Nahrajte jeden soubor, použije se pro všechny vybrané produkty.
+                          </p>
+                          {uploadedPdfName && (
+                            <p className="text-xs text-emerald-700 mt-1 truncate">Nahráno: {uploadedPdfName}</p>
+                          )}
                         </div>
+                        <label className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm cursor-pointer hover:bg-primary/90">
+                          {uploadingPdf ? "Nahrávám..." : "Vybrat PDF"}
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handlePdfUpload(file);
+                              e.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
                       </div>
-                    )}
+                    </div>
                   </div>
                 ) : activeSection === "hashtags" ? (
                   <div className="space-y-2">
@@ -449,7 +454,13 @@ export default function BulkEditContent() {
               {/* Save button */}
               <Button
                 onClick={handleSave}
-                disabled={isSaving || selectedProducts.size === 0 || !sectionValues[activeSection].trim()}
+                disabled={
+                  isSaving ||
+                  selectedProducts.size === 0 ||
+                  (activeSection === "pdfUrl"
+                    ? (!uploadedPdfStorageId && !sectionValues[activeSection].trim())
+                    : !sectionValues[activeSection].trim())
+                }
                 className="w-full"
                 size="lg"
               >
