@@ -89,6 +89,7 @@ export function PosmPageContent() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedStorageId, setUploadedStorageId] = useState<string | null>(null);
+  const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl);
@@ -129,6 +130,7 @@ export function PosmPageContent() {
 
       setUploadedStorageId(storageId);
       setUploadedFileName(file.name);
+      setUploadedFileType(file.type);
       // Clear the manual URL since we have a storage file
       setNewItem(prev => ({ ...prev, imageUrl: '' }));
     } catch (error) {
@@ -191,6 +193,11 @@ export function PosmPageContent() {
       type: newItem.type,
       imageUrl: newItem.imageUrl || undefined,
       storageId: uploadedStorageId ? (uploadedStorageId as Id<"_storage">) : undefined,
+      fileType:
+        uploadedFileType ||
+        (newItem.downloadUrl.toLowerCase().includes(".pdf") || newItem.imageUrl.toLowerCase().includes(".pdf")
+          ? "application/pdf"
+          : undefined),
       downloadUrl: newItem.downloadUrl || undefined,
       distributionType: newItem.distributionType,
       sizes: sizesArray.length > 0 ? sizesArray : undefined,
@@ -199,6 +206,7 @@ export function PosmPageContent() {
     setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "" });
     setUploadedFileName(null);
     setUploadedStorageId(null);
+    setUploadedFileType(null);
     setShowAddItem(false);
   };
 
@@ -447,6 +455,7 @@ export function PosmPageContent() {
               setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "" });
               setUploadedFileName(null);
               setUploadedStorageId(null);
+              setUploadedFileType(null);
               setShowAddItem(true);
             }} className="gap-2">
             <span>+</span>
@@ -599,11 +608,21 @@ export function PosmPageContent() {
                     >
                       {item.imageUrl ? (
                         <div className="aspect-video bg-muted relative">
-                          <img
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="w-full h-full object-cover"
-                          />
+                          {(item.fileType === "application/pdf" ||
+                            item.imageUrl.toLowerCase().includes(".pdf") ||
+                            (item.downloadUrl || "").toLowerCase().includes(".pdf")) ? (
+                            <iframe
+                              src={`${item.imageUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                              title={item.name}
+                              className="w-full h-full bg-white"
+                            />
+                          ) : (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                           {/* Distribution type badge overlay */}
                           {item.distributionType && (
                             <div className="absolute top-2 right-2">
@@ -934,6 +953,7 @@ export function PosmPageContent() {
                           e.stopPropagation();
                           setUploadedFileName(null);
                           setUploadedStorageId(null);
+                          setUploadedFileType(null);
                           setNewItem(prev => ({ ...prev, imageUrl: '' }));
                         }}
                         className="text-xs text-red-500 hover:text-red-700"
@@ -969,6 +989,7 @@ export function PosmPageContent() {
                       setNewItem({ ...newItem, imageUrl: e.target.value });
                       setUploadedFileName(null);
                       setUploadedStorageId(null);
+                      setUploadedFileType(null);
                     }}
                     placeholder="https://..."
                     className="text-sm h-8"
@@ -1039,11 +1060,21 @@ export function PosmPageContent() {
                   {/* Preview image */}
                   {selectedItemData.imageUrl && (
                     <div className="rounded-lg overflow-hidden bg-muted">
-                      <img
-                        src={selectedItemData.imageUrl}
-                        alt={selectedItemData.name}
-                        className="w-full max-h-80 object-contain"
-                      />
+                      {(selectedItemData.fileType === "application/pdf" ||
+                        selectedItemData.imageUrl.toLowerCase().includes(".pdf") ||
+                        (selectedItemData.downloadUrl || "").toLowerCase().includes(".pdf")) ? (
+                        <iframe
+                          src={`${selectedItemData.imageUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                          title={selectedItemData.name}
+                          className="w-full h-80 bg-white"
+                        />
+                      ) : (
+                        <img
+                          src={selectedItemData.imageUrl}
+                          alt={selectedItemData.name}
+                          className="w-full max-h-80 object-contain"
+                        />
+                      )}
                     </div>
                   )}
 

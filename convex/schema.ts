@@ -168,6 +168,7 @@ export default defineSchema({
     ),
     imageUrl: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")), // Convex storage ID for uploaded files
+    fileType: v.optional(v.string()), // MIME type of uploaded file (e.g. application/pdf)
     downloadUrl: v.optional(v.string()), // External download URL (for download type materials)
     distributionType: v.optional(v.union(
       v.literal("download"),  // ke stažení

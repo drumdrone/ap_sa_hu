@@ -89,12 +89,16 @@ export default function BulkEditContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
   const [saveResult, setSaveResult] = useState<{ success: boolean; updated: number } | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadedPdfName, setUploadedPdfName] = useState<string | null>(null);
+  const [uploadedPdfStorageId, setUploadedPdfStorageId] = useState<string | null>(null);
   
   // Queries and mutations
   const products = useQuery(api.products.list, {
     search: debouncedSearch || undefined,
   });
   const bulkUpdate = useMutation(api.products.bulkUpdate);
+  const generateUploadUrl = useMutation(api.gallery.generateUploadUrl);
   
   // Filtered products
   const filteredProducts = products || [];
@@ -146,10 +150,16 @@ export default function BulkEditContent() {
         updateValue = value.split(/[,\s]+/).map(tag => tag.replace(/^#/, "").trim()).filter(Boolean);
       }
       
-      const result = await bulkUpdate({
+      const payload: Record<string, unknown> = {
         productIds: Array.from(selectedProducts),
         [activeSection]: updateValue,
-      });
+      };
+
+      if (activeSection === "pdfUrl" && uploadedPdfStorageId) {
+        payload.pdfStorageId = uploadedPdfStorageId as Id<"_storage">;
+      }
+
+      const result = await bulkUpdate(payload as Parameters<typeof bulkUpdate>[0]);
       
       setSaveResult({ success: result.success, updated: result.updated });
       
@@ -157,12 +167,41 @@ export default function BulkEditContent() {
         // Clear selection after successful save
         setSelectedProducts(new Set());
         setSectionValues(prev => ({ ...prev, [activeSection]: "" }));
+        if (activeSection === "pdfUrl") {
+          setUploadedPdfName(null);
+          setUploadedPdfStorageId(null);
+        }
       }
     } catch (error) {
       console.error("Bulk update error:", error);
       setSaveResult({ success: false, updated: 0 });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePdfUpload = async (file: File) => {
+    if (file.type !== "application/pdf") {
+      alert("Nahrajte prosím PDF soubor");
+      return;
+    }
+    setUploadingPdf(true);
+    try {
+      const uploadUrl = await generateUploadUrl();
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!response.ok) throw new Error("Upload failed");
+      const { storageId } = await response.json();
+      setUploadedPdfStorageId(storageId);
+      setUploadedPdfName(file.name);
+    } catch (error) {
+      console.error("PDF upload error:", error);
+      alert("Nepodařilo se nahrát PDF");
+    } finally {
+      setUploadingPdf(false);
     }
   };
   
@@ -331,15 +370,45 @@ export default function BulkEditContent() {
                 </label>
                 {/* Use Input for URL fields, Textarea for text content */}
                 {["socialFacebookImage", "socialInstagramImage", "pdfUrl"].includes(activeSection) ? (
-                  <Input
-                    type="url"
-                    placeholder={activeSection === "pdfUrl" 
-                      ? "https://example.com/material.pdf" 
-                      : "https://example.com/image.jpg"}
-                    value={sectionValues[activeSection]}
-                    onChange={(e) => setSectionValues(prev => ({ ...prev, [activeSection]: e.target.value }))}
-                    className="font-mono text-sm"
-                  />
+                  <div className="space-y-3">
+                    <Input
+                      type="url"
+                      placeholder={activeSection === "pdfUrl" 
+                        ? "https://example.com/material.pdf" 
+                        : "https://example.com/image.jpg"}
+                      value={sectionValues[activeSection]}
+                      onChange={(e) => setSectionValues(prev => ({ ...prev, [activeSection]: e.target.value }))}
+                      className="font-mono text-sm"
+                    />
+                    {activeSection === "pdfUrl" && (
+                      <div className="rounded-lg border border-dashed border-border p-3 bg-muted/20">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground">Nahrát PDF z disku</p>
+                            <p className="text-xs text-muted-foreground">
+                              Nahrajte jeden soubor, použije se pro všechny vybrané produkty.
+                            </p>
+                            {uploadedPdfName && (
+                              <p className="text-xs text-emerald-700 mt-1 truncate">Nahráno: {uploadedPdfName}</p>
+                            )}
+                          </div>
+                          <label className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm cursor-pointer hover:bg-primary/90">
+                            {uploadingPdf ? "Nahrávám..." : "Vybrat PDF"}
+                            <input
+                              type="file"
+                              accept="application/pdf,.pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handlePdfUpload(file);
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : activeSection === "hashtags" ? (
                   <div className="space-y-2">
                     <Input

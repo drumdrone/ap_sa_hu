@@ -36,13 +36,19 @@ export const listItems = query({
     const itemsWithUrls = await Promise.all(
       items.map(async (item) => {
         let resolvedImageUrl = item.imageUrl;
+        let resolvedFileType = item.fileType;
         if (item.storageId) {
           const url = await ctx.storage.getUrl(item.storageId);
           if (url) resolvedImageUrl = url;
+          const metadata = await ctx.storage.getMetadata(item.storageId);
+          if (metadata?.contentType) {
+            resolvedFileType = metadata.contentType;
+          }
         }
         return {
           ...item,
           imageUrl: resolvedImageUrl,
+          fileType: resolvedFileType,
         };
       })
     );
@@ -59,14 +65,20 @@ export const getItem = query({
 
     // Resolve storage URL
     let resolvedImageUrl = item.imageUrl;
+    let resolvedFileType = item.fileType;
     if (item.storageId) {
       const url = await ctx.storage.getUrl(item.storageId);
       if (url) resolvedImageUrl = url;
+      const metadata = await ctx.storage.getMetadata(item.storageId);
+      if (metadata?.contentType) {
+        resolvedFileType = metadata.contentType;
+      }
     }
 
     return {
       ...item,
       imageUrl: resolvedImageUrl,
+      fileType: resolvedFileType,
     };
   },
 });
@@ -86,6 +98,7 @@ export const createItem = mutation({
     ),
     imageUrl: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")),
+    fileType: v.optional(v.string()),
     downloadUrl: v.optional(v.string()),
     distributionType: v.optional(v.union(
       v.literal("download"),
@@ -119,6 +132,7 @@ export const updateItem = mutation({
     )),
     imageUrl: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")),
+    fileType: v.optional(v.string()),
     downloadUrl: v.optional(v.string()),
     distributionType: v.optional(v.union(
       v.literal("download"),
@@ -188,8 +202,13 @@ export const listOrders = query({
         let resolvedItem = item;
         if (item?.storageId) {
           const url = await ctx.storage.getUrl(item.storageId);
+          const metadata = await ctx.storage.getMetadata(item.storageId);
           if (url) {
-            resolvedItem = { ...item, imageUrl: url };
+            resolvedItem = {
+              ...item,
+              imageUrl: url,
+              fileType: metadata?.contentType ?? item.fileType,
+            };
           }
         }
         return {
