@@ -146,11 +146,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   };
   const [salesKitItems, setSalesKitItems] = useState<SalesKitItem[]>([]);
   const [showSalesKit, setShowSalesKit] = useState(false);
-  const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [emailTo, setEmailTo] = useState("");
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-  
-  const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
+  const [showPdfLinkDialog, setShowPdfLinkDialog] = useState(false);
   
   // Lightbox images: use same ordering as slider (main image first, then gallery)
   const galleryImageUrls = galleryImages?.filter(img => img.url).map(img => img.url!) ?? [];
@@ -304,7 +300,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       printWindow.document.write(printContent);
       printWindow.document.close();
       printWindow.focus();
-      setTimeout(() => printWindow.print(), 250);
     }
   };
 
@@ -4246,13 +4241,13 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                 PDF
               </button>
               <button
-                onClick={() => setShowEmailDialog(true)}
+                onClick={() => setShowPdfLinkDialog(true)}
                 className="flex items-center justify-center gap-1 px-2 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                Email
+                PDF odkaz
               </button>
             </div>
           )}
@@ -4271,31 +4266,41 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
         </button>
       )}
 
-      {/* Email Dialog */}
-      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+      {/* PDF Link Dialog */}
+      <Dialog open={showPdfLinkDialog} onOpenChange={setShowPdfLinkDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
-              Odeslat Sales Kit emailem
+              Odkaz na produktové PDF
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Email příjemce
+                PDF odkaz
               </label>
-              <Input
-                type="email"
-                placeholder="kolega@apotheke.cz"
-                value={emailTo}
-                onChange={(e) => setEmailTo(e.target.value)}
-              />
+              {product?.pdfUrl ? (
+                <div className="space-y-2">
+                  <Input
+                    value={product.pdfUrl}
+                    readOnly
+                    className="font-mono text-xs"
+                  />
+                  <div className="flex justify-end">
+                    <CopyButton text={product.pdfUrl} />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Tento produkt zatím nemá uložený PDF odkaz.
+                </p>
+              )}
             </div>
             <div className="bg-muted/50 rounded-lg p-3">
-              <p className="text-sm text-muted-foreground mb-2">Bude odesláno:</p>
+              <p className="text-sm text-muted-foreground mb-2">Obsah Sales Kitu:</p>
               <ul className="text-sm space-y-1">
                 {salesKitItems.map((item) => (
                   <li key={item.id} className="flex items-center gap-2">
@@ -4313,70 +4318,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setShowEmailDialog(false)}
+                onClick={() => setShowPdfLinkDialog(false)}
                 className="flex-1 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
               >
-                Zrušit
-              </button>
-              <button
-                onClick={async () => {
-                  if (!emailTo || !product) return;
-                  setIsSendingEmail(true);
-                  try {
-                    // Build email content
-                    const contentLines = [
-                      `PRODEJNÍ MATERIÁLY - ${product.name}`,
-                      ``,
-                      `Produkt: ${product.name}`,
-                      `Kód: ${product.externalId || productId}`,
-                      `Cena: ${product.price} Kč`,
-                      ``,
-                      `---`,
-                      ``,
-                    ];
-                    salesKitItems.forEach((item) => {
-                      contentLines.push(`▸ ${item.label.toUpperCase()}`);
-                      contentLines.push(``);
-                      contentLines.push(item.content);
-                      contentLines.push(``);
-                      contentLines.push(`---`);
-                      contentLines.push(``);
-                    });
-                    contentLines.push(`Vygenerováno: ${new Date().toLocaleString("cs-CZ")}`);
-                    
-                    await sendSalesKitEmail({
-                      email: emailTo,
-                      subject: `Sales Kit: ${product.name}`,
-                      content: contentLines.join("\n"),
-                    });
-                    setShowEmailDialog(false);
-                    setEmailTo("");
-                    setSaveMessage("Email odeslán!");
-                    setTimeout(() => setSaveMessage(null), 3000);
-                  } catch (error) {
-                    console.error("Error sending email:", error);
-                    setSaveMessage("Chyba při odesílání emailu");
-                    setTimeout(() => setSaveMessage(null), 3000);
-                  } finally {
-                    setIsSendingEmail(false);
-                  }
-                }}
-                disabled={!emailTo || isSendingEmail}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSendingEmail ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Odesílám...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                    Odeslat
-                  </>
-                )}
+                Zavřít
               </button>
             </div>
           </div>
