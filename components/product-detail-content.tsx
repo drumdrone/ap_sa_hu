@@ -50,6 +50,8 @@ type InlineEdit =
   | "mainBenefits"
   | "herbComposition"
   | "competitionComparison"
+  | "seasonalOpportunities"
+  | "targetAudience"
   | "sensoryProfile"
   | null;
 
@@ -2909,6 +2911,192 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    {/* Cílová skupina Section - Editable */}
+                    <div className={`w-full rounded-xl transition-colors ${
+                      product.targetAudience
+                        ? "bg-[#f5f9ff] border border-blue-200"
+                        : "bg-gray-50 border-2 border-dashed border-gray-300"
+                    }`}>
+                      {inlineEdit === "targetAudience" ? (
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-foreground">👥 CÍLOVÁ SKUPINA</p>
+                            <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+                          </div>
+                          <textarea
+                            value={inlineValue}
+                            onChange={(e) => setInlineValue(e.target.value)}
+                            placeholder="Vložte popis cílové skupiny (ASCII art text)..."
+                            className="w-full p-3 border rounded-lg text-xs font-mono min-h-[220px] resize-none bg-gray-900 text-blue-300"
+                          />
+                          <button
+                            onClick={() => handleInlineSave("targetAudience", inlineValue)}
+                            disabled={isSaving}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {isSaving ? "Ukládám..." : "Uložit"}
+                          </button>
+                        </div>
+                      ) : product.targetAudience ? (
+                        <div className="p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <p className="font-semibold text-foreground flex items-center gap-2 text-lg">
+                              <span>👥</span> CÍLOVÁ SKUPINA
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => addToSalesKit({
+                                  id: "target-audience",
+                                  type: "whybuy",
+                                  label: "Cílová skupina",
+                                  content: product.targetAudience || ""
+                                })}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  salesKitItems.find(i => i.id === "target-audience")
+                                    ? "bg-green-500 text-white"
+                                    : "bg-blue-100 hover:bg-blue-200 text-blue-700"
+                                }`}
+                                title="Přidat do Sales Kit"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                              <CopyButton text={product.targetAudience} />
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("targetAudience"); setInlineValue(product.targetAudience || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                            <pre className="text-[10px] text-blue-300 font-mono whitespace-pre leading-tight">{product.targetAudience}</pre>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4 p-4">
+                          <button
+                            onClick={() => { if (!canEdit) return; setInlineEdit("targetAudience"); setInlineValue(""); }}
+                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
+                          >
+                            <div className="relative flex-shrink-0">
+                              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                <span className="text-2xl">👥</span>
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-foreground">Cílová skupina</p>
+                              <p className="text-sm text-muted-foreground">Přidejte popis cílové skupiny zákazníků</p>
+                            </div>
+                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Sezónní příležitosti Section - Editable */}
+                    <div className={`w-full rounded-xl transition-colors ${
+                      product.seasonalOpportunities
+                        ? "bg-[#f0f8f0] border border-green-200"
+                        : "bg-gray-50 border-2 border-dashed border-gray-300"
+                    }`}>
+                      {inlineEdit === "seasonalOpportunities" ? (
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-foreground">📅 SEZÓNNÍ PŘÍLEŽITOSTI</p>
+                            <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+                          </div>
+                          <textarea
+                            value={inlineValue}
+                            onChange={(e) => setInlineValue(e.target.value)}
+                            placeholder="Vložte tabulku sezónních příležitostí (ASCII art)..."
+                            className="w-full p-3 border rounded-lg text-xs font-mono min-h-[250px] resize-none bg-gray-900 text-green-400"
+                          />
+                          <button
+                            onClick={() => handleInlineSave("seasonalOpportunities", inlineValue)}
+                            disabled={isSaving}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                          >
+                            {isSaving ? "Ukládám..." : "Uložit"}
+                          </button>
+                        </div>
+                      ) : product.seasonalOpportunities ? (
+                        <div className="p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <p className="font-semibold text-foreground flex items-center gap-2 text-lg">
+                              <span>📅</span> SEZÓNNÍ PŘÍLEŽITOSTI
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => addToSalesKit({
+                                  id: "seasonal-opportunities",
+                                  type: "whybuy",
+                                  label: "Sezónní příležitosti",
+                                  content: product.seasonalOpportunities || ""
+                                })}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  salesKitItems.find(i => i.id === "seasonal-opportunities")
+                                    ? "bg-green-500 text-white"
+                                    : "bg-green-100 hover:bg-green-200 text-green-700"
+                                }`}
+                                title="Přidat do Sales Kit"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                              <CopyButton text={product.seasonalOpportunities} />
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("seasonalOpportunities"); setInlineValue(product.seasonalOpportunities || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                            <pre className="text-[10px] text-green-400 font-mono whitespace-pre leading-tight">{product.seasonalOpportunities}</pre>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4 p-4">
+                          <button
+                            onClick={() => { if (!canEdit) return; setInlineEdit("seasonalOpportunities"); setInlineValue(""); }}
+                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
+                          >
+                            <div className="relative flex-shrink-0">
+                              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                                <span className="text-2xl">📅</span>
+                              </div>
+                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">3</span>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-foreground">Sezónní příležitosti</p>
+                              <p className="text-sm text-muted-foreground">Přidejte tabulku sezónních prodejních příležitostí</p>
+                            </div>
+                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     {/* Senzorický profil Section - Editable */}
                     <div className={`w-full rounded-xl transition-colors ${
                       product.sensoryProfile
