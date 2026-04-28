@@ -147,6 +147,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [salesKitItems, setSalesKitItems] = useState<SalesKitItem[]>([]);
   const [showSalesKit, setShowSalesKit] = useState(false);
   const [showPdfLinkDialog, setShowPdfLinkDialog] = useState(false);
+  const [salesKitShareUrl, setSalesKitShareUrl] = useState("");
   
   // Lightbox images: use same ordering as slider (main image first, then gallery)
   const galleryImageUrls = galleryImages?.filter(img => img.url).map(img => img.url!) ?? [];
@@ -300,6 +301,30 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       printWindow.document.write(printContent);
       printWindow.document.close();
       printWindow.focus();
+    }
+  };
+
+  const generateSalesKitShareUrl = () => {
+    if (!product || salesKitItems.length === 0 || typeof window === "undefined") return "";
+    try {
+      const payload = {
+        productName: product.name,
+        externalId: product.externalId || productId,
+        price: product.price ?? null,
+        generatedAt: new Date().toISOString(),
+        items: salesKitItems.map((item) => ({
+          label: item.label,
+          content: item.content,
+          type: item.type,
+        })),
+      };
+      const json = JSON.stringify(payload);
+      const utf8 = unescape(encodeURIComponent(json));
+      const base64 = btoa(utf8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      return `${window.location.origin}/sales-kit?data=${base64}`;
+    } catch (error) {
+      console.error("Failed to generate Sales Kit share URL:", error);
+      return "";
     }
   };
 
@@ -4241,13 +4266,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                 PDF
               </button>
               <button
-                onClick={() => setShowPdfLinkDialog(true)}
+                onClick={() => {
+                  const shareUrl = generateSalesKitShareUrl();
+                  setSalesKitShareUrl(shareUrl);
+                  setShowPdfLinkDialog(true);
+                }}
                 className="flex items-center justify-center gap-1 px-2 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                PDF odkaz
+                Odkaz
               </button>
             </div>
           )}
@@ -4274,28 +4303,28 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
-              Odkaz na produktové PDF
+              Odkaz na Sales Kit
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                PDF odkaz
+                Sdílitelný odkaz
               </label>
-              {product?.pdfUrl ? (
+              {salesKitShareUrl ? (
                 <div className="space-y-2">
                   <Input
-                    value={product.pdfUrl}
+                    value={salesKitShareUrl}
                     readOnly
                     className="font-mono text-xs"
                   />
                   <div className="flex justify-end">
-                    <CopyButton text={product.pdfUrl} />
+                    <CopyButton text={salesKitShareUrl} />
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Tento produkt zatím nemá uložený PDF odkaz.
+                  Odkaz se nepodařilo vygenerovat.
                 </p>
               )}
             </div>
