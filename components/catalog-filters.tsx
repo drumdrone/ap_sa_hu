@@ -2,6 +2,39 @@
 
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useAccess } from "@/components/access-context";
+import { ClientErrorBoundary } from "@/components/client-error-boundary";
+
+function CatalogEditorFilterBlock({
+  isEditor,
+  editorShortcut,
+  onEditorShortcutChange,
+}: {
+  isEditor: boolean;
+  editorShortcut: string;
+  onEditorShortcutChange: (value: string) => void;
+}) {
+  const editors = useQuery(api.editors.list, isEditor ? {} : "skip");
+  if (!isEditor) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-medium text-muted-foreground">Editor</label>
+      <select
+        value={editorShortcut}
+        onChange={(e) => onEditorShortcutChange(e.target.value)}
+        className="px-3 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent min-w-[140px]"
+        title="Filtruje produkty upravené konkrétním editorem"
+      >
+        <option value="">Všichni editoři</option>
+        {editors?.map((ed) => (
+          <option key={ed._id} value={ed.shortcut}>
+            {ed.shortcut} — {ed.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 interface CatalogFiltersProps {
   search: string;
@@ -36,11 +69,13 @@ export function CatalogFilters({
   viewMode,
   onViewModeChange,
 }: CatalogFiltersProps) {
+  const { role } = useAccess();
+  const isEditor = role === "editor";
+
   // Get dynamic categories from feed
   const feedCategories = useQuery(api.products.getFeedCategories);
   const feedBrands = useQuery(api.products.getFeedBrands);
-  const editors = useQuery(api.editors.list);
-  
+
   // Get subcategories for selected category (find from array instead of object key)
   const subcategories = feedCategory 
     ? (feedCategories?.subcategoryData?.find((d) => d.category === feedCategory)?.subcategories || [])
@@ -136,23 +171,27 @@ export function CatalogFilters({
             </select>
           </div>
 
-          {/* Editor filter */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">Editor</label>
-            <select
-              value={editorShortcut}
-              onChange={(e) => onEditorShortcutChange(e.target.value)}
-              className="px-3 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent min-w-[140px]"
-              title="Filtruje produkty upravené konkrétním editorem"
-            >
-              <option value="">Všichni editoři</option>
-              {editors?.map((ed) => (
-                <option key={ed._id} value={ed.shortcut}>
-                  {ed.shortcut} — {ed.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <ClientErrorBoundary
+            fallback={
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Editor</label>
+                <select
+                  disabled
+                  value=""
+                  className="px-3 py-2.5 bg-muted/50 border border-input rounded-lg text-sm min-w-[140px] opacity-80 cursor-not-allowed"
+                  title="Seznam editorů se nepodařilo načíst — nasaďte Convex (tabulku editors) na produkci."
+                >
+                  <option value="">Všichni editoři</option>
+                </select>
+              </div>
+            }
+          >
+            <CatalogEditorFilterBlock
+              isEditor={isEditor}
+              editorShortcut={editorShortcut}
+              onEditorShortcutChange={onEditorShortcutChange}
+            />
+          </ClientErrorBoundary>
 
           {/* With PDF filter */}
           <div className="flex flex-col gap-1">
