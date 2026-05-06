@@ -968,7 +968,7 @@ export function DashboardPageContent() {
             )}
           </div>
 
-          {/* Top 10 Products */}
+          {/* Top 20 Products */}
           {topProducts && topProducts.length > 0 && (
             <div className="bg-card rounded-2xl border border-border shadow-sm mb-8 overflow-hidden">
               <div className="p-5 border-b border-border bg-gradient-to-r from-amber-50 to-yellow-50">
@@ -976,9 +976,9 @@ export function DashboardPageContent() {
                   <div className="w-8 h-8 bg-amber-400 rounded-lg flex items-center justify-center">
                     <span className="text-white text-sm">⭐</span>
                   </div>
-                  Top 10 produktů
+                  Top 20 produktů
                   <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 text-xs ml-2">
-                    {topProducts.length}/10
+                    {topProducts.length}/20
                   </Badge>
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">

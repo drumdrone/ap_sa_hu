@@ -139,9 +139,9 @@ export default defineSchema({
     fieldMeta: v.optional(v.any()), // { fieldName: { editor: "JH", editedAt: number } }
     lastEditorShortcut: v.optional(v.string()),
     // Top products feature
-    isTop: v.optional(v.boolean()), // true if product is in Top 10
+    isTop: v.optional(v.boolean()), // true if product is in Top 20
     topAddedAt: v.optional(v.number()), // timestamp when added to top
-    topOrder: v.optional(v.number()), // position 1-10 in Top 10
+    topOrder: v.optional(v.number()), // position 1-20 in Top 20
   })
     .index("by_externalId", ["externalId"])
     .index("by_isTop", ["isTop"])
