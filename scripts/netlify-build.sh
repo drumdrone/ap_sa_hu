@@ -21,21 +21,22 @@ extract_convex_slug_from_url() {
   printf "%s" "${slug}"
 }
 
-# If Netlify can't determine a proper diff base, be safe and deploy Convex.
-if [[ -z "${COMMIT_REF:-}" || -z "${CACHED_COMMIT_REF:-}" || "${CACHED_COMMIT_REF:-}" == "0000000000000000000000000000000000000000" ]]; then
+# Always deploy Convex when targeting a Convex deployment (i.e. production
+# context). The previous "diff against CACHED_COMMIT_REF" heuristic could skip
+# redeploys when Netlify's build cache was fresh but the Convex deployment had
+# drifted (e.g. a new Netlify site connected to a Convex deployment that never
+# received the latest functions). That manifested as the frontend calling
+# functions like `api.editors.list` that didn't exist on the backend, breaking
+# the product detail page. Convex deploys are idempotent and fast, so always
+# running them on production builds is the safe default.
+if [[ -n "${CONVEX_DEPLOYMENT:-}" ]]; then
   should_deploy_convex="true"
 fi
 
-# Allow manual override from Netlify environment.
+# Allow manual override from Netlify environment (kept for completeness; e.g.
+# to force a deploy from a context that doesn't normally set CONVEX_DEPLOYMENT).
 if [[ "${FORCE_CONVEX_DEPLOY:-}" == "true" ]]; then
   should_deploy_convex="true"
-fi
-
-# Check if Convex backend changed between cached and current commit.
-if [[ "${should_deploy_convex}" != "true" ]]; then
-  if git diff --name-only "${CACHED_COMMIT_REF}" "${COMMIT_REF}" | grep -E '^convex/' >/dev/null 2>&1; then
-    should_deploy_convex="true"
-  fi
 fi
 
 echo "Convex deploy needed: ${should_deploy_convex}"
