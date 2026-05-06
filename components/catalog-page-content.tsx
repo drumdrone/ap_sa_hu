@@ -66,6 +66,7 @@ export function CatalogPageContent() {
   const [feedSubcategory, setFeedSubcategory] = useState("");
   const [brand, setBrand] = useState("");
   const [withPdf, setWithPdf] = useState(false);
+  const [editorShortcut, setEditorShortcut] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   
@@ -91,6 +92,7 @@ export function CatalogPageContent() {
     feedCategory: feedCategory || undefined,
     feedSubcategory: feedSubcategory || undefined,
     brand: brand || undefined,
+    editorShortcut: editorShortcut || undefined,
   });
 
   // Update last products when we get new data
@@ -138,6 +140,8 @@ export function CatalogPageContent() {
           onBrandChange={setBrand}
           withPdf={withPdf}
           onWithPdfChange={setWithPdf}
+          editorShortcut={editorShortcut}
+          onEditorShortcutChange={setEditorShortcut}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
         />

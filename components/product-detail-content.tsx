@@ -94,6 +94,97 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const updateMarketingData = useMutation(api.products.updateMarketingData);
   const clearPdfUrl = useMutation(api.products.clearPdfUrl);
   const clearVideoUrl = useMutation(api.products.clearVideoUrl);
+  const activeEditors = useQuery(api.editors.list);
+
+  // Editor tracking - persisted in localStorage for the session
+  const EDITOR_STORAGE_KEY = "apo-currentEditor";
+  const [currentEditor, setCurrentEditor] = useState<string | null>(null);
+  const [editorModalOpen, setEditorModalOpen] = useState(false);
+  const pendingSaveRef = useRef<{
+    args: Parameters<typeof updateMarketingData>[0];
+    resolve: (v: unknown) => void;
+    reject: (e: unknown) => void;
+  } | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(EDITOR_STORAGE_KEY);
+      if (saved) setCurrentEditor(saved);
+    } catch {}
+  }, []);
+
+  const setEditor = (shortcut: string | null) => {
+    setCurrentEditor(shortcut);
+    try {
+      if (shortcut) localStorage.setItem(EDITOR_STORAGE_KEY, shortcut);
+      else localStorage.removeItem(EDITOR_STORAGE_KEY);
+    } catch {}
+  };
+
+  // Wrapper around updateMarketingData that ensures an editor is selected.
+  // If no editor is set, opens modal and returns a Promise that resolves after the save runs.
+  const saveMarketing = (args: Parameters<typeof updateMarketingData>[0]) => {
+    if (currentEditor) {
+      return updateMarketingData({ ...args, editorShortcut: currentEditor });
+    }
+    return new Promise((resolve, reject) => {
+      pendingSaveRef.current = { args, resolve, reject };
+      setEditorModalOpen(true);
+    });
+  };
+
+  const pickEditorAndSave = async (shortcut: string) => {
+    setEditor(shortcut);
+    setEditorModalOpen(false);
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    if (pending) {
+      try {
+        const result = await updateMarketingData({ ...pending.args, editorShortcut: shortcut });
+        pending.resolve(result);
+      } catch (err) {
+        pending.reject(err);
+      }
+    }
+  };
+
+  const cancelEditorPick = () => {
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    setEditorModalOpen(false);
+    if (pending) {
+      pending.reject(new Error("Save cancelled - no editor selected"));
+    }
+  };
+
+  // Format a relative timestamp in Czech (e.g. "před 2 dny", "před 5 min")
+  const formatRelative = (ts: number) => {
+    const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (diffSec < 60) return "před chvílí";
+    const diffMin = Math.round(diffSec / 60);
+    if (diffMin < 60) return `před ${diffMin} min`;
+    const diffH = Math.round(diffMin / 60);
+    if (diffH < 24) return `před ${diffH} h`;
+    const diffD = Math.round(diffH / 24);
+    if (diffD < 30) return `před ${diffD} ${diffD === 1 ? "dnem" : diffD < 5 ? "dny" : "dny"}`;
+    const diffMo = Math.round(diffD / 30);
+    if (diffMo < 12) return `před ${diffMo} měs.`;
+    return new Date(ts).toLocaleDateString("cs-CZ");
+  };
+
+  // Inline stamp showing who/when last edited a given field
+  const renderEditorStamp = (fieldName: string) => {
+    const meta = (product?.fieldMeta as Record<string, { editor: string; editedAt: number }> | undefined)?.[fieldName];
+    if (!meta) return null;
+    return (
+      <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+        <span>✏️</span>
+        <span className="font-semibold">{meta.editor}</span>
+        <span>·</span>
+        <span>{formatRelative(meta.editedAt)}</span>
+      </p>
+    );
+  };
   
   // Gallery queries and mutations
   const galleryImages = useQuery(api.gallery.listByProduct, { productId, tag: selectedGalleryTag });
@@ -351,7 +442,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
         field === "salesForecast"
           ? normalizeLeadingBlankLines(value)
           : value;
-      await updateMarketingData({
+      await saveMarketing({
         id: productId,
         [field]: normalizedValue || undefined,
       });
@@ -392,7 +483,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     setIsSaving(true);
     try {
       const filteredFaq = editingFaq.filter(item => item.question.trim() && item.answer.trim());
-      await updateMarketingData({
+      await saveMarketing({
         id: productId,
         faq: filteredFaq.length > 0 ? filteredFaq : undefined,
       });
@@ -410,7 +501,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     setIsSaving(true);
     try {
       const filteredArticles = editingArticles.filter(item => item.title.trim() && item.url.trim());
-      await updateMarketingData({
+      await saveMarketing({
         id: productId,
         articleUrls: filteredArticles.length > 0 ? filteredArticles : undefined,
       });
@@ -880,7 +971,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             type="button"
                             onClick={async () => {
                               if (!canEdit) return;
-                              await updateMarketingData({ id: productId, rating: value });
+                              await saveMarketing({ id: productId, rating: value });
                               setSaveMessage("Hodnocení uloženo");
                               setTimeout(() => setSaveMessage(null), 1500);
                             }}
@@ -1658,7 +1749,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               setIsSaving(true);
                               try {
                                 const [fbImage, igImage] = inlineValue.split("|||");
-                                await updateMarketingData({
+                                await saveMarketing({
                                   id: productId,
                                   socialFacebookImage: fbImage?.trim() || undefined,
                                   socialInstagramImage: igImage?.trim() || undefined,
@@ -2528,6 +2619,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         <p className="text-xs text-muted-foreground mb-2 font-medium">PRODEJNÍ CLAIM</p>
                         <p className="text-foreground font-medium mb-3">{product.salesClaim}</p>
                         <CopyButton text={product.salesClaim} />
+                        {renderEditorStamp("salesClaim")}
                       </div>
                     )}
                   </div>
@@ -2564,7 +2656,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             onClick={async () => {
                               setIsSaving(true);
                               try {
-                                await updateMarketingData({
+                                await saveMarketing({
                                   id: productId,
                                   mainBenefits: inlineValue.trim() || undefined,
                                 });
@@ -2624,6 +2716,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <pre className="p-3 bg-gray-900 text-amber-300 rounded-lg text-xs font-mono whitespace-pre-wrap overflow-x-auto">
                             {product.mainBenefits}
                           </pre>
+                          {renderEditorStamp("mainBenefits")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
@@ -2717,6 +2810,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <pre className="text-xs font-mono whitespace-pre-wrap bg-gray-900 text-lime-300 p-4 rounded-lg overflow-x-auto">
                             {product.herbComposition}
                           </pre>
+                          {renderEditorStamp("herbComposition")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
@@ -2810,6 +2904,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
                             <pre className="text-xs text-purple-300 font-mono whitespace-pre">{seasonalOpportunitiesText}</pre>
                           </div>
+                          {renderEditorStamp("salesForecast")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
@@ -2906,6 +3001,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
                             <pre className="text-[10px] text-green-400 font-mono whitespace-pre leading-tight">{product.faqText}</pre>
                           </div>
+                          {renderEditorStamp("faqText")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
@@ -3092,6 +3188,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
                             <pre className="text-[10px] text-purple-300 font-mono whitespace-pre leading-tight">{product.sensoryProfile}</pre>
                           </div>
+                          {renderEditorStamp("sensoryProfile")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
@@ -4434,6 +4531,92 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
           )}
         </div>
       )}
+
+      {/* Editor selector floating chip (visible to editors) */}
+      {canEdit && (
+        <div className="fixed bottom-4 right-4 z-40">
+          <button
+            onClick={() => setEditorModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-full bg-card border border-border shadow-lg text-sm hover:shadow-xl transition-shadow"
+            title="Vybrat / přepnout editora"
+          >
+            <span className="text-muted-foreground">✏️</span>
+            {currentEditor ? (
+              <span className="font-semibold">{currentEditor}</span>
+            ) : (
+              <span className="text-muted-foreground">Vyberte editora</span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* "Kdo ukládá?" modal */}
+      <Dialog
+        open={editorModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            // If a save was waiting on a pick, treat closing as cancel
+            if (pendingSaveRef.current) cancelEditorPick();
+            else setEditorModalOpen(false);
+          } else {
+            setEditorModalOpen(true);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Kdo ukládá?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Vyberte editora — zkratka se uloží ke každému poli a zapamatuje se na celou session.
+            </p>
+            {activeEditors === undefined ? (
+              <p className="text-sm text-muted-foreground">Načítám…</p>
+            ) : activeEditors.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Zatím nejsou vytvořeni žádní aktivní editoři.{" "}
+                <Link href="/nastaveni" className="text-primary underline">
+                  Spravovat editory
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {activeEditors.map((ed) => (
+                  <button
+                    key={ed._id}
+                    onClick={() => pickEditorAndSave(ed.shortcut)}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${
+                      currentEditor === ed.shortcut
+                        ? "bg-blue-50 border-blue-300 text-blue-700"
+                        : "bg-muted/30 border-border hover:bg-muted"
+                    }`}
+                  >
+                    <span className="text-lg font-bold">{ed.shortcut}</span>
+                    <span className="text-xs text-muted-foreground truncate max-w-full">{ed.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {currentEditor && (
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="text-xs text-muted-foreground">
+                  Aktuální editor: <span className="font-semibold text-foreground">{currentEditor}</span>
+                </span>
+                <button
+                  onClick={() => {
+                    setEditor(null);
+                    if (!pendingSaveRef.current) setEditorModalOpen(false);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Odhlásit editora
+                </button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -4476,7 +4659,7 @@ function EditMarketingForm({
     setSaveMessage(null);
 
     try {
-      await updateMarketingData({
+      await saveMarketing({
         id: productId,
         category: formData.category ? formData.category as "Bylinný" | "Funkční" | "Dětský" | "BIO" : null,
         salesClaim: formData.salesClaim || undefined,

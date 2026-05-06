@@ -153,11 +153,17 @@ export function Header() {
                   >
                     Hromadná
                   </Link>
-                  <Link 
-                    href="/admin/feed" 
+                  <Link
+                    href="/admin/feed"
                     className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Feed
+                  </Link>
+                  <Link
+                    href="/nastaveni"
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Nastavení
                   </Link>
                 </>
               )}
