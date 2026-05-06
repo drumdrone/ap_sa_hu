@@ -68,7 +68,10 @@ if [[ "${should_deploy_convex}" == "true" ]]; then
   fi
 
   echo "Running Convex deploy (includes Next build)..."
-  npx convex deploy --deployment "${CONVEX_DEPLOYMENT}" --cmd "npm run build"
+  # The Convex CLI selects the deployment from the CONVEX_DEPLOYMENT env var
+  # (already exported above) and authenticates via CONVEX_DEPLOY_KEY in CI;
+  # there is no --deployment flag.
+  npx convex deploy --yes --cmd "npm run build"
 else
   echo "Skipping Convex deploy (no backend changes). Running Next build only..."
   npm run build
