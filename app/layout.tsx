@@ -8,6 +8,7 @@ import { AccessProvider } from "@/components/access-context";
 import { AccessGate } from "@/components/access-gate";
 import { Header } from "@/components/header";
 import { GlobalSearchBar } from "@/components/global-search-bar";
+import { ClientErrorBoundary } from "@/components/client-error-boundary";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -57,7 +58,9 @@ export default function RootLayout({
           <AccessProvider>
             <AccessGate>
               <Header />
-              <GlobalSearchBar />
+              <ClientErrorBoundary fallback={null}>
+                <GlobalSearchBar />
+              </ClientErrorBoundary>
               {children}
             </AccessGate>
           </AccessProvider>

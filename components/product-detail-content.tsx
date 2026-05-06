@@ -94,7 +94,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const updateMarketingData = useMutation(api.products.updateMarketingData);
   const clearPdfUrl = useMutation(api.products.clearPdfUrl);
   const clearVideoUrl = useMutation(api.products.clearVideoUrl);
-  const activeEditors = useQuery(api.editors.list);
+  const activeEditors = useQuery(api.editors.list, canEdit ? {} : "skip");
 
   // Editor tracking - persisted in localStorage for the session
   const EDITOR_STORAGE_KEY = "apo-currentEditor";
