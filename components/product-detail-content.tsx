@@ -3028,6 +3028,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     </div>
 
                     {/* Cílová skupina Section - Editable */}
+                    {(product.targetAudience || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.targetAudience
                         ? "bg-[#f5f9ff] border border-blue-200"
@@ -3119,6 +3120,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       )}
                     </div>
+                    )}
 
                     {/* Senzorický profil Section - Editable */}
                     <div className={`w-full rounded-xl transition-colors ${
