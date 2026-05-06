@@ -135,6 +135,9 @@ export default defineSchema({
     marketingLastUpdated: v.optional(v.number()), // timestamp when marketing data was last changed
     lastUpdatedField: v.optional(v.string()), // which field was updated last
     dismissedAlerts: v.optional(v.array(v.string())), // IDs of dismissed alerts
+    // Editor tracking - per-field metadata + shortcut of last editor
+    fieldMeta: v.optional(v.any()), // { fieldName: { editor: "JH", editedAt: number } }
+    lastEditorShortcut: v.optional(v.string()),
     // Top products feature
     isTop: v.optional(v.boolean()), // true if product is in Top 10
     topAddedAt: v.optional(v.number()), // timestamp when added to top
@@ -355,4 +358,14 @@ export default defineSchema({
     text: v.string(),
     updatedAt: v.number(),
   }).index("by_updatedAt", ["updatedAt"]),
+
+  // Editors - people who can be tagged as authors of marketing data edits
+  editors: defineTable({
+    name: v.string(),
+    shortcut: v.string(), // short code shown in UI (e.g. "JH")
+    isActive: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_shortcut", ["shortcut"])
+    .index("by_active", ["isActive"]),
 })

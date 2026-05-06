@@ -8,10 +8,11 @@ export const list = query({
     brand: v.optional(v.string()),
     search: v.optional(v.string()),
     withPdf: v.optional(v.boolean()),
+    editorShortcut: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     let products;
-    
+
     if (args.search && args.search.trim() !== "") {
       // Use search index for text search
       products = await ctx.db
@@ -21,7 +22,7 @@ export const list = query({
     } else {
       products = await ctx.db.query("products").collect();
     }
-    
+
     // Apply filters
     if (args.feedCategory) {
       products = products.filter((p) => p.feedCategory === args.feedCategory);
@@ -35,7 +36,16 @@ export const list = query({
     if (args.withPdf) {
       products = products.filter((p) => !!p.pdfUrl);
     }
-    
+    if (args.editorShortcut) {
+      const shortcut = args.editorShortcut;
+      products = products.filter((p) => {
+        if (p.lastEditorShortcut === shortcut) return true;
+        const meta = p.fieldMeta as Record<string, { editor: string; editedAt: number }> | undefined;
+        if (!meta) return false;
+        return Object.values(meta).some((entry) => entry?.editor === shortcut);
+      });
+    }
+
     return products;
   },
 });
@@ -145,13 +155,15 @@ export const updateMarketingData = mutation({
     videoUrl: v.optional(v.string()),
     pdfUrl: v.optional(v.string()),
     rating: v.optional(v.union(v.number(), v.null())),
+    editorShortcut: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
-    
+    const { id, editorShortcut, ...updates } = args;
+
     // Filter out undefined values and convert null to undefined for removal
     const cleanUpdates: Record<string, unknown> = {};
     let lastField = "";
+    const changedFields: string[] = [];
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) {
         if (key === "rating" && value !== null) {
@@ -163,18 +175,32 @@ export const updateMarketingData = mutation({
         }
         if (value !== null) {
           lastField = key;
+          changedFields.push(key);
         }
       }
     }
-    
+
     // Track when marketing data was updated
     cleanUpdates.marketingLastUpdated = Date.now();
     if (lastField) {
       cleanUpdates.lastUpdatedField = lastField;
     }
-    
+
+    // Editor tracking: stamp every changed field with editor + timestamp
+    if (editorShortcut && changedFields.length > 0) {
+      const product = await ctx.db.get(id);
+      const existingMeta = (product?.fieldMeta as Record<string, { editor: string; editedAt: number }> | undefined) ?? {};
+      const nextMeta: Record<string, { editor: string; editedAt: number }> = { ...existingMeta };
+      const now = Date.now();
+      for (const field of changedFields) {
+        nextMeta[field] = { editor: editorShortcut, editedAt: now };
+      }
+      cleanUpdates.fieldMeta = nextMeta;
+      cleanUpdates.lastEditorShortcut = editorShortcut;
+    }
+
     await ctx.db.patch(id, cleanUpdates);
-    console.log(`Updated marketing data for product ${id}, field: ${lastField}`);
+    console.log(`Updated marketing data for product ${id}, field: ${lastField}${editorShortcut ? `, editor: ${editorShortcut}` : ""}`);
     return { success: true };
   },
 });
