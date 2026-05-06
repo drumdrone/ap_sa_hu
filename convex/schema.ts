@@ -39,6 +39,31 @@ export default defineSchema({
   })
     .index("by_product", ["productId"])
     .index("by_uploadedAt", ["uploadedAt"]),
+
+  // Product banners (separate from gallery)
+  productBanners: defineTable({
+    productId: v.id("products"),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    width: v.number(),
+    height: v.number(),
+    tags: v.array(v.string()),
+    uploadedAt: v.number(),
+  })
+    .index("by_product", ["productId"])
+    .index("by_uploadedAt", ["uploadedAt"]),
+
+  uploadLogs: defineTable({
+    kind: v.union(v.literal("gallery_image"), v.literal("product_pdf")),
+    productId: v.optional(v.id("products")),
+    storageId: v.optional(v.id("_storage")),
+    filename: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+    size: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
   
   products: defineTable({
     // Feed data (from XML feed - auto-updated)
@@ -70,6 +95,7 @@ export default defineSchema({
       text: v.string(),
     }))),
     targetAudience: v.optional(v.string()),
+    rating: v.optional(v.number()), // 0-5 stars (editor-set)
     pdfUrl: v.optional(v.string()),
     bannerUrls: v.optional(v.array(v.object({
       size: v.string(),
@@ -109,6 +135,9 @@ export default defineSchema({
     marketingLastUpdated: v.optional(v.number()), // timestamp when marketing data was last changed
     lastUpdatedField: v.optional(v.string()), // which field was updated last
     dismissedAlerts: v.optional(v.array(v.string())), // IDs of dismissed alerts
+    // Editor tracking - per-field metadata + shortcut of last editor
+    fieldMeta: v.optional(v.any()), // { fieldName: { editor: "JH", editedAt: number } }
+    lastEditorShortcut: v.optional(v.string()),
     // Top products feature
     isTop: v.optional(v.boolean()), // true if product is in Top 10
     topAddedAt: v.optional(v.number()), // timestamp when added to top
@@ -142,6 +171,7 @@ export default defineSchema({
     ),
     imageUrl: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")), // Convex storage ID for uploaded files
+    fileType: v.optional(v.string()), // MIME type of uploaded file (e.g. application/pdf)
     downloadUrl: v.optional(v.string()), // External download URL (for download type materials)
     distributionType: v.optional(v.union(
       v.literal("download"),  // ke stažení
@@ -220,6 +250,20 @@ export default defineSchema({
   })
     .index("by_product", ["productId"])
     .index("by_date", ["date"]),
+  
+  // Historical snapshots of marketing data for the whole catalog
+  marketingSnapshots: defineTable({
+    name: v.string(), // human-friendly snapshot name
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+    createdBy: v.optional(v.string()),
+    products: v.array(v.object({
+      productId: v.id("products"),
+      externalId: v.optional(v.string()),
+      // Stored marketing fields for this product at snapshot time
+      data: v.any(),
+    })),
+  }).index("by_createdAt", ["createdAt"]),
   
   // Marketing data backup (by SKU for recovery after product deletion)
   marketingBackup: defineTable({
@@ -308,4 +352,20 @@ export default defineSchema({
   })
     .index("by_type", ["type"])
     .index("by_createdAt", ["createdAt"]),
+
+  // Global news ticker message (single-row table)
+  newsTicker: defineTable({
+    text: v.string(),
+    updatedAt: v.number(),
+  }).index("by_updatedAt", ["updatedAt"]),
+
+  // Editors - people who can be tagged as authors of marketing data edits
+  editors: defineTable({
+    name: v.string(),
+    shortcut: v.string(), // short code shown in UI (e.g. "JH")
+    isActive: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_shortcut", ["shortcut"])
+    .index("by_active", ["isActive"]),
 })

@@ -9,7 +9,7 @@
 
 # --- Production build (main branch) -----------------------------------------
 [build]
-  command = "npx convex deploy --cmd 'npm run build'"
+  command = "bash scripts/netlify-build.sh"
   publish = ".next"
 
 # Next.js on Netlify requires the Next.js Runtime plugin
@@ -22,23 +22,22 @@
 [build.environment]
   # Default environment (production)
   NODE_VERSION = "20"
-  NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
 
 # --- Staging branch-specific overrides ---------------------------------------
 [context.staging]
-  command = "npx convex deploy --cmd 'npm run build'"
+  command = "bash scripts/netlify-build.sh"
   [context.staging.environment]
-    # Staging shares the PROD Convex database (same data as production)
-    NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
+    # Set NEXT_PUBLIC_CONVEX_URL in Netlify UI per-site.
     NEXT_PUBLIC_ENVIRONMENT = "staging"
 
 # --- Production branch-specific overrides ------------------------------------
 [context.production]
-  command = "npx convex deploy --cmd 'npm run build'"
+  command = "bash scripts/netlify-build.sh"
   [context.production.environment]
-    # Production uses the PROD Convex deployment
-    NEXT_PUBLIC_CONVEX_URL = "https://exuberant-koala-3.eu-west-1.convex.cloud"
+    # Set NEXT_PUBLIC_CONVEX_URL in Netlify UI per-site.
     NEXT_PUBLIC_ENVIRONMENT = "production"
+    # Needed by scripts/netlify-build.sh to deploy Convex during build.
+    CONVEX_DEPLOYMENT = "prod:efficient-basilisk-904"
 
 # --- Headers -----------------------------------------------------------------
 [[headers]]

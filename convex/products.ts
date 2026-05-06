@@ -7,10 +7,12 @@ export const list = query({
     feedSubcategory: v.optional(v.string()),
     brand: v.optional(v.string()),
     search: v.optional(v.string()),
+    withPdf: v.optional(v.boolean()),
+    editorShortcut: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     let products;
-    
+
     if (args.search && args.search.trim() !== "") {
       // Use search index for text search
       products = await ctx.db
@@ -20,7 +22,7 @@ export const list = query({
     } else {
       products = await ctx.db.query("products").collect();
     }
-    
+
     // Apply filters
     if (args.feedCategory) {
       products = products.filter((p) => p.feedCategory === args.feedCategory);
@@ -31,7 +33,19 @@ export const list = query({
     if (args.brand) {
       products = products.filter((p) => p.brand === args.brand);
     }
-    
+    if (args.withPdf) {
+      products = products.filter((p) => !!p.pdfUrl);
+    }
+    if (args.editorShortcut) {
+      const shortcut = args.editorShortcut;
+      products = products.filter((p) => {
+        if (p.lastEditorShortcut === shortcut) return true;
+        const meta = p.fieldMeta as Record<string, { editor: string; editedAt: number }> | undefined;
+        if (!meta) return false;
+        return Object.values(meta).some((entry) => entry?.editor === shortcut);
+      });
+    }
+
     return products;
   },
 });
@@ -138,31 +152,85 @@ export const updateMarketingData = mutation({
       title: v.string(),
       url: v.string(),
     }))),
+    videoUrl: v.optional(v.string()),
     pdfUrl: v.optional(v.string()),
+    rating: v.optional(v.union(v.number(), v.null())),
+    editorShortcut: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
-    
+    const { id, editorShortcut, ...updates } = args;
+
     // Filter out undefined values and convert null to undefined for removal
     const cleanUpdates: Record<string, unknown> = {};
     let lastField = "";
+    const changedFields: string[] = [];
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) {
-        cleanUpdates[key] = value === null ? undefined : value;
+        if (key === "rating" && value !== null) {
+          const n = typeof value === "number" ? value : Number(value);
+          const clamped = Number.isFinite(n) ? Math.max(0, Math.min(5, Math.round(n))) : 0;
+          cleanUpdates[key] = clamped;
+        } else {
+          cleanUpdates[key] = value === null ? undefined : value;
+        }
         if (value !== null) {
           lastField = key;
+          changedFields.push(key);
         }
       }
     }
-    
+
     // Track when marketing data was updated
     cleanUpdates.marketingLastUpdated = Date.now();
     if (lastField) {
       cleanUpdates.lastUpdatedField = lastField;
     }
-    
+
+    // Editor tracking: stamp every changed field with editor + timestamp
+    if (editorShortcut && changedFields.length > 0) {
+      const product = await ctx.db.get(id);
+      const existingMeta = (product?.fieldMeta as Record<string, { editor: string; editedAt: number }> | undefined) ?? {};
+      const nextMeta: Record<string, { editor: string; editedAt: number }> = { ...existingMeta };
+      const now = Date.now();
+      for (const field of changedFields) {
+        nextMeta[field] = { editor: editorShortcut, editedAt: now };
+      }
+      cleanUpdates.fieldMeta = nextMeta;
+      cleanUpdates.lastEditorShortcut = editorShortcut;
+    }
+
     await ctx.db.patch(id, cleanUpdates);
-    console.log(`Updated marketing data for product ${id}, field: ${lastField}`);
+    console.log(`Updated marketing data for product ${id}, field: ${lastField}${editorShortcut ? `, editor: ${editorShortcut}` : ""}`);
+    return { success: true };
+  },
+});
+
+// Clear product PDF (product sheet)
+export const clearPdfUrl = mutation({
+  args: {
+    id: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      pdfUrl: undefined,
+      marketingLastUpdated: Date.now(),
+      lastUpdatedField: "pdfUrl",
+    });
+    return { success: true };
+  },
+});
+
+// Clear product video link
+export const clearVideoUrl = mutation({
+  args: {
+    id: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      videoUrl: undefined,
+      marketingLastUpdated: Date.now(),
+      lastUpdatedField: "videoUrl",
+    });
     return { success: true };
   },
 });
@@ -655,6 +723,7 @@ export const bulkUpdate = mutation({
     hashtags: v.optional(v.array(v.string())),
     // Materiály
     pdfUrl: v.optional(v.string()),
+    pdfStorageId: v.optional(v.id("_storage")),
     // Prodejní data
     mainBenefits: v.optional(v.string()),
     herbComposition: v.optional(v.string()),
@@ -668,11 +737,33 @@ export const bulkUpdate = mutation({
     // Filter out undefined values
     const cleanUpdates: Record<string, unknown> = {};
     let lastField = "";
+    let resolvedPdfUrl: string | undefined;
+
+    if (updates.pdfStorageId) {
+      const url = await ctx.storage.getUrl(updates.pdfStorageId);
+      if (url) {
+        resolvedPdfUrl = url;
+      }
+    }
+
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) {
+        if (key === "pdfStorageId") {
+          continue;
+        }
+        if (key === "pdfUrl" && resolvedPdfUrl) {
+          cleanUpdates[key] = resolvedPdfUrl;
+          lastField = key;
+          continue;
+        }
         cleanUpdates[key] = value;
         lastField = key;
       }
+    }
+
+    if (resolvedPdfUrl && cleanUpdates.pdfUrl === undefined) {
+      cleanUpdates.pdfUrl = resolvedPdfUrl;
+      lastField = "pdfUrl";
     }
     
     if (Object.keys(cleanUpdates).length === 0) {

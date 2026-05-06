@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "convex:dev": "npx convex dev",
+    "convex:target": "node scripts/convex-target-check.mjs",
     "convex:deploy:staging": "npx convex deploy --cmd 'npm run build'",
     "convex:deploy:prod": "npx convex deploy --cmd 'npm run build'"
   },

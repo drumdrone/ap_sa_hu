@@ -12,6 +12,10 @@ interface CatalogFiltersProps {
   onFeedSubcategoryChange: (value: string) => void;
   brand: string;
   onBrandChange: (value: string) => void;
+  withPdf: boolean;
+  onWithPdfChange: (value: boolean) => void;
+  editorShortcut: string;
+  onEditorShortcutChange: (value: string) => void;
   viewMode: "grid" | "list";
   onViewModeChange: (mode: "grid" | "list") => void;
 }
@@ -25,12 +29,17 @@ export function CatalogFilters({
   onFeedSubcategoryChange,
   brand,
   onBrandChange,
+  withPdf,
+  onWithPdfChange,
+  editorShortcut,
+  onEditorShortcutChange,
   viewMode,
   onViewModeChange,
 }: CatalogFiltersProps) {
   // Get dynamic categories from feed
   const feedCategories = useQuery(api.products.getFeedCategories);
   const feedBrands = useQuery(api.products.getFeedBrands);
+  const editors = useQuery(api.editors.list);
   
   // Get subcategories for selected category (find from array instead of object key)
   const subcategories = feedCategory 
@@ -50,7 +59,7 @@ export function CatalogFilters({
         <div className="flex-1">
           <div className="relative">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-700"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -67,7 +76,7 @@ export function CatalogFilters({
               placeholder="Hledat produkty..."
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="w-full pl-10 pr-4 py-3 bg-sky-100 border-2 border-sky-400 rounded-xl text-sm shadow-md placeholder:text-sky-700/60 focus:outline-none focus:ring-4 focus:ring-sky-300/70 focus:border-sky-600 transition-colors"
             />
           </div>
         </div>
@@ -125,6 +134,41 @@ export function CatalogFilters({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Editor filter */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Editor</label>
+            <select
+              value={editorShortcut}
+              onChange={(e) => onEditorShortcutChange(e.target.value)}
+              className="px-3 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent min-w-[140px]"
+              title="Filtruje produkty upravené konkrétním editorem"
+            >
+              <option value="">Všichni editoři</option>
+              {editors?.map((ed) => (
+                <option key={ed._id} value={ed.shortcut}>
+                  {ed.shortcut} — {ed.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* With PDF filter */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Produktový list</label>
+            <button
+              type="button"
+              onClick={() => onWithPdfChange(!withPdf)}
+              className={`px-3 py-2.5 border rounded-lg text-sm min-w-[220px] text-left transition-colors ${
+                withPdf
+                  ? "bg-sky-100 text-sky-950 border-sky-200 hover:bg-sky-700 hover:text-white hover:border-sky-700"
+                  : "bg-sky-50 text-sky-900 border-sky-200 hover:bg-sky-100"
+              }`}
+              title="Zobrazí jen produkty s nahraným produktovým listem"
+            >
+              {withPdf ? "✓ Zobraz s produktovým listem" : "Zobraz s produktovým listem"}
+            </button>
           </div>
 
           {/* View Mode Toggle */}

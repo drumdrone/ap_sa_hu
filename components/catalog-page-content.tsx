@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Header } from "@/components/header";
@@ -8,30 +9,90 @@ import { CatalogFilters } from "@/components/catalog-filters";
 import { ProductCard } from "@/components/product-card";
 import { ProductListItem } from "@/components/product-list-item";
 
+const CatalogResults = memo(function CatalogResults({
+  viewMode,
+  products,
+}: {
+  viewMode: "grid" | "list";
+  products: Array<any>;
+}) {
+  if (viewMode === "grid") {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {products.map((product) => (
+          <ProductCard
+            key={product._id}
+            id={product._id}
+            name={product.name}
+            image={product.image}
+            category={product.category}
+            price={product.price}
+            tier={product.tier}
+            availability={product.availability}
+            brand={product.brand}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {products.map((product) => (
+        <ProductListItem
+          key={product._id}
+          id={product._id}
+          name={product.name}
+          image={product.image}
+          category={product.category}
+          price={product.price}
+          tier={product.tier}
+          brandPillar={product.brandPillar}
+          salesClaim={product.salesClaim}
+          availability={product.availability}
+          brand={product.brand}
+          pdfUrl={product.pdfUrl}
+        />
+      ))}
+    </div>
+  );
+});
+
 export function CatalogPageContent() {
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const searchFromUrl = useMemo(() => searchParams.get("search") ?? "", [searchParams]);
+  const [searchInput, setSearchInput] = useState("");
   const [feedCategory, setFeedCategory] = useState("");
   const [feedSubcategory, setFeedSubcategory] = useState("");
   const [brand, setBrand] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [withPdf, setWithPdf] = useState(false);
+  const [editorShortcut, setEditorShortcut] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   
   // Keep reference to last loaded products to prevent flickering
   const lastProducts = useRef<typeof products>(undefined);
 
+  // Sync search from URL (used by the global sticky search bar)
+  useEffect(() => {
+    setSearchInput(searchFromUrl);
+    setDebouncedSearch(searchFromUrl);
+  }, [searchFromUrl]);
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
+      setDebouncedSearch(searchInput);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [searchInput]);
 
   const products = useQuery(api.products.list, {
     search: debouncedSearch || undefined,
     feedCategory: feedCategory || undefined,
     feedSubcategory: feedSubcategory || undefined,
     brand: brand || undefined,
+    editorShortcut: editorShortcut || undefined,
   });
 
   // Update last products when we get new data
@@ -41,6 +102,9 @@ export function CatalogPageContent() {
   
   // Use last products during loading to prevent flickering
   const displayProducts = products ?? lastProducts.current;
+  const filteredProducts = withPdf
+    ? (displayProducts ?? []).filter((p) => !!p.pdfUrl)
+    : displayProducts;
 
   const seedProducts = useMutation(api.products.seed);
 
@@ -53,12 +117,10 @@ export function CatalogPageContent() {
   }, [products, seedProducts]);
 
   // Only show loading on initial load, not during searches
-  const isLoading = displayProducts === undefined;
+  const isLoading = filteredProducts === undefined;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
+      <div className="min-h-screen bg-background">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-foreground mb-2">Katalog produktů</h2>
@@ -68,14 +130,18 @@ export function CatalogPageContent() {
         </div>
 
         <CatalogFilters
-          search={search}
-          onSearchChange={setSearch}
+          search={searchInput}
+          onSearchChange={setSearchInput}
           feedCategory={feedCategory}
           onFeedCategoryChange={setFeedCategory}
           feedSubcategory={feedSubcategory}
           onFeedSubcategoryChange={setFeedSubcategory}
           brand={brand}
           onBrandChange={setBrand}
+          withPdf={withPdf}
+          onWithPdfChange={setWithPdf}
+          editorShortcut={editorShortcut}
+          onEditorShortcutChange={setEditorShortcut}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
         />
@@ -87,7 +153,7 @@ export function CatalogPageContent() {
               <p className="text-muted-foreground">Načítám produkty...</p>
             </div>
           </div>
-        ) : displayProducts.length === 0 ? (
+        ) : filteredProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
               <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,45 +163,19 @@ export function CatalogPageContent() {
             <h3 className="text-lg font-semibold text-foreground mb-1">Žádné produkty nenalezeny</h3>
             <p className="text-muted-foreground">Zkuste upravit filtry nebo vyhledávání</p>
           </div>
-        ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {displayProducts.map((product) => (
-              <ProductCard
-                key={product._id}
-                id={product._id}
-                name={product.name}
-                image={product.image}
-                category={product.category}
-                price={product.price}
-                tier={product.tier}
-                availability={product.availability}
-                brand={product.brand}
-              />
-            ))}
-          </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {displayProducts.map((product) => (
-              <ProductListItem
-                key={product._id}
-                id={product._id}
-                name={product.name}
-                image={product.image}
-                category={product.category}
-                price={product.price}
-                tier={product.tier}
-                brandPillar={product.brandPillar}
-                salesClaim={product.salesClaim}
-                availability={product.availability}
-                brand={product.brand}
-              />
-            ))}
+          <CatalogResults viewMode={viewMode} products={filteredProducts} />
+        )}
+
+        {products === undefined && filteredProducts !== undefined && (
+          <div className="mt-4 text-center text-xs text-muted-foreground">
+            Načítám výsledky…
           </div>
         )}
 
-        {displayProducts && displayProducts.length > 0 && (
+        {filteredProducts && filteredProducts.length > 0 && (
           <div className="mt-8 text-center text-sm text-muted-foreground">
-            Zobrazeno {displayProducts.length} produktů
+            Zobrazeno {filteredProducts.length} produktů
             {products === undefined && <span className="ml-2 text-xs">(načítám...)</span>}
           </div>
         )}

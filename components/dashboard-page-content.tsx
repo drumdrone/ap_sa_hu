@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Header } from "@/components/header";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { Id, Doc } from "@/convex/_generated/dataModel";
+import { useAccess } from "@/components/access-context";
 
 // Business Opportunities data
 const businessOpportunities = [
@@ -110,17 +111,20 @@ function NewsItemCard({
   onDelete,
   onEdit,
   onImageClick,
+  matchedProducts,
 }: { 
   item: NewsItemWithImage; 
   formatRelativeTime: (ts: number) => string;
   onDelete: (id: Id<"news">) => void;
   onEdit: (item: NewsItemWithImage) => void;
   onImageClick?: (imageUrl: string) => void;
+  matchedProducts?: Array<{ _id: string; name: string; image?: string | undefined | null; externalId?: string | undefined | null }>;
 }) {
-  const matchedProducts = useQuery(
-    api.news.findProductsBySkus, 
-    item.skus && item.skus.length > 0 ? { skus: item.skus } : "skip"
-  );
+  const productsForItem = useMemo(() => {
+    if (!matchedProducts || !item.skus || item.skus.length === 0) return [];
+    const wanted = new Set(item.skus);
+    return matchedProducts.filter((p) => wanted.has(p._id) || (p.externalId ? wanted.has(p.externalId) : false));
+  }, [matchedProducts, item.skus]);
 
   // Extract tag prefix from title if exists (e.g., "Upgrade: Nové obrázky")
   const titleParts = item.title.split(": ");
@@ -154,129 +158,64 @@ function NewsItemCard({
   };
 
   return (
-    <div className={`group relative p-4 rounded-xl ${getCardStyle()} hover:shadow-md transition-all`}>
-      {/* Action buttons - top right */}
-      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-        <button
-          onClick={() => onEdit(item)}
-          className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-white/80 rounded-lg transition-all"
-          title="Upravit"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-        </button>
-        <button
-          onClick={() => onDelete(item._id)}
-          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white/80 rounded-lg transition-all"
-          title="Smazat"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+    <div className={`group p-3 rounded-xl ${getCardStyle()} border border-border/40 hover:shadow-sm transition-all`}>
+      <div className="flex items-center gap-3">
+        {item.imageUrl ? (
+          <button
+            type="button"
+            onClick={() => onImageClick?.(item.imageUrl!)}
+            className="w-10 h-10 rounded-lg overflow-hidden bg-muted flex-shrink-0"
+            title="Zvětšit obrázek"
+          >
+            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+          </button>
+        ) : null}
 
-      {/* Custom image or Icon */}
-      {item.imageUrl ? (
-        <div 
-          className="relative w-full h-24 rounded-xl overflow-visible bg-muted mb-3 -mt-1 -mx-1 group/image cursor-pointer" 
-          style={{ width: 'calc(100% + 8px)' }}
-          onClick={() => onImageClick?.(item.imageUrl!)}
-        >
-          <img
-            src={item.imageUrl}
-            alt=""
-            className="w-full h-full object-cover rounded-xl"
-          />
-          {/* Click hint */}
-          <div className="absolute inset-0 rounded-xl bg-black/0 group-hover/image:bg-black/20 transition-all flex items-center justify-center">
-            <svg className="w-8 h-8 text-white opacity-0 group-hover/image:opacity-100 transition-opacity drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground truncate">{displayTitle}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {tagPrefix ? `${tagPrefix} • ` : ""}{item.content || formatRelativeTime(item.createdAt)}
+          </p>
+          {productsForItem && productsForItem.length > 0 && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              {productsForItem
+                .filter((p) => !!p.image)
+                .slice(0, 5)
+                .map((p) => (
+                  <Link
+                    key={p._id}
+                    href={`/product/${p._id}`}
+                    className="block w-7 h-7 rounded-md overflow-hidden bg-white border border-border hover:scale-105 transition-transform"
+                    title={p.name}
+                  >
+                    <img src={p.image || ""} alt={p.name} className="w-full h-full object-cover" />
+                  </Link>
+                ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => onEdit(item)}
+            className="p-1.5 text-gray-500 hover:text-blue-500 hover:bg-white/80 rounded-md transition-all"
+            title="Upravit"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
             </svg>
-          </div>
+          </button>
+          <button
+            onClick={() => onDelete(item._id)}
+            className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-white/80 rounded-md transition-all"
+            title="Smazat"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-      ) : (
-        <div className={`w-10 h-10 rounded-xl ${getIconStyle()} flex items-center justify-center text-lg mb-3`}>
-          {getCategoryIcon()}
-        </div>
-      )}
-
-      {/* Title with tag */}
-      <div className="mb-1">
-        <h3 className="font-semibold text-foreground text-sm leading-tight">{displayTitle}</h3>
-        {tagPrefix && (
-          <span className="text-xs text-muted-foreground">{tagPrefix}</span>
-        )}
       </div>
-
-      {/* Content/Description or date */}
-      <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
-        {item.content || formatRelativeTime(item.createdAt)}
-      </p>
-
-      {/* Matched products with all gallery images */}
-      {matchedProducts && matchedProducts.length > 0 && (() => {
-        // Collect all images: product main image + all gallery images
-        const allImages: { url: string; productName: string; productId: string }[] = [];
-        
-        matchedProducts.forEach((product) => {
-          // Add main product image
-          if (product.image) {
-            allImages.push({ 
-              url: product.image, 
-              productName: product.name,
-              productId: product._id 
-            });
-          }
-          // Add all gallery images
-          if (product.galleryImages) {
-            product.galleryImages.forEach((img: { url?: string | null }) => {
-              if (img.url) {
-                allImages.push({ 
-                  url: img.url, 
-                  productName: product.name,
-                  productId: product._id 
-                });
-              }
-            });
-          }
-        });
-        
-        return allImages.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-black/5">
-            {allImages.map((img, idx) => (
-              <div
-                key={`${img.productId}-${idx}`}
-                className="relative group/img"
-              >
-                <Link
-                  href={`/product/${img.productId}`}
-                  className="block w-8 h-8 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md hover:scale-105 transition-all"
-                  title={img.productName}
-                >
-                  <img
-                    src={img.url}
-                    alt={img.productName}
-                    className="w-full h-full object-cover"
-                  />
-                </Link>
-                {/* Hover preview */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity z-50">
-                  <div className="bg-white rounded-xl shadow-xl border border-border p-1 w-40">
-                    <img
-                      src={img.url}
-                      alt={img.productName}
-                      className="w-full h-32 object-cover rounded-lg"
-                    />
-                    <p className="text-xs text-center text-muted-foreground mt-1 truncate px-1">{img.productName}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null;
-      })()}
     </div>
   );
 }
@@ -418,6 +357,10 @@ export function DashboardPageContent() {
   const stats = useQuery(api.products.getStats);
   const recentActivity = useQuery(api.products.getRecentActivity, { limit: 10 });
   const recentImages = useQuery(api.gallery.getRecentImages, { limit: 6 });
+  const recentUploads = useQuery(api.uploadLogs.getRecent, { limit: 3 });
+  const removeUploadLog = useMutation(api.uploadLogs.remove);
+  const { role } = useAccess();
+  const canEdit = role === "editor";
   const productsNeedingAttention = useQuery(api.products.getProductsNeedingAttention);
   const topProducts = useQuery(api.products.getTopProducts);
   const searchResults = useQuery(api.products.list, {
@@ -652,6 +595,24 @@ export function DashboardPageContent() {
     return news;
   };
 
+  const filteredNews = getFilteredNews();
+  const newsSkusForLookup = useMemo(() => {
+    if (!filteredNews) return [];
+    const set = new Set<string>();
+    for (const item of filteredNews) {
+      if (item.skus && item.skus.length > 0) {
+        for (const sku of item.skus) set.add(sku);
+      }
+    }
+    return Array.from(set);
+  }, [filteredNews]);
+
+  // Resolve all products for visible news in a single Convex call (cheaper than per-card).
+  const matchedProductsForNews = useQuery(
+    api.news.findProductsBySkusLite,
+    newsSkusForLookup.length > 0 ? { skus: newsSkusForLookup } : "skip"
+  );
+
   const getTagLabel = (type: NewsType) => {
     switch (type) {
       case "product": return "📦 Produkty";
@@ -768,69 +729,7 @@ export function DashboardPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search bar */}
-        <div className="mb-8">
-          <div className="relative max-w-xl">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <Input
-              type="text"
-              placeholder="Hledat produkty..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-12 text-base"
-            />
-          </div>
-          
-          {/* Search Results */}
-          {debouncedSearch && searchResults && (
-            <div className="mt-4 bg-card rounded-xl border border-border p-4">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                Výsledky vyhledávání ({searchResults.length})
-              </h3>
-              {searchResults.length === 0 ? (
-                <p className="text-muted-foreground">Žádné produkty nenalezeny</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {searchResults.slice(0, 9).map((product) => (
-                    <Link
-                      key={product._id}
-                      href={`/product/${product._id}`}
-                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
-                    >
-                      {product.image && (
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">{product.name}</p>
-                        <p className="text-sm text-muted-foreground">{product.price} Kč</p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="flex flex-col items-center gap-3">
@@ -840,124 +739,233 @@ export function DashboardPageContent() {
           </div>
         ) : (
           <>
-          {/* News Tabs Panel */}
-          <div className="bg-card rounded-2xl border border-border shadow-sm mb-8 overflow-hidden">
-            <div className="p-5 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-white text-sm">📰</span>
+          {/* News + Last images (50/50 layout) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* News Tabs Panel */}
+            <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                    <span className="text-white text-sm">📰</span>
+                  </div>
+                  <h2 className="text-lg font-semibold text-foreground">Novinky</h2>
+                  <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-xs">
+                    {newsStats?.total ?? 0}
+                  </Badge>
                 </div>
-                <h2 className="text-lg font-semibold text-foreground">Novinky</h2>
-                <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-xs">
-                  {newsStats?.total ?? 0}
-                </Badge>
+                <Button
+                  onClick={() => setShowAddNews(true)}
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Přidat
+                </Button>
               </div>
-              <Button
-                onClick={() => setShowAddNews(true)}
-                size="sm"
-                className="bg-primary hover:bg-primary/90"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Přidat
-              </Button>
-            </div>
 
-            {/* Tag Filters */}
-            <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-border bg-muted/30">
-              <span className="text-sm text-muted-foreground mr-1">Filtr:</span>
-              <button
-                onClick={() => setActiveNewsFilter(null)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                  activeNewsFilter === null
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
-                }`}
-              >
-                Vše ({newsStats?.total ?? 0})
-              </button>
-              {(["product", "company", "materials"] as NewsType[]).map((type) => (
+              {/* Tag Filters */}
+              <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-border bg-muted/30">
+                <span className="text-sm text-muted-foreground mr-1">Filtr:</span>
                 <button
-                  key={type}
-                  onClick={() => setActiveNewsFilter(activeNewsFilter === type ? null : type)}
+                  onClick={() => setActiveNewsFilter(null)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                    activeNewsFilter === type
-                      ? getTagColor(type) + " border-current"
-                      : "bg-white text-muted-foreground border-border hover:border-current hover:" + getTagColor(type).split(" ")[1]
+                    activeNewsFilter === null
+                      ? "bg-primary text-white border-primary"
+                      : "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
                   }`}
                 >
-                  {getTagLabel(type)} ({getTagCount(type)})
+                  Vše ({newsStats?.total ?? 0})
                 </button>
-              ))}
-              
-              {/* Date separator */}
-              <div className="w-px h-5 bg-border mx-2" />
-              
-              {/* Date filter */}
-              {([
-                { days: 7, label: "7 dní" },
-                { days: 14, label: "14 dní" },
-                { days: 30, label: "30 dní" },
-              ] as const).map(({ days, label }) => (
+                {(["product", "company", "materials"] as NewsType[]).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setActiveNewsFilter(activeNewsFilter === type ? null : type)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                      activeNewsFilter === type
+                        ? getTagColor(type) + " border-current"
+                        : "bg-white text-muted-foreground border-border hover:border-current hover:" + getTagColor(type).split(" ")[1]
+                    }`}
+                  >
+                    {getTagLabel(type)} ({getTagCount(type)})
+                  </button>
+                ))}
+                
+                {/* Date separator */}
+                <div className="w-px h-5 bg-border mx-2" />
+                
+                {/* Date filter */}
+                {([
+                  { days: 7, label: "7 dní" },
+                  { days: 14, label: "14 dní" },
+                  { days: 30, label: "30 dní" },
+                ] as const).map(({ days, label }) => (
+                  <button
+                    key={days}
+                    onClick={() => setNewsDateFilter(newsDateFilter === days ? null : days)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                      newsDateFilter === days
+                        ? "bg-gray-800 text-white border-gray-800"
+                        : "bg-white text-muted-foreground border-border hover:border-gray-400 hover:text-gray-700"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
                 <button
-                  key={days}
-                  onClick={() => setNewsDateFilter(newsDateFilter === days ? null : days)}
+                  onClick={() => setNewsDateFilter(null)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                    newsDateFilter === days
+                    newsDateFilter === null
                       ? "bg-gray-800 text-white border-gray-800"
                       : "bg-white text-muted-foreground border-border hover:border-gray-400 hover:text-gray-700"
                   }`}
                 >
-                  {label}
+                  Vše
                 </button>
-              ))}
-              <button
-                onClick={() => setNewsDateFilter(null)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                  newsDateFilter === null
-                    ? "bg-gray-800 text-white border-gray-800"
-                    : "bg-white text-muted-foreground border-border hover:border-gray-400 hover:text-gray-700"
-                }`}
-              >
-                Vše
-              </button>
+              </div>
+
+              {/* News List */}
+              <div className="max-h-[500px] overflow-y-auto">
+                {filteredNews === undefined ? (
+                  <div className="p-8 text-center">
+                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                  </div>
+                ) : filteredNews?.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <div className="text-4xl mb-3">📭</div>
+                    <p className="text-muted-foreground">Zatím žádné novinky</p>
+                    <Button
+                      onClick={() => setShowAddNews(true)}
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                    >
+                      Přidat první novinku
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2 p-4">
+                    {filteredNews?.map((item) => (
+                      <NewsItemCard
+                        key={item._id}
+                        item={item}
+                        formatRelativeTime={formatRelativeTime}
+                        onDelete={handleDeleteNews}
+                        onEdit={handleStartEdit}
+                        onImageClick={handleOpenLightbox}
+                        matchedProducts={matchedProductsForNews}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* News List */}
-            <div className="max-h-[500px] overflow-y-auto">
-              {getFilteredNews() === undefined ? (
-                <div className="p-8 text-center">
-                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            {/* Last uploaded images – homepage column next to news */}
+            {recentImages && recentImages.length > 0 && (
+              <div className="bg-card rounded-2xl border border-border shadow-sm">
+                <div className="p-5 border-b border-border">
+                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    Poslední nahrané obrázky
+                  </h2>
                 </div>
-              ) : getFilteredNews()?.length === 0 ? (
-                <div className="p-8 text-center">
-                  <div className="text-4xl mb-3">📭</div>
-                  <p className="text-muted-foreground">Zatím žádné novinky</p>
-                  <Button
-                    onClick={() => setShowAddNews(true)}
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                  >
-                    Přidat první novinku
-                  </Button>
+                <div className="p-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {recentImages.map((image) => (
+                      <Link
+                        key={image._id}
+                        href={`/product/${image.productId}`}
+                        className="group relative aspect-square rounded-xl overflow-hidden bg-muted shadow-sm"
+                      >
+                        {image.url && (
+                          <img
+                            src={image.url}
+                            alt={image.filename}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute bottom-0 left-0 right-0 p-2">
+                            <p className="text-white text-xs truncate">{image.productName}</p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-50 text-blue-700">
+                        📄
+                      </span>
+                      Poslední nahrané dokumenty
+                    </p>
+                    <div className="space-y-1">
+                      {recentUploads?.map((log) => {
+                        const where =
+                          log.kind === "product_pdf"
+                            ? "Produktový list"
+                            : log.kind === "gallery_image"
+                            ? "Galerie"
+                            : "Soubor";
+                        const when = new Date(log.createdAt).toLocaleDateString("cs-CZ", {
+                          day: "numeric",
+                          month: "numeric",
+                          year: "numeric",
+                        });
+                        const productName = log.productName ?? "Produkt";
+                        const productId = (log as any).productId as string | undefined;
+                        const fileUrl = (log as any).fileUrl as string | null | undefined;
+
+                        return (
+                          <div key={log._id} className="text-xs text-muted-foreground flex items-center gap-2">
+                            <span className="mr-2">⬆️</span>
+                            <span className="flex-1 min-w-0">
+                              {when}
+                              <span className="mx-2">—</span>
+                              <span className="font-medium text-foreground">{where}</span>
+                              <span className="mx-2">—</span>
+                              {fileUrl ? (
+                                <a
+                                  href={fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-medium"
+                                >
+                                  {productName}
+                                </a>
+                              ) : productId ? (
+                                <Link href={`/product/${productId}`} className="text-primary hover:underline font-medium">
+                                  {productName}
+                                </Link>
+                              ) : (
+                                <span className="font-medium">{productName}</span>
+                              )}
+                            </span>
+                            {canEdit && (
+                              <button
+                                onClick={async () => {
+                                  await removeUploadLog({ id: log._id });
+                                }}
+                                className="ml-auto w-5 h-5 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground"
+                                title="Smazat záznam"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-                  {getFilteredNews()?.map((item) => (
-                    <NewsItemCard
-                      key={item._id}
-                      item={item}
-                      formatRelativeTime={formatRelativeTime}
-                      onDelete={handleDeleteNews}
-                      onEdit={handleStartEdit}
-                      onImageClick={handleOpenLightbox}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Top 10 Products */}
@@ -1170,45 +1178,6 @@ export function DashboardPageContent() {
                 </div>
               </div>
 
-              {/* Recent Images */}
-              {recentImages && recentImages.length > 0 && (
-                <div className="bg-card rounded-2xl border border-border shadow-sm">
-                  <div className="p-5 border-b border-border">
-                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                      <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                      Poslední nahrané obrázky
-                    </h2>
-                  </div>
-                  <div className="p-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {recentImages.map((image) => (
-                        <Link
-                          key={image._id}
-                          href={`/product/${image.productId}`}
-                          className="group relative aspect-square rounded-xl overflow-hidden bg-muted shadow-sm"
-                        >
-                          {image.url && (
-                            <img
-                              src={image.url}
-                              alt={image.filename}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="absolute bottom-0 left-0 right-0 p-2">
-                              <p className="text-white text-xs truncate">{image.productName}</p>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Right column - Stats & Todos */}

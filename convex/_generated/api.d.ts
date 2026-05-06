@@ -10,16 +10,20 @@
 
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as auth from "../auth.js";
+import type * as editors from "../editors.js";
 import type * as emails from "../emails.js";
 import type * as feedImport from "../feedImport.js";
 import type * as gallery from "../gallery.js";
 import type * as http from "../http.js";
 import type * as news from "../news.js";
+import type * as newsTicker from "../newsTicker.js";
 import type * as opportunities from "../opportunities.js";
 import type * as posm from "../posm.js";
+import type * as productBanners from "../productBanners.js";
 import type * as products from "../products.js";
 import type * as promotionLogs from "../promotionLogs.js";
 import type * as seed_import from "../seed/import.js";
+import type * as uploadLogs from "../uploadLogs.js";
 
 import type {
   ApiFromModules,
@@ -38,16 +42,20 @@ import type {
 declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
   auth: typeof auth;
+  editors: typeof editors;
   emails: typeof emails;
   feedImport: typeof feedImport;
   gallery: typeof gallery;
   http: typeof http;
   news: typeof news;
+  newsTicker: typeof newsTicker;
   opportunities: typeof opportunities;
   posm: typeof posm;
+  productBanners: typeof productBanners;
   products: typeof products;
   promotionLogs: typeof promotionLogs;
   "seed/import": typeof seed_import;
+  uploadLogs: typeof uploadLogs;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductImageSlider } from "@/components/product-image-slider";
+import { useAccess } from "@/components/access-context";
 
 type MenuSection = "dashboard" | "eshop" | "marketing" | "social" | "gallery" | "materials" | "edit";
 type MobileView = "product" | "data";
@@ -34,14 +35,14 @@ const todoItems = [
   { id: "review-materials", label: "Zkontrolovat marketingové materiály", priority: "low" },
 ];
 
-type QuickActionPanel = "social" | "materials" | "edit" | "gallery" | "referenceCard" | "promotionHistory" | null;
+type QuickActionPanel = "social" | "materials" | "edit" | "gallery" | "referenceCard" | null;
 type InlineEdit =
   | "gallery"
   | "social"
   | "socialImages"
   | "materials"
+  | "video"
   | "eshop"
-  | "presentation"
   | "referenceCard"
   | "faq"
   | "salesForecast"
@@ -50,6 +51,7 @@ type InlineEdit =
   | "herbComposition"
   | "competitionComparison"
   | "seasonalOpportunities"
+  | "targetAudience"
   | "sensoryProfile"
   | null;
 
@@ -60,6 +62,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<QuickActionPanel>(null);
+  const [dashboardTab, setDashboardTab] = useState<"materials" | "data">("materials");
+
+  const { role } = useAccess();
+  const canEdit = role === "editor";
   
   // Inline edit state
   const [inlineEdit, setInlineEdit] = useState<InlineEdit>(null);
@@ -69,10 +75,15 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   
   // Gallery state
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [bannerTagsInput, setBannerTagsInput] = useState("banner e-shop, banner facebook");
   const [newImageTags, setNewImageTags] = useState("");
   const [selectedGalleryTag, setSelectedGalleryTag] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
+  const bannerFileInputRef = useRef<HTMLInputElement>(null);
+  const mainContentRef = useRef<HTMLMainElement>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
   
   // Lightbox state for gallery
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -81,6 +92,99 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const product = useQuery(api.products.getById, { id: productId });
   const adjacentProducts = useQuery(api.products.getAdjacentProducts, { currentId: productId });
   const updateMarketingData = useMutation(api.products.updateMarketingData);
+  const clearPdfUrl = useMutation(api.products.clearPdfUrl);
+  const clearVideoUrl = useMutation(api.products.clearVideoUrl);
+  const activeEditors = useQuery(api.editors.list);
+
+  // Editor tracking - persisted in localStorage for the session
+  const EDITOR_STORAGE_KEY = "apo-currentEditor";
+  const [currentEditor, setCurrentEditor] = useState<string | null>(null);
+  const [editorModalOpen, setEditorModalOpen] = useState(false);
+  const pendingSaveRef = useRef<{
+    args: Parameters<typeof updateMarketingData>[0];
+    resolve: (v: unknown) => void;
+    reject: (e: unknown) => void;
+  } | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(EDITOR_STORAGE_KEY);
+      if (saved) setCurrentEditor(saved);
+    } catch {}
+  }, []);
+
+  const setEditor = (shortcut: string | null) => {
+    setCurrentEditor(shortcut);
+    try {
+      if (shortcut) localStorage.setItem(EDITOR_STORAGE_KEY, shortcut);
+      else localStorage.removeItem(EDITOR_STORAGE_KEY);
+    } catch {}
+  };
+
+  // Wrapper around updateMarketingData that ensures an editor is selected.
+  // If no editor is set, opens modal and returns a Promise that resolves after the save runs.
+  const saveMarketing = (args: Parameters<typeof updateMarketingData>[0]) => {
+    if (currentEditor) {
+      return updateMarketingData({ ...args, editorShortcut: currentEditor });
+    }
+    return new Promise((resolve, reject) => {
+      pendingSaveRef.current = { args, resolve, reject };
+      setEditorModalOpen(true);
+    });
+  };
+
+  const pickEditorAndSave = async (shortcut: string) => {
+    setEditor(shortcut);
+    setEditorModalOpen(false);
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    if (pending) {
+      try {
+        const result = await updateMarketingData({ ...pending.args, editorShortcut: shortcut });
+        pending.resolve(result);
+      } catch (err) {
+        pending.reject(err);
+      }
+    }
+  };
+
+  const cancelEditorPick = () => {
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    setEditorModalOpen(false);
+    if (pending) {
+      pending.reject(new Error("Save cancelled - no editor selected"));
+    }
+  };
+
+  // Format a relative timestamp in Czech (e.g. "před 2 dny", "před 5 min")
+  const formatRelative = (ts: number) => {
+    const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (diffSec < 60) return "před chvílí";
+    const diffMin = Math.round(diffSec / 60);
+    if (diffMin < 60) return `před ${diffMin} min`;
+    const diffH = Math.round(diffMin / 60);
+    if (diffH < 24) return `před ${diffH} h`;
+    const diffD = Math.round(diffH / 24);
+    if (diffD < 30) return `před ${diffD} ${diffD === 1 ? "dnem" : diffD < 5 ? "dny" : "dny"}`;
+    const diffMo = Math.round(diffD / 30);
+    if (diffMo < 12) return `před ${diffMo} měs.`;
+    return new Date(ts).toLocaleDateString("cs-CZ");
+  };
+
+  // Inline stamp showing who/when last edited a given field
+  const renderEditorStamp = (fieldName: string) => {
+    const meta = (product?.fieldMeta as Record<string, { editor: string; editedAt: number }> | undefined)?.[fieldName];
+    if (!meta) return null;
+    return (
+      <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+        <span>✏️</span>
+        <span className="font-semibold">{meta.editor}</span>
+        <span>·</span>
+        <span>{formatRelative(meta.editedAt)}</span>
+      </p>
+    );
+  };
   
   // Gallery queries and mutations
   const galleryImages = useQuery(api.gallery.listByProduct, { productId, tag: selectedGalleryTag });
@@ -89,19 +193,40 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const saveImage = useMutation(api.gallery.saveImage);
   const deleteImage = useMutation(api.gallery.deleteImage);
   const savePdfToProduct = useMutation(api.gallery.savePdfToProduct);
+  const productBanners = useQuery(api.productBanners.listByProduct, { productId });
+  const saveProductBanner = useMutation(api.productBanners.save);
+  const deleteProductBanner = useMutation(api.productBanners.remove);
+
+  // Při navigaci na jiný produkt obnov scroll (main je overflow-auto → jinak zůstane „uprostřed“)
+  // a zobraz sekci s fotkami (dashboard / mobilní záložka Produkt).
+  useEffect(() => {
+    setActiveSection("dashboard");
+    setMobileView("product");
+    mainContentRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [productId]);
   
   // Top product mutations
   const toggleTopProduct = useMutation(api.products.toggleTopProduct);
   const setTopOrder = useMutation(api.products.setTopOrder);
   const topProducts = useQuery(api.products.getTopProducts);
+
+  // Helper: detect if URL looks like přímý obrázek
+  const isImageUrl = (url?: string | null) => {
+    if (!url) return false;
+    return /\.(jpe?g|png|webp|gif)$/i.test(url.split("?")[0]);
+  };
+
+  // Helper: build Facebook embed URL from post link
+  const getFacebookEmbedUrl = (url: string) => {
+    try {
+      return `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(url)}&show_text=true&width=500`;
+    } catch {
+      return url;
+    }
+  };
   
-  // Promotion logs
-  const promotionLogs = useQuery(api.promotionLogs.getByProduct, { productId });
-  const addPromotionLog = useMutation(api.promotionLogs.add);
-  const removePromotionLog = useMutation(api.promotionLogs.remove);
-  const [newLogTitle, setNewLogTitle] = useState("");
-  const [newLogDate, setNewLogDate] = useState("");
-  const [newLogUrl, setNewLogUrl] = useState("");
+  // Promotion logs section removed
   
   // Sales Kit - items to export
   type SalesKitItem = {
@@ -112,17 +237,26 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   };
   const [salesKitItems, setSalesKitItems] = useState<SalesKitItem[]>([]);
   const [showSalesKit, setShowSalesKit] = useState(false);
-  const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [emailTo, setEmailTo] = useState("");
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [showPdfLinkDialog, setShowPdfLinkDialog] = useState(false);
+  const [salesKitShareUrl, setSalesKitShareUrl] = useState("");
   
-  const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
+  // Lightbox images: use same ordering as slider (main image first, then gallery)
+  const galleryImageUrls = galleryImages?.filter(img => img.url).map(img => img.url!) ?? [];
+  const hasMainImageInLightbox = !!product?.image;
+  const lightboxImages: string[] = hasMainImageInLightbox
+    ? [product!.image!, ...galleryImageUrls]
+    : [...galleryImageUrls];
   
-  // Lightbox functions for gallery
-  const lightboxImages = galleryImages?.filter(img => img.url).map(img => img.url!) || [];
+  // Open from slider: index matches lightboxImages
+  const openLightboxFromSlider = (sliderIndex: number) => {
+    setLightboxIndex(sliderIndex);
+    setLightboxOpen(true);
+  };
   
-  const handleOpenLightbox = (index: number) => {
-    setLightboxIndex(index);
+  // Open from gallery grid: map gallery index to lightbox index (+1 if main image exists)
+  const openLightboxFromGallery = (galleryIndex: number) => {
+    const targetIndex = hasMainImageInLightbox ? galleryIndex + 1 : galleryIndex;
+    setLightboxIndex(targetIndex);
     setLightboxOpen(true);
   };
   
@@ -258,7 +392,30 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       printWindow.document.write(printContent);
       printWindow.document.close();
       printWindow.focus();
-      setTimeout(() => printWindow.print(), 250);
+    }
+  };
+
+  const generateSalesKitShareUrl = () => {
+    if (!product || salesKitItems.length === 0 || typeof window === "undefined") return "";
+    try {
+      const payload = {
+        productName: product.name,
+        externalId: product.externalId || productId,
+        price: product.price ?? null,
+        generatedAt: new Date().toISOString(),
+        items: salesKitItems.map((item) => ({
+          label: item.label,
+          content: item.content,
+          type: item.type,
+        })),
+      };
+      const json = JSON.stringify(payload);
+      const utf8 = unescape(encodeURIComponent(json));
+      const base64 = btoa(utf8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      return `${window.location.origin}/sales-kit?data=${base64}`;
+    } catch (error) {
+      console.error("Failed to generate Sales Kit share URL:", error);
+      return "";
     }
   };
 
@@ -274,13 +431,20 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     });
   };
 
+  const normalizeLeadingBlankLines = (text: string) =>
+    text.replace(/^\uFEFF?(?:\r?\n)+/, "");
+
   // Inline edit save handler
   const handleInlineSave = async (field: string, value: string) => {
     setIsSaving(true);
     try {
-      await updateMarketingData({
+      const normalizedValue =
+        field === "salesForecast"
+          ? normalizeLeadingBlankLines(value)
+          : value;
+      await saveMarketing({
         id: productId,
-        [field]: value || undefined,
+        [field]: normalizedValue || undefined,
       });
       setInlineEdit(null);
       setInlineValue("");
@@ -291,12 +455,35 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     }
   };
 
+  // Helper: convert various YouTube URLs to embeddable URL
+  const getYoutubeEmbedUrl = (url: string) => {
+    try {
+      if (!url) return "";
+      // Already an embed URL
+      if (url.includes("/embed/")) return url;
+      // Short url: https://youtu.be/VIDEO_ID
+      const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+      if (shortMatch?.[1]) {
+        return `https://www.youtube.com/embed/${shortMatch[1]}`;
+      }
+      // Standard url: https://www.youtube.com/watch?v=VIDEO_ID
+      const urlObj = new URL(url);
+      const vParam = urlObj.searchParams.get("v");
+      if (vParam) {
+        return `https://www.youtube.com/embed/${vParam}`;
+      }
+      return url;
+    } catch {
+      return url;
+    }
+  };
+
   // FAQ save handler
   const handleFaqSave = async () => {
     setIsSaving(true);
     try {
       const filteredFaq = editingFaq.filter(item => item.question.trim() && item.answer.trim());
-      await updateMarketingData({
+      await saveMarketing({
         id: productId,
         faq: filteredFaq.length > 0 ? filteredFaq : undefined,
       });
@@ -314,7 +501,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     setIsSaving(true);
     try {
       const filteredArticles = editingArticles.filter(item => item.title.trim() && item.url.trim());
-      await updateMarketingData({
+      await saveMarketing({
         id: productId,
         articleUrls: filteredArticles.length > 0 ? filteredArticles : undefined,
       });
@@ -326,6 +513,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       setIsSaving(false);
     }
   };
+
+  const seasonalOpportunitiesText = product?.salesForecast
+    ? normalizeLeadingBlankLines(product.salesForecast)
+    : "";
 
   // Inline image upload handler
   const handleInlineImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -357,6 +548,61 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
       setIsSaving(false);
       if (inlineFileInputRef.current) {
         inlineFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const getImageDimensions = (file: File): Promise<{ width: number; height: number }> =>
+    new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new window.Image();
+      img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        URL.revokeObjectURL(objectUrl);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Image dimension read failed"));
+      };
+      img.src = objectUrl;
+    });
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBanner(true);
+    try {
+      const tags = bannerTagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const { width, height } = await getImageDimensions(file);
+
+      const uploadUrl = await generateUploadUrl();
+      const result = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await result.json();
+
+      await saveProductBanner({
+        productId,
+        storageId,
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+        width,
+        height,
+        tags,
+      });
+    } catch (error) {
+      console.error("Error uploading banner:", error);
+    } finally {
+      setIsUploadingBanner(false);
+      if (bannerFileInputRef.current) {
+        bannerFileInputRef.current.value = "";
       }
     }
   };
@@ -406,7 +652,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const hasSocialData = !!(product.socialFacebook || product.socialInstagram);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Mobile Top Bar */}
       <div className="lg:hidden sticky top-0 z-50 bg-card border-b border-border">
         {/* Header with back button and product info */}
@@ -467,99 +713,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
         </div>
       </div>
 
-      {/* Left Sidebar Menu - Hidden on mobile */}
-      <aside className="hidden lg:flex w-64 bg-card border-r border-border flex-col">
-        {/* Logo / Back */}
-        <div className="p-4 border-b border-border">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-primary font-semibold hover:opacity-80 transition-opacity"
-          >
-            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-primary-foreground text-sm">🍃</span>
-            </div>
-            <span>Apotheke Hub</span>
-          </Link>
-        </div>
-
-        {/* Product Mini Card */}
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-              {product.image ? (
-                <Image
-                  src={product.image}
-                  alt={product.name}
-                  width={48}
-                  height={48}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
-                  🍵
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="font-medium text-foreground text-sm truncate">{product.name}</p>
-              <p className="text-xs text-muted-foreground">{product.price} Kč</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Menu */}
-        <nav className="flex-1 p-2">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                activeSection === item.id
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Product Navigation */}
-        <div className="p-4 border-t border-border">
-          <div className="flex gap-2">
-            {adjacentProducts?.prevProduct ? (
-              <Link
-                href={`/product/${adjacentProducts.prevProduct._id}`}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-xs text-muted-foreground hover:text-foreground bg-muted rounded-lg transition-colors"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Předchozí
-              </Link>
-            ) : (
-              <div className="flex-1" />
-            )}
-            {adjacentProducts?.nextProduct ? (
-              <Link
-                href={`/product/${adjacentProducts.nextProduct._id}`}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-xs text-muted-foreground hover:text-foreground bg-muted rounded-lg transition-colors"
-              >
-                Další
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-            ) : (
-              <div className="flex-1" />
-            )}
-          </div>
-        </div>
-      </aside>
-
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main ref={mainContentRef} className="flex-1 overflow-auto">
         <div className="p-4 lg:p-6 xl:p-8 max-w-full 2xl:max-w-[1600px]">
           {/* Mobile View: Product Tab */}
           <div className={`lg:hidden ${mobileView !== "product" ? "hidden" : ""}`}>
@@ -572,12 +727,11 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
                   productName={product.name}
                   maxThumbnails={3}
-                  onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
+                  onImageClick={openLightboxFromSlider}
                   className="aspect-square max-h-72"
                 />
                 <div className="p-4">
                   <div className="flex flex-wrap gap-1.5 mb-2">
-                    {product.category && <CategoryBadge category={product.category} />}
                     {product.tier && <TierBadge tier={product.tier} />}
                     {product.brandPillar && <BrandPillarBadge pillar={product.brandPillar} />}
                   </div>
@@ -795,17 +949,52 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   <ProductImageSlider
                     productImage={product.image}
                     galleryImageUrls={galleryImages?.filter(img => img.url).map(img => img.url!) ?? []}
+                    videoUrl={product.videoUrl ?? undefined}
                     productName={product.name}
                     maxThumbnails={4}
-                    onImageClick={(galleryIndex) => handleOpenLightbox(galleryIndex)}
-                    className="w-full md:w-96 h-64 md:h-80 flex-shrink-0"
+                    onImageClick={openLightboxFromSlider}
+                    className="w-full md:w-[420px] h-80 md:h-[460px] flex-shrink-0"
                   />
                   {/* Product Info */}
                   <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
                     <div className="flex flex-wrap gap-2 mb-3">
-                      {product.category && <CategoryBadge category={product.category} />}
                       {product.tier && <TierBadge tier={product.tier} />}
                       {product.brandPillar && <BrandPillarBadge pillar={product.brandPillar} />}
+                    </div>
+                    <div className="flex items-center gap-1 mb-2">
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const value = i + 1;
+                        const filled = (product.rating ?? 0) >= value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={async () => {
+                              if (!canEdit) return;
+                              await saveMarketing({ id: productId, rating: value });
+                              setSaveMessage("Hodnocení uloženo");
+                              setTimeout(() => setSaveMessage(null), 1500);
+                            }}
+                            className={`p-0.5 rounded ${
+                              canEdit ? "cursor-pointer hover:bg-amber-50" : "cursor-default"
+                            }`}
+                            title={canEdit ? `Nastavit hodnocení ${value}/5` : `Hodnocení ${product.rating ?? 0}/5`}
+                            aria-label={`${value} z 5`}
+                            disabled={!canEdit}
+                          >
+                            <svg
+                              className={`w-5 h-5 ${filled ? "text-amber-400" : "text-gray-300"}`}
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.966a1 1 0 00.95.69h4.172c.969 0 1.371 1.24.588 1.81l-3.375 2.453a1 1 0 00-.364 1.118l1.287 3.966c.3.921-.755 1.688-1.539 1.118l-3.375-2.453a1 1 0 00-1.176 0l-3.375 2.453c-.783.57-1.838-.197-1.539-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.393c-.783-.57-.38-1.81.588-1.81h4.172a1 1 0 00.95-.69l1.286-3.966z" />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {(product.rating ?? 0)}/5
+                      </span>
                     </div>
                     <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">{product.name}</h1>
                     <p className="text-2xl font-bold text-primary mb-4">{product.price} Kč</p>
@@ -851,9 +1040,36 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               </div>
 
               {/* Three Column Layout: Alerts + Quick Actions + Pro prodejce */}
-              <div className="grid 2xl:grid-cols-[1fr_1fr_minmax(500px,1.5fr)] xl:grid-cols-3 lg:grid-cols-2 gap-6">
+              <div className="mb-4">
+                <div className="inline-flex w-full rounded-xl border border-border bg-card p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setDashboardTab("materials")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      dashboardTab === "materials"
+                        ? "bg-amber-100 text-amber-900"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    Dostupné materiály
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardTab("data")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      dashboardTab === "data"
+                        ? "bg-amber-100 text-amber-900"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    Data
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6">
                 {/* Left Column - Alerts */}
-                <div className="space-y-4">
+                <div className={`space-y-4 ${dashboardTab === "materials" ? "" : "hidden"}`}>
                   {(() => {
                     const dismissedAlerts = product.dismissedAlerts || [];
                     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -933,6 +1149,18 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         action: "Stáhnout"
                       });
                     }
+
+                    // Product banners available
+                    if (productBanners && productBanners.length > 0) {
+                      alerts.push({
+                        id: "has-banners",
+                        icon: "check",
+                        type: "new",
+                        message: `${productBanners.length} ${productBanners.length === 1 ? "banner" : "bannerů"} je k dispozici.`,
+                        action: "Zobrazit",
+                        date: productBanners[0]?.uploadedAt,
+                      });
+                    }
                     
                     // Why Buy points available
                     if (product.whyBuy && product.whyBuy.length > 0) {
@@ -958,7 +1186,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             {alertCount > 0 && <span className="text-green-600">({alertCount})</span>}
                           </h2>
                         </div>
-                        <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
                           {visibleAlerts.length > 0 ? visibleAlerts.map((alert) => (
                             <div 
                               key={alert.id}
@@ -1027,6 +1255,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                       setOpenPanel("gallery");
                                     } else if (alert.id === "has-pdf" && product.pdfUrl) {
                                       window.open(product.pdfUrl, "_blank");
+                                    } else if (alert.id === "has-banners") {
+                                      setDashboardTab("data");
                                     } else if (alert.id === "has-whybuy") {
                                       setActiveSection("marketing");
                                     }
@@ -1044,24 +1274,94 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 {/* Add to Sales Kit button */}
                                 <button
                                   onClick={() => {
-                                    const getKitItem = (): { id: string; type: "claim" | "reference" | "gallery" | "social" | "materials" | "whybuy"; label: string; content: string } | null => {
+                                    const getKitItem = (): {
+                                      id: string;
+                                      type: "claim" | "reference" | "gallery" | "social" | "materials" | "whybuy";
+                                      label: string;
+                                      content: string;
+                                    } | null => {
                                       if (alert.id === "has-claim" && product.salesClaim) {
-                                        return { id: "sales-claim", type: "claim", label: "Prodejní claim", content: product.salesClaim + (product.salesClaimSubtitle ? `\n${product.salesClaimSubtitle}` : "") };
+                                        return {
+                                          id: "sales-claim",
+                                          type: "claim",
+                                          label: "Prodejní claim",
+                                          content:
+                                            product.salesClaim +
+                                            (product.salesClaimSubtitle ? `\n${product.salesClaimSubtitle}` : ""),
+                                        };
                                       }
                                       if (alert.id === "has-reference-card" && product.quickReferenceCard) {
-                                        return { id: "reference-card", type: "reference", label: "Quick Reference Card", content: product.quickReferenceCard };
+                                        return {
+                                          id: "reference-card",
+                                          type: "reference",
+                                          label: "Quick Reference Card",
+                                          content: product.quickReferenceCard,
+                                        };
                                       }
                                       if (alert.id === "has-fb" && product.socialFacebook) {
-                                        return { id: "fb-post", type: "social", label: "Facebook post", content: product.socialFacebook };
+                                        return {
+                                          id: "fb-post",
+                                          type: "social",
+                                          label: "Facebook post",
+                                          content: product.socialFacebook,
+                                        };
                                       }
                                       if (alert.id === "has-ig" && product.socialInstagram) {
-                                        return { id: "ig-post", type: "social", label: "Instagram post", content: product.socialInstagram };
+                                        return {
+                                          id: "ig-post",
+                                          type: "social",
+                                          label: "Instagram post",
+                                          content: product.socialInstagram,
+                                        };
+                                      }
+                                      if (alert.id === "has-gallery" && galleryImages && galleryImages.length > 0) {
+                                        const urls =
+                                          galleryImages
+                                            .map((img) => img.url)
+                                            .filter((url): url is string => !!url) ?? [];
+                                        const content =
+                                          urls.length > 0
+                                            ? `Obrázky v galerii: ${galleryImages.length}\n\nOdkazy:\n${urls
+                                                .slice(0, 5)
+                                                .join("\n")}${urls.length > 5 ? "\n..." : ""}`
+                                            : `Obrázky v galerii: ${galleryImages.length}`;
+                                        return {
+                                          id: "gallery-images",
+                                          type: "gallery",
+                                          label: `Galerie (${galleryImages.length} obr.)`,
+                                          content,
+                                        };
                                       }
                                       if (alert.id === "has-pdf" && product.pdfUrl) {
-                                        return { id: "pdf-link", type: "materials", label: "PDF odkaz", content: product.pdfUrl };
+                                        return {
+                                          id: "pdf-link",
+                                          type: "materials",
+                                          label: "PDF odkaz",
+                                          content: product.pdfUrl,
+                                        };
+                                      }
+                                      if (alert.id === "has-banners" && productBanners && productBanners.length > 0) {
+                                        const content = productBanners
+                                          .map((b) => {
+                                            const tags = b.tags?.length ? ` [${b.tags.join(", ")}]` : "";
+                                            const link = b.url ? ` - ${b.url}` : "";
+                                            return `${b.filename} (${b.width}x${b.height})${tags}${link}`;
+                                          })
+                                          .join("\n");
+                                        return {
+                                          id: "product-banners",
+                                          type: "materials",
+                                          label: `Bannery (${productBanners.length})`,
+                                          content,
+                                        };
                                       }
                                       if (alert.id === "has-whybuy" && product.whyBuy) {
-                                        return { id: "why-buy", type: "whybuy", label: "Proč koupit", content: product.whyBuy.join("\n• ") };
+                                        return {
+                                          id: "why-buy",
+                                          type: "whybuy",
+                                          label: "Proč koupit",
+                                          content: product.whyBuy.join("\n• "),
+                                        };
                                       }
                                       return null;
                                     };
@@ -1069,13 +1369,16 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     if (item) addToSalesKit(item);
                                   }}
                                   className={`px-2 py-1.5 rounded text-xs font-bold transition-colors ${
-                                    salesKitItems.find(i => 
-                                      (alert.id === "has-claim" && i.id === "sales-claim") ||
-                                      (alert.id === "has-reference-card" && i.id === "reference-card") ||
-                                      (alert.id === "has-fb" && i.id === "fb-post") ||
-                                      (alert.id === "has-ig" && i.id === "ig-post") ||
-                                      (alert.id === "has-pdf" && i.id === "pdf-link") ||
-                                      (alert.id === "has-whybuy" && i.id === "why-buy")
+                                    salesKitItems.find(
+                                      (i) =>
+                                        (alert.id === "has-claim" && i.id === "sales-claim") ||
+                                        (alert.id === "has-reference-card" && i.id === "reference-card") ||
+                                        (alert.id === "has-fb" && i.id === "fb-post") ||
+                                        (alert.id === "has-ig" && i.id === "ig-post") ||
+                                        (alert.id === "has-gallery" && i.id === "gallery-images") ||
+                                        (alert.id === "has-pdf" && i.id === "pdf-link") ||
+                                        (alert.id === "has-banners" && i.id === "product-banners") ||
+                                        (alert.id === "has-whybuy" && i.id === "why-buy"),
                                     )
                                       ? "bg-primary text-primary-foreground"
                                       : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"
@@ -1087,7 +1390,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </div>
                             </div>
                           )) : (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <div className="md:col-span-2 flex flex-col items-center justify-center py-8 text-center">
                               <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -1104,6 +1407,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                 </div>
 
                 {/* Right Column - Quick Actions */}
+                <div className={`${dashboardTab === "data" ? "grid grid-cols-1 xl:grid-cols-2 gap-6" : "hidden"}`}>
                 <div className="bg-card border border-border rounded-xl overflow-hidden h-full">
                   <div className="p-4 border-b border-border bg-muted/30">
                     <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
@@ -1112,66 +1416,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     </h2>
                   </div>
                   <div className="p-4 space-y-3">
-                    {/* Quick Reference Card - First */}
-                    <div className={`w-full rounded-xl transition-colors ${
-                        product.quickReferenceCard
-                          ? "bg-gray-800 border border-gray-700"
-                          : "bg-gray-50 border-2 border-dashed border-gray-300"
-                      }`}>
-                      <div className="flex items-center gap-4 p-4">
-                        <button
-                          onClick={() => setOpenPanel("referenceCard")}
-                          className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                        >
-                          <div className="relative flex-shrink-0">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              product.quickReferenceCard ? "bg-gray-700" : "bg-gray-200"
-                            }`}>
-                              <span className="text-2xl">📋</span>
-                            </div>
-                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-green-500 text-white text-xs font-bold rounded-full flex items-center justify-center">1</span>
-                          </div>
-                          <div className="flex-1">
-                            <p className={`font-semibold flex items-center gap-2 ${product.quickReferenceCard ? "text-green-400" : "text-foreground"}`}>
-                              Quick Reference Card
-                              {product.quickReferenceCard && (
-                                <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full">✓</span>
-                              )}
-                            </p>
-                            <p className={`text-sm ${product.quickReferenceCard ? "text-gray-400" : "text-muted-foreground"}`}>
-                              {product.quickReferenceCard 
-                                ? "Zobrazit kartu pro prodejce" 
-                                : "Karta není vyplněna"}
-                            </p>
-                          </div>
-                          <svg className={`w-5 h-5 ${product.quickReferenceCard ? "text-gray-500" : "text-muted-foreground"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                        {product.quickReferenceCard && (
-                          <button
-                            onClick={() => addToSalesKit({
-                              id: "reference-card",
-                              type: "reference",
-                              label: "Quick Reference Card",
-                              content: product.quickReferenceCard || ""
-                            })}
-                            className={`p-2 rounded-lg transition-colors ${
-                              salesKitItems.find(i => i.id === "reference-card")
-                                ? "bg-green-500 text-white"
-                                : "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                            }`}
-                            title="Přidat do Sales Kit"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Gallery - Second */}
+                    {/* Gallery - First */}
                     <div className={`w-full rounded-xl transition-colors ${
                         galleryImages && galleryImages.length > 0
                           ? "bg-purple-50 border border-purple-200"
@@ -1231,14 +1476,13 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               onClick={() => setOpenPanel("gallery")}
                               className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
                             >
-                              <div className="relative flex-shrink-0">
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                                  galleryImages && galleryImages.length > 0 ? "bg-purple-100" : "bg-gray-200"
-                                }`}>
-                                  <span className="text-2xl">🖼️</span>
-                                </div>
-                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">2</span>
+                            <div className="relative flex-shrink-0">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                galleryImages && galleryImages.length > 0 ? "bg-purple-100" : "bg-gray-200"
+                              }`}>
+                                <span className="text-2xl">🖼️</span>
                               </div>
+                            </div>
                               <div className="flex-1">
                                 <p className="font-semibold text-foreground flex items-center gap-2">
                                   Galerie
@@ -1259,12 +1503,23 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {galleryImages && galleryImages.length > 0 && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); addToSalesKit({
-                                    id: "gallery-images",
-                                    type: "gallery",
-                                    label: `Galerie (${galleryImages.length} obr.)`,
-                                    content: `Obrázky v galerii: ${galleryImages.length}\n\nOdkazy:\n${galleryImages.slice(0, 5).map(img => img.url).join("\n")}${galleryImages.length > 5 ? "\n..." : ""}`
-                                  }); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const urls = galleryImages
+                                      .map(img => img.url)
+                                      .filter((url): url is string => !!url);
+                                    if (urls.length === 0) {
+                                      return;
+                                    }
+                                    addToSalesKit({
+                                      id: "gallery-images",
+                                      type: "gallery",
+                                      label: `Galerie (${galleryImages.length} obr.)`,
+                                      content: `Obrázky v galerii: ${galleryImages.length}\n\nOdkazy:\n${urls.slice(0, 5).join("\n")}${urls.length > 5 ? "\n..." : ""}`,
+                                    });
+                                    setSaveMessage("Galerie přidána do Sales Kit");
+                                    setTimeout(() => setSaveMessage(null), 2000);
+                                  }}
                                   className={`p-2 rounded-lg transition-colors ${
                                     salesKitItems.find(i => i.id === "gallery-images")
                                       ? "bg-green-500 text-white"
@@ -1277,19 +1532,168 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   </svg>
                                 </button>
                               )}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setInlineEdit("gallery"); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Nahrát obrázek"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setInlineEdit("gallery"); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Nahrát obrázek"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Banners */}
+                    <div
+                      className={`w-full rounded-xl transition-colors ${
+                        productBanners && productBanners.length > 0
+                          ? "bg-cyan-50 border border-cyan-200"
+                          : "bg-gray-50 border-2 border-dashed border-gray-300"
+                      }`}
+                    >
+                      <div className="p-4">
+                        <div className="flex items-center gap-4">
+                          <div className="relative flex-shrink-0">
+                            <div
+                              className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                productBanners && productBanners.length > 0 ? "bg-cyan-100" : "bg-gray-200"
+                              }`}
+                            >
+                              <span className="text-2xl">🪧</span>
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-foreground flex items-center gap-2">
+                              Bannery
+                              {productBanners && productBanners.length > 0 && (
+                                <span className="text-xs bg-cyan-200 text-cyan-800 px-2 py-0.5 rounded-full">
+                                  {productBanners.length}
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Přehled bannerů včetně rozměrů a tagů.
+                            </p>
+                          </div>
+                          {productBanners && productBanners.length > 0 && (
+                            <button
+                              onClick={() => {
+                                const urls = productBanners
+                                  .map((b) => b.url)
+                                  .filter((url): url is string => !!url);
+                                const content = productBanners
+                                  .map((b) => {
+                                    const tags = b.tags?.length ? ` [${b.tags.join(", ")}]` : "";
+                                    const link = b.url ? ` - ${b.url}` : "";
+                                    return `${b.filename} (${b.width}x${b.height})${tags}${link}`;
+                                  })
+                                  .join("\n");
+                                addToSalesKit({
+                                  id: "product-banners",
+                                  type: "materials",
+                                  label: `Bannery (${productBanners.length})`,
+                                  content:
+                                    urls.length > 0
+                                      ? `Bannery (${productBanners.length}):\n${content}`
+                                      : `Bannery (${productBanners.length})`,
+                                });
+                                setSaveMessage("Bannery přidány do Sales Kit");
+                                setTimeout(() => setSaveMessage(null), 2000);
+                              }}
+                              className={`p-2 rounded-lg transition-colors ${
+                                salesKitItems.find(i => i.id === "product-banners")
+                                  ? "bg-green-500 text-white"
+                                  : "bg-cyan-100 hover:bg-cyan-200 text-cyan-700"
+                              }`}
+                              title="Přidat bannery do Sales Kit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+
+                        {canEdit && (
+                          <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                            <input
+                              value={bannerTagsInput}
+                              onChange={(e) => setBannerTagsInput(e.target.value)}
+                              placeholder="Tagy (např. banner e-shop, banner facebook)"
+                              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                            />
+                            <label className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-700 cursor-pointer">
+                              {isUploadingBanner ? "Nahrávám..." : "Nahrát banner"}
+                              <input
+                                ref={bannerFileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleBannerUpload}
+                                disabled={isUploadingBanner}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        )}
+
+                        {productBanners && productBanners.length > 0 ? (
+                          <div className="mt-4 space-y-2">
+                            {productBanners.map((banner) => (
+                              <div
+                                key={banner._id}
+                                className="flex items-center gap-3 p-3 bg-white/80 rounded-lg border border-cyan-100"
+                              >
+                                <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex-shrink-0">
+                                  {banner.url ? (
+                                    <img src={banner.url} alt={banner.filename} className="w-full h-full object-cover" />
+                                  ) : null}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">{banner.filename}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {banner.width} x {banner.height}px • {(banner.size / 1024).toFixed(0)} KB
+                                  </p>
+                                  {banner.tags?.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {banner.tags.map((tag, idx) => (
+                                        <span key={`${banner._id}-${tag}-${idx}`} className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800">
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                {banner.url && (
+                                  <a
+                                    href={banner.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2 py-1.5 text-xs rounded-md bg-cyan-100 hover:bg-cyan-200 text-cyan-800"
+                                  >
+                                    Otevřít
+                                  </a>
+                                )}
+                                {canEdit && (
+                                  <button
+                                    onClick={() => deleteProductBanner({ id: banner._id })}
+                                    className="px-2 py-1.5 text-xs rounded-md bg-red-100 hover:bg-red-200 text-red-700"
+                                  >
+                                    Smazat
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-sm text-muted-foreground">Zatím nejsou nahrané žádné bannery.</p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Facebook & Instagram Images */}
@@ -1345,7 +1749,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               setIsSaving(true);
                               try {
                                 const [fbImage, igImage] = inlineValue.split("|||");
-                                await updateMarketingData({
+                                await saveMarketing({
                                   id: productId,
                                   socialFacebookImage: fbImage?.trim() || undefined,
                                   socialInstagramImage: igImage?.trim() || undefined,
@@ -1392,18 +1796,20 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
                               </button>
-                              <button
-                                onClick={() => { 
-                                  setInlineEdit("socialImages"); 
-                                  setInlineValue(`${product.socialFacebookImage || ""}|||${product.socialInstagramImage || ""}`);
-                                }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { 
+                                    setInlineEdit("socialImages"); 
+                                    setInlineValue(`${product.socialFacebookImage || ""}|||${product.socialInstagramImage || ""}`);
+                                  }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-3">
@@ -1415,13 +1821,38 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   </svg>
                                   Facebook
                                 </div>
-                                <a href={product.socialFacebookImage} target="_blank" rel="noopener noreferrer" className="block">
-                                  <img 
-                                    src={product.socialFacebookImage} 
-                                    alt="Facebook" 
-                                    className="w-full h-24 object-cover rounded-lg border hover:opacity-80 transition-opacity"
-                                  />
-                                </a>
+                                {isImageUrl(product.socialFacebookImage) ? (
+                                  <a
+                                    href={product.socialFacebookImage}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block"
+                                  >
+                                    <img 
+                                      src={product.socialFacebookImage} 
+                                      alt="Facebook" 
+                                      className="w-full h-24 object-cover rounded-lg border hover:opacity-80 transition-opacity"
+                                    />
+                                  </a>
+                                ) : (
+                                  <div className="w-full rounded-lg border border-blue-100 bg-blue-50 overflow-hidden">
+                                    <iframe
+                                      src={getFacebookEmbedUrl(product.socialFacebookImage)}
+                                      className="w-full h-40"
+                                      style={{ border: "none", overflow: "hidden" }}
+                                      scrolling="no"
+                                      frameBorder={0}
+                                      allow="encrypted-media; picture-in-picture"
+                                    />
+                                  </div>
+                                )}
+                                {product.socialFacebook && (
+                                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                                    {product.socialFacebook.length > 140
+                                      ? `${product.socialFacebook.slice(0, 140)}…`
+                                      : product.socialFacebook}
+                                  </p>
+                                )}
                               </div>
                             )}
                             {product.socialInstagramImage && (
@@ -1439,6 +1870,13 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     className="w-full h-24 object-cover rounded-lg border hover:opacity-80 transition-opacity"
                                   />
                                 </a>
+                                {product.socialInstagram && (
+                                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                                    {product.socialInstagram.length > 140
+                                      ? `${product.socialInstagram.slice(0, 140)}…`
+                                      : product.socialInstagram}
+                                  </p>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1446,14 +1884,14 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("socialImages"); setInlineValue("|||"); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("socialImages"); setInlineValue("|||"); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">📷</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">3</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Facebook a Instagram obrázky</p>
@@ -1533,6 +1971,30 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           >
                             {isSaving ? "Ukládám..." : "Uložit odkaz"}
                           </button>
+                          {canEdit && product.pdfUrl && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Opravdu smazat produktový list (PDF) z tohoto produktu?")) return;
+                                setIsSaving(true);
+                                try {
+                                  await clearPdfUrl({ id: productId });
+                                  setInlineValue("");
+                                  setInlineEdit(null);
+                                  setSaveMessage("Produktový list smazán.");
+                                  setTimeout(() => setSaveMessage(null), 2000);
+                                } catch (error) {
+                                  console.error("Error deleting PDF:", error);
+                                  alert("Chyba při mazání PDF");
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                              disabled={isSaving}
+                              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                            >
+                              Smazat produktový list
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="p-4">
@@ -1547,10 +2009,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 }`}>
                                   <span className="text-2xl">📥</span>
                                 </div>
-                                <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">4</span>
                               </div>
                               <div className="flex-1">
-                                <p className="font-semibold text-foreground">Stáhnout materiály</p>
+                                <p className="font-semibold text-foreground">Produktové listy</p>
                                 <p className="text-sm text-muted-foreground">
                                   {product.pdfUrl || (product.bannerUrls && product.bannerUrls.length > 0)
                                     ? "PDF listy a bannery ke stažení"
@@ -1567,7 +2028,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   onClick={(e) => { e.stopPropagation(); addToSalesKit({
                                     id: "download-materials",
                                     type: "materials",
-                                    label: "Materiály ke stažení",
+                                    label: "Produktové listy",
                                     content: [
                                       product.pdfUrl ? `PDF: ${product.pdfUrl}` : "",
                                       product.bannerUrls?.length ? `Bannery:\n${product.bannerUrls.join("\n")}` : ""
@@ -1585,53 +2046,160 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   </svg>
                                 </button>
                               )}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setInlineEdit("materials"); setInlineValue(product.pdfUrl || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Přidat PDF odkaz"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setInlineEdit("materials"); setInlineValue(product.pdfUrl || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Přidat PDF odkaz"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* Promotion History - Fifth */}
+                    {/* Product video - Fifth */}
                     <div className={`w-full rounded-xl transition-colors ${
-                        promotionLogs && promotionLogs.length > 0
-                          ? "bg-indigo-50 border border-indigo-200"
+                        product.videoUrl
+                          ? "bg-red-50 border border-red-200"
                           : "bg-gray-50 border-2 border-dashed border-gray-300"
                       }`}>
-                      <div className="flex items-center gap-4 p-4">
-                        <button
-                          onClick={() => setOpenPanel("promotionHistory")}
-                          className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                        >
-                          <div className="relative flex-shrink-0">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              promotionLogs && promotionLogs.length > 0 ? "bg-indigo-100" : "bg-gray-200"
-                            }`}>
-                              <span className="text-2xl">📜</span>
+                      {inlineEdit === "video" ? (
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">
+                                  5
+                                </span>
+                                Produktové video (YouTube)
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Vložte odkaz na YouTube video (např.{" "}
+                                <code className="text-xs">https://www.youtube.com/watch?v=...</code> nebo{" "}
+                                <code className="text-xs">https://youtu.be/...</code>).
+                              </p>
                             </div>
-                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">5</span>
+                            <button
+                              onClick={() => { setInlineEdit(null); setInlineValue(""); }}
+                              className="p-1 hover:bg-black/5 rounded-lg"
+                              title="Zavřít"
+                            >
+                              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-foreground">Historie propagace</p>
-                            <p className="text-sm text-muted-foreground">
-                              {promotionLogs && promotionLogs.length > 0
-                                ? `${promotionLogs.length} ${promotionLogs.length === 1 ? "záznam" : promotionLogs.length < 5 ? "záznamy" : "záznamů"}`
-                                : "Zatím žádné záznamy"}
+                          <div className="space-y-2">
+                            <Input
+                              placeholder="https://www.youtube.com/watch?v=..."
+                              value={inlineValue}
+                              onChange={(e) => setInlineValue(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Podporovány jsou standardní YouTube odkazy i zkrácené <code>youtu.be</code>. Video se zobrazí v horní části detailu produktu.
                             </p>
                           </div>
-                          <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
+                          <button
+                            onClick={() => handleInlineSave("videoUrl", inlineValue)}
+                            disabled={isSaving}
+                            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {isSaving ? "Ukládám..." : "Uložit video"}
+                          </button>
+                          {canEdit && product.videoUrl && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Opravdu smazat odkaz na produktové video?")) return;
+                                setIsSaving(true);
+                                try {
+                                  await clearVideoUrl({ id: productId });
+                                  setInlineValue("");
+                                  setInlineEdit(null);
+                                  setSaveMessage("Video odkaz smazán.");
+                                  setTimeout(() => setSaveMessage(null), 2000);
+                                } catch (error) {
+                                  console.error("Error deleting video URL:", error);
+                                  alert("Chyba při mazání video odkazu");
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                              disabled={isSaving}
+                              className="w-full px-4 py-2 bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-800 disabled:opacity-50"
+                            >
+                              Smazat video odkaz
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-4">
+                          <div className="flex items-center gap-4">
+                            <button
+                              onClick={() => { if (!canEdit) return; setInlineEdit("video"); setInlineValue(product.videoUrl || ""); }}
+                              className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                              disabled={!canEdit}
+                            >
+                              <div className="relative flex-shrink-0">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                  product.videoUrl ? "bg-red-100" : "bg-gray-200"
+                                }`}>
+                                  <span className="text-2xl">▶️</span>
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-foreground">Produktové video</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {product.videoUrl
+                                    ? "Video z YouTube je připojeno"
+                                    : "Přidejte odkaz na YouTube video k tomuto produktu"}
+                                </p>
+                              </div>
+                            </button>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {product.videoUrl && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    addToSalesKit({
+                                      id: "product-video",
+                                      type: "materials",
+                                      label: "Produktové video",
+                                      content: `Video: ${product.videoUrl}`,
+                                    });
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    salesKitItems.find(i => i.id === "product-video")
+                                      ? "bg-green-500 text-white"
+                                      : "bg-red-100 hover:bg-red-200 text-red-700"
+                                  }`}
+                                  title="Přidat do Sales Kit"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+                              )}
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("video"); setInlineValue(product.videoUrl || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit produktové video"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* View on e-shop */}
@@ -1646,7 +2214,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                             <span className="text-2xl">🛒</span>
                           </div>
-                          <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
                         </div>
                         <div className="flex-1">
                           <p className="font-semibold text-foreground">Zobrazit na e-shopu</p>
@@ -1657,74 +2224,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </svg>
                       </a>
                     )}
-
-                    {/* Edit Marketing Data */}
-                    {(() => {
-                      const missingFields: string[] = [];
-                      if (!product.salesClaim) missingFields.push("claim");
-                      if (!product.tier) missingFields.push("tier");
-                      if (!product.brandPillar) missingFields.push("pillar");
-                      const hasMissing = missingFields.length > 0;
-                      return (
-                        <button
-                          onClick={() => setOpenPanel("edit")}
-                          className={`w-full flex items-center gap-4 p-4 rounded-xl transition-colors text-left ${
-                            hasMissing
-                              ? "bg-red-50 hover:bg-red-100 border-2 border-dashed border-red-300"
-                              : "bg-amber-50 hover:bg-amber-100 border border-amber-200"
-                          }`}
-                        >
-                          <div className="relative flex-shrink-0">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              hasMissing ? "bg-red-100" : "bg-amber-100"
-                            }`}>
-                              <span className="text-2xl">{hasMissing ? "⚠️" : "✏️"}</span>
-                            </div>
-                            <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">7</span>
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-foreground flex items-center gap-2">
-                              Upravit data
-                              {hasMissing && (
-                                <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded-full">
-                                  {missingFields.length} chybí
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {hasMissing
-                                ? "Doplňte chybějící marketingové údaje!"
-                                : "Editovat marketingové informace"}
-                            </p>
-                          </div>
-                          <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      );
-                    })()}
-
-                    {/* Presentation */}
-                    <a
-                      href="https://notebooklm.google.com/notebook/8e4b446d-d801-44d3-a6cb-4f5ea37760e8?artifactId=3e6d9eb6-b181-4b66-904f-12f224eb5235"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center gap-4 p-4 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors"
-                    >
-                      <div className="relative flex-shrink-0">
-                        <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                          <span className="text-2xl">📊</span>
-                        </div>
-                        <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">6</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-foreground">Prezentace</p>
-                        <p className="text-sm text-muted-foreground">Otevřít AI prezentaci produktu</p>
-                      </div>
-                      <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
 
                     {/* Quick Reference Card */}
                     <div className={`w-full rounded-xl transition-colors ${
@@ -1760,15 +2259,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             </p>
                             <div className="flex items-center gap-2">
                               <CopyButton text={product.quickReferenceCard} />
-                              <button
-                                onClick={() => { setInlineEdit("referenceCard"); setInlineValue(product.quickReferenceCard || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit kartu"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("referenceCard"); setInlineValue(product.quickReferenceCard || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit kartu"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
@@ -1778,14 +2279,14 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("referenceCard"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("referenceCard"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-gray-200 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">📋</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">7</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Quick Reference Card</p>
@@ -1936,7 +2437,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">📰</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">10</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Články</p>
@@ -1966,11 +2466,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               }`}>
                                 <span className="text-xl sm:text-2xl">{product.isTop ? "⭐" : "☆"}</span>
                               </div>
-                              {product.topOrder && (
-                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                                  {product.topOrder}
-                                </span>
-                              )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold text-foreground flex items-center gap-2 flex-wrap">
@@ -2095,7 +2590,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             <div 
                               key={img._id} 
                               className="aspect-square rounded-lg overflow-hidden bg-white border cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                              onClick={() => img.url && handleOpenLightbox(index)}
+                              onClick={() => img.url && openLightboxFromGallery(index)}
                             >
                               {img.url ? (
                                 <Image
@@ -2124,6 +2619,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         <p className="text-xs text-muted-foreground mb-2 font-medium">PRODEJNÍ CLAIM</p>
                         <p className="text-foreground font-medium mb-3">{product.salesClaim}</p>
                         <CopyButton text={product.salesClaim} />
+                        {renderEditorStamp("salesClaim")}
                       </div>
                     )}
                   </div>
@@ -2160,7 +2656,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             onClick={async () => {
                               setIsSaving(true);
                               try {
-                                await updateMarketingData({
+                                await saveMarketing({
                                   id: productId,
                                   mainBenefits: inlineValue.trim() || undefined,
                                 });
@@ -2204,32 +2700,35 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.mainBenefits || ""} />
-                              <button
-                                onClick={() => { setInlineEdit("mainBenefits"); setInlineValue(product.mainBenefits || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("mainBenefits"); setInlineValue(product.mainBenefits || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <pre className="p-3 bg-gray-900 text-amber-300 rounded-lg text-xs font-mono whitespace-pre-wrap overflow-x-auto">
                             {product.mainBenefits}
                           </pre>
+                          {renderEditorStamp("mainBenefits")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("mainBenefits"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("mainBenefits"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">🎯</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">0</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">3 hlavní benefity</p>
@@ -2295,32 +2794,35 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.herbComposition || ""} />
-                              <button
-                                onClick={() => { setInlineEdit("herbComposition"); setInlineValue(product.herbComposition || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("herbComposition"); setInlineValue(product.herbComposition || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <pre className="text-xs font-mono whitespace-pre-wrap bg-gray-900 text-lime-300 p-4 rounded-lg overflow-x-auto">
                             {product.herbComposition}
                           </pre>
+                          {renderEditorStamp("herbComposition")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("herbComposition"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("herbComposition"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-lime-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">🌿</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">0</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">Hlavní zastoupení bylinek</p>
@@ -2334,113 +2836,22 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
-                    {/* Competition Comparison */}
+                    {/* Seasonal Opportunities (formerly Sales Forecast) */}
                     <div className={`w-full rounded-xl transition-colors ${
-                      product.competitionComparison
-                        ? "bg-orange-50 border border-orange-200"
-                        : "bg-gray-50 border-2 border-dashed border-gray-300"
-                    }`}>
-                      {inlineEdit === "competitionComparison" ? (
-                        <div className="p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-foreground">⚔️ Srovnání s konkurencí</p>
-                            <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
-                          </div>
-                          <textarea
-                            value={inlineValue}
-                            onChange={(e) => setInlineValue(e.target.value)}
-                            placeholder="Vložte srovnání s konkurencí..."
-                            className="w-full p-3 border rounded-lg text-xs font-mono min-h-[300px] resize-none bg-gray-900 text-orange-300"
-                          />
-                          <button
-                            onClick={() => handleInlineSave("competitionComparison", inlineValue)}
-                            disabled={isSaving}
-                            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
-                          >
-                            {isSaving ? "Ukládám..." : "Uložit"}
-                          </button>
-                        </div>
-                      ) : product.competitionComparison ? (
-                        <div className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <p className="font-semibold text-foreground flex items-center gap-2">
-                              <span>⚔️</span> Srovnání s konkurencí
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => addToSalesKit({
-                                  id: "competitionComparison",
-                                  type: "materials",
-                                  label: "Srovnání s konkurencí",
-                                  content: product.competitionComparison || ""
-                                })}
-                                className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "competitionComparison")
-                                    ? "bg-green-500 text-white"
-                                    : "bg-orange-100 hover:bg-orange-200 text-orange-700"
-                                }`}
-                                title="Přidat do Sales Kit"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                              </button>
-                              <CopyButton text={product.competitionComparison || ""} />
-                              <button
-                                onClick={() => { setInlineEdit("competitionComparison"); setInlineValue(product.competitionComparison || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                          <pre className="text-xs font-mono whitespace-pre-wrap bg-gray-900 text-orange-300 p-4 rounded-lg overflow-x-auto">
-                            {product.competitionComparison}
-                          </pre>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 p-4">
-                          <button
-                            onClick={() => { setInlineEdit("competitionComparison"); setInlineValue(""); }}
-                            className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
-                          >
-                            <div className="relative flex-shrink-0">
-                              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                                <span className="text-2xl">⚔️</span>
-                              </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">0</span>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-foreground">Srovnání s konkurencí</p>
-                              <p className="text-sm text-muted-foreground">Přidejte srovnání produktu vs. konkurence</p>
-                            </div>
-                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Sales Forecast */}
-                    <div className={`w-full rounded-xl transition-colors ${
-                      product.salesForecast
+                      seasonalOpportunitiesText
                         ? "bg-purple-50 border border-purple-200"
                         : "bg-gray-50 border-2 border-dashed border-gray-300"
                     }`}>
                       {inlineEdit === "salesForecast" ? (
                         <div className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
-                            <p className="font-semibold text-foreground">📊 Předpokládaná křivka prodejů</p>
+                            <p className="font-semibold text-foreground">📅 Sezónní příležitosti</p>
                             <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
                           </div>
                           <textarea
                             value={inlineValue}
                             onChange={(e) => setInlineValue(e.target.value)}
-                            placeholder="Vložte graf prodejů (ASCII art)..."
+                            placeholder="Přidejte předpokládané prodeje po měsících"
                             className="w-full p-3 border rounded-lg text-xs font-mono min-h-[250px] resize-none bg-gray-900 text-purple-300"
                           />
                           <button
@@ -2455,15 +2866,15 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         <div className="p-4">
                           <div className="flex items-center justify-between mb-3">
                             <p className="font-semibold text-foreground flex items-center gap-2">
-                              <span>📊</span> Předpokládaná křivka prodejů
+                              <span>📅</span> Sezónní příležitosti
                             </p>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => addToSalesKit({
                                   id: "salesForecast",
                                   type: "materials",
-                                  label: "Křivka prodejů",
-                                  content: product.salesForecast || ""
+                                  label: "Sezónní příležitosti",
+                                  content: seasonalOpportunitiesText
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
                                   salesKitItems.find(i => i.id === "salesForecast")
@@ -2476,36 +2887,39 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
                               </button>
-                              <CopyButton text={product.salesForecast} />
-                              <button
-                                onClick={() => { setInlineEdit("salesForecast"); setInlineValue(product.salesForecast || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit graf"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              <CopyButton text={seasonalOpportunitiesText} />
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("salesForecast"); setInlineValue(seasonalOpportunitiesText); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                            <pre className="text-xs text-purple-300 font-mono whitespace-pre">{product.salesForecast}</pre>
+                            <pre className="text-xs text-purple-300 font-mono whitespace-pre">{seasonalOpportunitiesText}</pre>
                           </div>
+                          {renderEditorStamp("salesForecast")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("salesForecast"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("salesForecast"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                                <span className="text-2xl">📊</span>
+                                <span className="text-2xl">📅</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">1</span>
                             </div>
                             <div className="flex-1">
-                              <p className="font-semibold text-foreground">Křivka prodejů</p>
+                              <p className="font-semibold text-foreground">Sezónní příležitosti</p>
                               <p className="text-sm text-muted-foreground">Přidejte předpokládané prodeje po měsících</p>
                             </div>
                             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2571,32 +2985,35 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.faqText} />
-                              <button
-                                onClick={() => { setInlineEdit("faq"); setInlineValue(product.faqText || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit FAQ"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("faq"); setInlineValue(product.faqText || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit FAQ"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
                             <pre className="text-[10px] text-green-400 font-mono whitespace-pre leading-tight">{product.faqText}</pre>
                           </div>
+                          {renderEditorStamp("faqText")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("faq"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("faq"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
                                 <span className="text-2xl">💬</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">2</span>
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-foreground">FAQ</p>
@@ -2610,50 +3027,50 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
-                    {/* Sezónní příležitosti Section - Editable */}
+                    {/* Cílová skupina Section - Editable */}
                     <div className={`w-full rounded-xl transition-colors ${
-                      product.seasonalOpportunities
-                        ? "bg-[#f0f8f0] border border-green-200"
+                      product.targetAudience
+                        ? "bg-[#f5f9ff] border border-blue-200"
                         : "bg-gray-50 border-2 border-dashed border-gray-300"
                     }`}>
-                      {inlineEdit === "seasonalOpportunities" ? (
+                      {inlineEdit === "targetAudience" ? (
                         <div className="p-4 space-y-3">
                           <div className="flex items-center justify-between">
-                            <p className="font-semibold text-foreground">📅 SEZÓNNÍ PŘÍLEŽITOSTI</p>
+                            <p className="font-semibold text-foreground">👥 CÍLOVÁ SKUPINA</p>
                             <button onClick={() => setInlineEdit(null)} className="text-muted-foreground hover:text-foreground">✕</button>
                           </div>
                           <textarea
                             value={inlineValue}
                             onChange={(e) => setInlineValue(e.target.value)}
-                            placeholder="Vložte tabulku sezónních příležitostí (ASCII art)..."
-                            className="w-full p-3 border rounded-lg text-xs font-mono min-h-[250px] resize-none bg-gray-900 text-green-400"
+                            placeholder="Vložte popis cílové skupiny (ASCII art text)..."
+                            className="w-full p-3 border rounded-lg text-xs font-mono min-h-[220px] resize-none bg-gray-900 text-blue-300"
                           />
                           <button
-                            onClick={() => handleInlineSave("seasonalOpportunities", inlineValue)}
+                            onClick={() => handleInlineSave("targetAudience", inlineValue)}
                             disabled={isSaving}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                           >
                             {isSaving ? "Ukládám..." : "Uložit"}
                           </button>
                         </div>
-                      ) : product.seasonalOpportunities ? (
+                      ) : product.targetAudience ? (
                         <div className="p-5">
                           <div className="flex items-center justify-between mb-4">
                             <p className="font-semibold text-foreground flex items-center gap-2 text-lg">
-                              <span>📅</span> SEZÓNNÍ PŘÍLEŽITOSTI
+                              <span>👥</span> CÍLOVÁ SKUPINA
                             </p>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => addToSalesKit({
-                                  id: "seasonal-opportunities",
+                                  id: "target-audience",
                                   type: "whybuy",
-                                  label: "Sezónní příležitosti",
-                                  content: product.seasonalOpportunities || ""
+                                  label: "Cílová skupina",
+                                  content: product.targetAudience || ""
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "seasonal-opportunities")
+                                  salesKitItems.find(i => i.id === "target-audience")
                                     ? "bg-green-500 text-white"
-                                    : "bg-green-100 hover:bg-green-200 text-green-700"
+                                    : "bg-blue-100 hover:bg-blue-200 text-blue-700"
                                 }`}
                                 title="Přidat do Sales Kit"
                               >
@@ -2661,37 +3078,39 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
                               </button>
-                              <CopyButton text={product.seasonalOpportunities} />
-                              <button
-                                onClick={() => { setInlineEdit("seasonalOpportunities"); setInlineValue(product.seasonalOpportunities || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              <CopyButton text={product.targetAudience} />
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("targetAudience"); setInlineValue(product.targetAudience || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
-                            <pre className="text-[10px] text-green-400 font-mono whitespace-pre leading-tight">{product.seasonalOpportunities}</pre>
+                            <pre className="text-[10px] text-blue-300 font-mono whitespace-pre leading-tight">{product.targetAudience}</pre>
                           </div>
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("seasonalOpportunities"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("targetAudience"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
-                              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                                <span className="text-2xl">📅</span>
+                              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                <span className="text-2xl">👥</span>
                               </div>
-                              <span className="absolute -top-1 -left-1 w-5 h-5 bg-foreground text-background text-xs font-bold rounded-full flex items-center justify-center">3</span>
                             </div>
                             <div className="flex-1">
-                              <p className="font-semibold text-foreground">Sezónní příležitosti</p>
-                              <p className="text-sm text-muted-foreground">Přidejte tabulku sezónních prodejních příležitostí</p>
+                              <p className="font-semibold text-foreground">Cílová skupina</p>
+                              <p className="text-sm text-muted-foreground">Přidejte popis cílové skupiny zákazníků</p>
                             </div>
                             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -2753,26 +3172,30 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 </svg>
                               </button>
                               <CopyButton text={product.sensoryProfile} />
-                              <button
-                                onClick={() => { setInlineEdit("sensoryProfile"); setInlineValue(product.sensoryProfile || ""); }}
-                                className="p-2 hover:bg-black/10 rounded-lg transition-colors"
-                                title="Upravit"
-                              >
-                                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("sensoryProfile"); setInlineValue(product.sensoryProfile || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
                             <pre className="text-[10px] text-purple-300 font-mono whitespace-pre leading-tight">{product.sensoryProfile}</pre>
                           </div>
+                          {renderEditorStamp("sensoryProfile")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
                           <button
-                            onClick={() => { setInlineEdit("sensoryProfile"); setInlineValue(""); }}
+                            onClick={() => { if (!canEdit) return; setInlineEdit("sensoryProfile"); setInlineValue(""); }}
                             className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                            disabled={!canEdit}
                           >
                             <div className="relative flex-shrink-0">
                               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -2792,6 +3215,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
 
@@ -3173,124 +3597,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     >
                       Otevřít plnou galerii →
                     </button>
-                  </div>
-                </SheetContent>
-              </Sheet>
-
-              {/* Promotion History Panel Sheet */}
-              <Sheet open={openPanel === "promotionHistory"} onOpenChange={(open) => !open && setOpenPanel(null)}>
-                <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-                  <SheetHeader className="mb-6">
-                    <SheetTitle className="flex items-center gap-2 text-xl">
-                      <span>📜</span>
-                      Historie propagace
-                    </SheetTitle>
-                  </SheetHeader>
-                  
-                  {/* Add new log form */}
-                  <div className="bg-muted/30 border border-border rounded-xl p-4 mb-6">
-                    <h3 className="font-semibold text-sm mb-3">Přidat záznam</h3>
-                    <div className="space-y-3">
-                      <Input
-                        placeholder="Název (např. TV Reklama, Facebook Ads)"
-                        value={newLogTitle}
-                        onChange={(e) => setNewLogTitle(e.target.value)}
-                        className="w-full"
-                      />
-                      <Input
-                        type="date"
-                        value={newLogDate}
-                        onChange={(e) => setNewLogDate(e.target.value)}
-                        className="w-full"
-                      />
-                      <Input
-                        placeholder="URL odkaz (volitelné)"
-                        value={newLogUrl}
-                        onChange={(e) => setNewLogUrl(e.target.value)}
-                        className="w-full"
-                      />
-                      <button
-                        onClick={async () => {
-                          if (!newLogTitle.trim() || !newLogDate) return;
-                          await addPromotionLog({
-                            productId,
-                            title: newLogTitle.trim(),
-                            date: new Date(newLogDate).getTime(),
-                            url: newLogUrl.trim() || undefined,
-                          });
-                          setNewLogTitle("");
-                          setNewLogDate("");
-                          setNewLogUrl("");
-                        }}
-                        disabled={!newLogTitle.trim() || !newLogDate}
-                        className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-                      >
-                        Přidat záznam
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Log list - GitHub style */}
-                  <div className="space-y-0">
-                    {promotionLogs && promotionLogs.length > 0 ? (
-                      <div className="border border-border rounded-xl overflow-hidden">
-                        {promotionLogs.map((log, index) => (
-                          <div 
-                            key={log._id}
-                            className={`flex items-center gap-3 p-3 ${
-                              index !== promotionLogs.length - 1 ? "border-b border-border" : ""
-                            } hover:bg-muted/30`}
-                          >
-                            {/* Commit dot */}
-                            <div className="w-3 h-3 rounded-full bg-indigo-500 flex-shrink-0" />
-                            
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm text-foreground truncate">{log.title}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(log.date).toLocaleDateString("cs-CZ", { 
-                                  day: "numeric", 
-                                  month: "short", 
-                                  year: "numeric" 
-                                })}
-                              </p>
-                            </div>
-                            
-                            {/* Actions */}
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {log.url && (
-                                <a
-                                  href={log.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground"
-                                  title="Otevřít odkaz"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                              )}
-                              <button
-                                onClick={() => removePromotionLog({ id: log._id })}
-                                className="p-1.5 hover:bg-red-100 rounded-lg text-muted-foreground hover:text-red-600"
-                                title="Smazat"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <span className="text-4xl mb-3 block">📭</span>
-                        <p className="text-sm">Zatím žádné záznamy propagace.</p>
-                        <p className="text-xs mt-1">Přidejte první záznam výše.</p>
-                      </div>
-                    )}
                   </div>
                 </SheetContent>
               </Sheet>
@@ -3913,7 +4219,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       <div
                         key={image._id}
                         className="relative group rounded-xl overflow-hidden bg-muted aspect-square cursor-pointer"
-                        onClick={() => image.url && handleOpenLightbox(index)}
+                        onClick={() => image.url && openLightboxFromGallery(index)}
                       >
                         {image.url ? (
                           <img
@@ -4057,13 +4363,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                 PDF
               </button>
               <button
-                onClick={() => setShowEmailDialog(true)}
+                onClick={() => {
+                  const shareUrl = generateSalesKitShareUrl();
+                  setSalesKitShareUrl(shareUrl);
+                  setShowPdfLinkDialog(true);
+                }}
                 className="flex items-center justify-center gap-1 px-2 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                Email
+                Odkaz
               </button>
             </div>
           )}
@@ -4082,31 +4392,41 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
         </button>
       )}
 
-      {/* Email Dialog */}
-      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+      {/* PDF Link Dialog */}
+      <Dialog open={showPdfLinkDialog} onOpenChange={setShowPdfLinkDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
-              Odeslat Sales Kit emailem
+              Odkaz na Sales Kit
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Email příjemce
+                Sdílitelný odkaz
               </label>
-              <Input
-                type="email"
-                placeholder="kolega@apotheke.cz"
-                value={emailTo}
-                onChange={(e) => setEmailTo(e.target.value)}
-              />
+              {salesKitShareUrl ? (
+                <div className="space-y-2">
+                  <Input
+                    value={salesKitShareUrl}
+                    readOnly
+                    className="font-mono text-xs"
+                  />
+                  <div className="flex justify-end">
+                    <CopyButton text={salesKitShareUrl} />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Odkaz se nepodařilo vygenerovat.
+                </p>
+              )}
             </div>
             <div className="bg-muted/50 rounded-lg p-3">
-              <p className="text-sm text-muted-foreground mb-2">Bude odesláno:</p>
+              <p className="text-sm text-muted-foreground mb-2">Obsah Sales Kitu:</p>
               <ul className="text-sm space-y-1">
                 {salesKitItems.map((item) => (
                   <li key={item.id} className="flex items-center gap-2">
@@ -4124,70 +4444,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setShowEmailDialog(false)}
+                onClick={() => setShowPdfLinkDialog(false)}
                 className="flex-1 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
               >
-                Zrušit
-              </button>
-              <button
-                onClick={async () => {
-                  if (!emailTo || !product) return;
-                  setIsSendingEmail(true);
-                  try {
-                    // Build email content
-                    const contentLines = [
-                      `PRODEJNÍ MATERIÁLY - ${product.name}`,
-                      ``,
-                      `Produkt: ${product.name}`,
-                      `Kód: ${product.externalId || productId}`,
-                      `Cena: ${product.price} Kč`,
-                      ``,
-                      `---`,
-                      ``,
-                    ];
-                    salesKitItems.forEach((item) => {
-                      contentLines.push(`▸ ${item.label.toUpperCase()}`);
-                      contentLines.push(``);
-                      contentLines.push(item.content);
-                      contentLines.push(``);
-                      contentLines.push(`---`);
-                      contentLines.push(``);
-                    });
-                    contentLines.push(`Vygenerováno: ${new Date().toLocaleString("cs-CZ")}`);
-                    
-                    await sendSalesKitEmail({
-                      email: emailTo,
-                      subject: `Sales Kit: ${product.name}`,
-                      content: contentLines.join("\n"),
-                    });
-                    setShowEmailDialog(false);
-                    setEmailTo("");
-                    setSaveMessage("Email odeslán!");
-                    setTimeout(() => setSaveMessage(null), 3000);
-                  } catch (error) {
-                    console.error("Error sending email:", error);
-                    setSaveMessage("Chyba při odesílání emailu");
-                    setTimeout(() => setSaveMessage(null), 3000);
-                  } finally {
-                    setIsSendingEmail(false);
-                  }
-                }}
-                disabled={!emailTo || isSendingEmail}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSendingEmail ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Odesílám...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                    Odeslat
-                  </>
-                )}
+                Zavřít
               </button>
             </div>
           </div>
@@ -4271,6 +4531,92 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
           )}
         </div>
       )}
+
+      {/* Editor selector floating chip (visible to editors) */}
+      {canEdit && (
+        <div className="fixed bottom-4 right-4 z-40">
+          <button
+            onClick={() => setEditorModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-full bg-card border border-border shadow-lg text-sm hover:shadow-xl transition-shadow"
+            title="Vybrat / přepnout editora"
+          >
+            <span className="text-muted-foreground">✏️</span>
+            {currentEditor ? (
+              <span className="font-semibold">{currentEditor}</span>
+            ) : (
+              <span className="text-muted-foreground">Vyberte editora</span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* "Kdo ukládá?" modal */}
+      <Dialog
+        open={editorModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            // If a save was waiting on a pick, treat closing as cancel
+            if (pendingSaveRef.current) cancelEditorPick();
+            else setEditorModalOpen(false);
+          } else {
+            setEditorModalOpen(true);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Kdo ukládá?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Vyberte editora — zkratka se uloží ke každému poli a zapamatuje se na celou session.
+            </p>
+            {activeEditors === undefined ? (
+              <p className="text-sm text-muted-foreground">Načítám…</p>
+            ) : activeEditors.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Zatím nejsou vytvořeni žádní aktivní editoři.{" "}
+                <Link href="/nastaveni" className="text-primary underline">
+                  Spravovat editory
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {activeEditors.map((ed) => (
+                  <button
+                    key={ed._id}
+                    onClick={() => pickEditorAndSave(ed.shortcut)}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors ${
+                      currentEditor === ed.shortcut
+                        ? "bg-blue-50 border-blue-300 text-blue-700"
+                        : "bg-muted/30 border-border hover:bg-muted"
+                    }`}
+                  >
+                    <span className="text-lg font-bold">{ed.shortcut}</span>
+                    <span className="text-xs text-muted-foreground truncate max-w-full">{ed.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {currentEditor && (
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="text-xs text-muted-foreground">
+                  Aktuální editor: <span className="font-semibold text-foreground">{currentEditor}</span>
+                </span>
+                <button
+                  onClick={() => {
+                    setEditor(null);
+                    if (!pendingSaveRef.current) setEditorModalOpen(false);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Odhlásit editora
+                </button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -4313,7 +4659,7 @@ function EditMarketingForm({
     setSaveMessage(null);
 
     try {
-      await updateMarketingData({
+      await saveMarketing({
         id: productId,
         category: formData.category ? formData.category as "Bylinný" | "Funkční" | "Dětský" | "BIO" : null,
         salesClaim: formData.salesClaim || undefined,

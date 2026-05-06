@@ -29,9 +29,12 @@ export function FeedAdminContent() {
   const feedCategories = useQuery(api.products.getFeedCategories);
   const backupStats = useQuery(api.feedImport.getBackupStats);
   const marketingBackups = useQuery(api.feedImport.listMarketingBackups);
+  const marketingSnapshots = useQuery(api.feedImport.listMarketingSnapshots);
   const deleteOrphaned = useMutation(api.feedImport.deleteOrphanedProducts);
   const restoreBackup = useMutation(api.feedImport.restoreBackupToProduct);
   const restoreAllBackups = useMutation(api.feedImport.restoreAllBackups);
+  const createMarketingSnapshot = useMutation(api.feedImport.createMarketingSnapshot);
+  const restoreMarketingSnapshot = useMutation(api.feedImport.restoreMarketingSnapshot);
   const restoreMarketingFromSeed = useMutation(api.products.restoreMarketingFromSeed);
   const restoreImagesFromSeed = useMutation(api.products.restoreImagesFromSeed);
   const restoreNewsFromSeed = useMutation(api.news.restoreFromSeed);
@@ -62,6 +65,14 @@ export function FeedAdminContent() {
   }[] | null>(null);
   const [isDeletingOrphans, setIsDeletingOrphans] = useState(false);
   const [deleteResult, setDeleteResult] = useState<string | null>(null);
+
+  // State for catalog-wide marketing snapshots
+  const [snapshotName, setSnapshotName] = useState("");
+  const [snapshotNote, setSnapshotNote] = useState("");
+  const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
+  const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
+  const [isRestoringSnapshot, setIsRestoringSnapshot] = useState(false);
+  const [snapshotRestoreMessage, setSnapshotRestoreMessage] = useState<string | null>(null);
 
   // State for backup restoration
   const [productSearchQuery, setProductSearchQuery] = useState("");
@@ -119,8 +130,6 @@ export function FeedAdminContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground mb-2">Správa XML Feedu</h1>
@@ -358,16 +367,191 @@ export function FeedAdminContent() {
           </Card>
         )}
 
-        {/* Backup Stats & Restore */}
+        {/* Catalog-wide marketing snapshots (historické verze katalogu) */}
+        {marketingSnapshots && (
+          <Card className="mb-6 border-blue-200 bg-blue-50/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-blue-900">
+                <Archive className="w-5 h-5" />
+                Historické snapshoty marketingových dat
+              </CardTitle>
+              <CardDescription>
+                Uložení kompletního stavu marketingových dat pro všechny produkty. Obnova neovlivní data z feedu (ceny, dostupnost atd.).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Vytvoření snapshotu */}
+              <div className="rounded-lg border border-blue-200 bg-white/70 p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium mb-1 block">Název snapshotu</label>
+                    <Input
+                      value={snapshotName}
+                      onChange={(e) => setSnapshotName(e.target.value)}
+                      placeholder="Např. Před vánoční kampaní 2026"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      onClick={async () => {
+                        if (!snapshotName.trim()) return;
+                        if (!confirm("Vytvořit snapshot aktuálních marketingových dat pro všechny produkty?")) return;
+                        setIsCreatingSnapshot(true);
+                        setSnapshotMessage(null);
+                        try {
+                          const result = await createMarketingSnapshot({
+                            name: snapshotName.trim(),
+                            note: snapshotNote.trim() || undefined,
+                          });
+                          setSnapshotMessage(`✅ Snapshot vytvořen (${result.products} produktů).`);
+                          setSnapshotName("");
+                          setSnapshotNote("");
+                        } catch (error) {
+                          setSnapshotMessage(`Chyba: ${error instanceof Error ? error.message : String(error)}`);
+                        } finally {
+                          setIsCreatingSnapshot(false);
+                        }
+                      }}
+                      disabled={isCreatingSnapshot || !snapshotName.trim()}
+                      className="min-w-[180px]"
+                    >
+                      {isCreatingSnapshot ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Vytvářím snapshot...
+                        </>
+                      ) : (
+                        <>
+                          <Archive className="w-4 h-4 mr-2" />
+                          Vytvořit snapshot
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Poznámka (volitelné)</label>
+                  <Input
+                    value={snapshotNote}
+                    onChange={(e) => setSnapshotNote(e.target.value)}
+                    placeholder="Krátký popis, proč snapshot vzniká"
+                  />
+                </div>
+                {snapshotMessage && (
+                  <div className={`mt-1 text-sm ${
+                    snapshotMessage.startsWith("✅") ? "text-green-700" : "text-red-700"
+                  }`}>
+                    {snapshotMessage}
+                  </div>
+                )}
+              </div>
+
+              {/* Seznam snapshotů a obnova */}
+              {marketingSnapshots.length > 0 && (
+                <div className="rounded-lg border border-blue-200 bg-white/70">
+                  <div className="p-3 border-b border-blue-200 bg-blue-100/60">
+                    <h4 className="font-medium text-blue-900 flex items-center gap-2">
+                      <RotateCcw className="w-4 h-4" />
+                      Obnova z historického snapshotu
+                    </h4>
+                    <p className="text-sm text-blue-800">
+                      Vyberte snapshot a obnovte marketingová data pro celý katalog. Feedová data (ceny, dostupnost, názvy z feedu) zůstanou beze změny.
+                    </p>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-blue-100/70 sticky top-0">
+                        <tr>
+                          <th className="text-left p-2">Název</th>
+                          <th className="text-left p-2">Vytvořeno</th>
+                          <th className="text-left p-2">Produktů</th>
+                          <th className="text-left p-2">Poznámka</th>
+                          <th className="text-left p-2">Akce</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {marketingSnapshots.map((snap) => (
+                          <tr key={snap._id} className="border-t border-blue-100">
+                            <td className="p-2 font-medium">{snap.name}</td>
+                            <td className="p-2 text-xs text-muted-foreground">
+                              {new Date(snap.createdAt).toLocaleString("cs-CZ")}
+                            </td>
+                            <td className="p-2">{snap.productCount}</td>
+                            <td className="p-2 truncate max-w-[220px]" title={snap.note || ""}>
+                              {snap.note || "-"}
+                            </td>
+                            <td className="p-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  if (!confirm(`Obnovit marketingová data pro celý katalog ze snapshotu "${snap.name}"? Toto přepíše marketingová pole u všech produktů, ale ceny a dostupnost z feedu zůstanou.`)) {
+                                    return;
+                                  }
+                                  setIsRestoringSnapshot(true);
+                                  setSnapshotRestoreMessage(null);
+                                  try {
+                                    const result = await restoreMarketingSnapshot({
+                                      snapshotId: snap._id as Id<"marketingSnapshots">,
+                                      mode: "all",
+                                    });
+                                    setSnapshotRestoreMessage(
+                                      `✅ Obnoveno ${result.updated} produktů${result.missing > 0 ? `, ${result.missing} produktů v DB již neexistuje` : ""}.`
+                                    );
+                                  } catch (error) {
+                                    setSnapshotRestoreMessage(
+                                      `Chyba při obnově: ${error instanceof Error ? error.message : String(error)}`
+                                    );
+                                  } finally {
+                                    setIsRestoringSnapshot(false);
+                                  }
+                                }}
+                                disabled={isRestoringSnapshot}
+                                className="h-7 text-xs"
+                              >
+                                {isRestoringSnapshot ? (
+                                  <>
+                                    <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                                    Obnovuji...
+                                  </>
+                                ) : (
+                                  <>
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                    Obnovit katalog
+                                  </>
+                                )}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {snapshotRestoreMessage && (
+                    <div className={`p-3 border-t ${
+                      snapshotRestoreMessage.startsWith("✅")
+                        ? "bg-green-50 border-green-200 text-green-800"
+                        : "bg-red-50 border-red-200 text-red-800"
+                    }`}>
+                      {snapshotRestoreMessage}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Backup Stats & Restore (per-SKU backups for smazané produkty) */}
         {backupStats && (backupStats.marketingBackups > 0 || backupStats.galleryBackups > 0) && (
           <Card className="mb-6 border-amber-200 bg-amber-50/50">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-amber-800">
                 <Archive className="w-5 h-5" />
-                Zálohovaná data
+                Zálohy smazaných produktů (podle SKU)
               </CardTitle>
               <CardDescription>
-                Marketingová data a obrázky ze smazaných produktů. Můžete je ručně přiřadit k produktům.
+                Marketingová data a obrázky ze smazaných produktů podle SKU. Slouží pro ruční přiřazení k jiným produktům.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -390,7 +574,7 @@ export function FeedAdminContent() {
               <div className="flex items-center gap-3">
                 <Button
                   onClick={async () => {
-                    if (!confirm("Obnovit všechna marketingová data ze záloh? Toto přepíše aktuální marketingová data na produktech odpovídajících SKU.")) return;
+                    if (!confirm("Obnovit všechna marketingová data ze záloh podle SKU? Toto přepíše aktuální marketingová data na produktech, které mají stejné SKU.")) return;
                     setIsRestoringAll(true);
                     setRestoreAllResult(null);
                     try {
@@ -413,7 +597,7 @@ export function FeedAdminContent() {
                   ) : (
                     <>
                       <RotateCcw className="w-4 h-4 mr-2" />
-                      Obnovit všechny zálohy
+                      Obnovit všechny zálohy podle SKU
                     </>
                   )}
                 </Button>
@@ -432,10 +616,10 @@ export function FeedAdminContent() {
                   <div className="p-3 border-b border-amber-200 bg-amber-100/50">
                     <h4 className="font-medium text-amber-800 flex items-center gap-2">
                       <RotateCcw className="w-4 h-4" />
-                      Obnovit marketingová data
+                      Ruční přiřazení zálohy k produktu
                     </h4>
                     <p className="text-sm text-amber-600">
-                      Vyberte zálohu a vyhledejte produkt, ke kterému ji chcete přiřadit
+                      Vyberte zálohu podle původního SKU a vyhledejte produkt, ke kterému ji chcete přiřadit.
                     </p>
                   </div>
                   
