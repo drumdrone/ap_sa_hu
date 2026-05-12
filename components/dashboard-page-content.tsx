@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { useAccess } from "@/components/access-context";
+import { NeuronLoader } from "@/components/ui/neuron-loader";
 
 // Business Opportunities data
 const businessOpportunities = [
@@ -732,10 +733,7 @@ export function DashboardPageContent() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="text-muted-foreground">Načítám dashboard...</p>
-            </div>
+            <NeuronLoader size={88} label="Načítám dashboard..." />
           </div>
         ) : (
           <>
@@ -968,7 +966,7 @@ export function DashboardPageContent() {
             )}
           </div>
 
-          {/* Top 10 Products */}
+          {/* Top 20 Products */}
           {topProducts && topProducts.length > 0 && (
             <div className="bg-card rounded-2xl border border-border shadow-sm mb-8 overflow-hidden">
               <div className="p-5 border-b border-border bg-gradient-to-r from-amber-50 to-yellow-50">
@@ -976,9 +974,9 @@ export function DashboardPageContent() {
                   <div className="w-8 h-8 bg-amber-400 rounded-lg flex items-center justify-center">
                     <span className="text-white text-sm">⭐</span>
                   </div>
-                  Top 10 produktů
+                  Top 20 produktů
                   <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 text-xs ml-2">
-                    {topProducts.length}/10
+                    {topProducts.length}/20
                   </Badge>
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">

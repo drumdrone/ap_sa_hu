@@ -8,6 +8,7 @@ import { Header } from "@/components/header";
 import { CatalogFilters } from "@/components/catalog-filters";
 import { ProductCard } from "@/components/product-card";
 import { ProductListItem } from "@/components/product-list-item";
+import { NeuronLoader } from "@/components/ui/neuron-loader";
 
 const CatalogResults = memo(function CatalogResults({
   viewMode,
@@ -148,10 +149,7 @@ export function CatalogPageContent() {
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="text-muted-foreground">Načítám produkty...</p>
-            </div>
+            <NeuronLoader size={88} label="Načítám produkty..." />
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">

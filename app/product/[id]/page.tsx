@@ -1,4 +1,6 @@
 import { ProductDetailContent } from "@/components/product-detail-content";
+import { ProductDetailErrorFallback } from "@/components/product-detail-error-fallback";
+import { ClientErrorBoundary } from "@/components/client-error-boundary";
 import { Id } from "@/convex/_generated/dataModel";
 
 interface ProductPageProps {
@@ -10,7 +12,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
   
   return (
     <main className="max-w-7xl mx-auto py-6">
-      <ProductDetailContent productId={id as Id<"products">} />
+      <ClientErrorBoundary fallback={<ProductDetailErrorFallback />}>
+        <ProductDetailContent productId={id as Id<"products">} />
+      </ClientErrorBoundary>
     </main>
   );
 }

@@ -5,13 +5,16 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { Header } from "@/components/header";
+import { useAccess } from "@/components/access-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, UserPlus, ToggleLeft, ToggleRight } from "lucide-react";
 
 export function NastaveniContent() {
-  const editors = useQuery(api.editors.listAll);
+  const { role } = useAccess();
+  const isEditor = role === "editor";
+  const editors = useQuery(api.editors.listAll, isEditor ? {} : "skip");
   const createEditor = useMutation(api.editors.create);
   const toggleActive = useMutation(api.editors.toggleActive);
   const removeEditor = useMutation(api.editors.remove);
@@ -56,6 +59,20 @@ export function NastaveniContent() {
       console.error(err);
     }
   };
+
+  if (role === "viewer") {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h1 className="text-2xl font-bold">Nastavení</h1>
+          <p className="text-sm text-muted-foreground mt-4">
+            Tato stránka je dostupná jen v editorském režimu. Odhlásit se můžeš v hlavičce a znovu se přihlásit heslem pro editory.
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

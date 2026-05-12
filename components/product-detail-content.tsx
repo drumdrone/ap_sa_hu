@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductImageSlider } from "@/components/product-image-slider";
 import { useAccess } from "@/components/access-context";
+import { NeuronLoader } from "@/components/ui/neuron-loader";
 
 type MenuSection = "dashboard" | "eshop" | "marketing" | "social" | "gallery" | "materials" | "edit";
 type MobileView = "product" | "data";
@@ -94,7 +95,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const updateMarketingData = useMutation(api.products.updateMarketingData);
   const clearPdfUrl = useMutation(api.products.clearPdfUrl);
   const clearVideoUrl = useMutation(api.products.clearVideoUrl);
-  const activeEditors = useQuery(api.editors.list);
+  const activeEditors = useQuery(api.editors.list, canEdit ? {} : "skip");
 
   // Editor tracking - persisted in localStorage for the session
   const EDITOR_STORAGE_KEY = "apo-currentEditor";
@@ -172,8 +173,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     return new Date(ts).toLocaleDateString("cs-CZ");
   };
 
-  // Inline stamp showing who/when last edited a given field
+  // Inline stamp showing who/when last edited a given field. Editor-only:
+  // viewers (read-only password) shouldn't see the editor attribution.
   const renderEditorStamp = (fieldName: string) => {
+    if (!canEdit) return null;
     const meta = (product?.fieldMeta as Record<string, { editor: string; editedAt: number }> | undefined)?.[fieldName];
     if (!meta) return null;
     return (
@@ -611,10 +614,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     return (
       <div className="min-h-screen bg-background flex">
         <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-muted-foreground">Načítám produkt...</p>
-          </div>
+          <NeuronLoader size={88} label="Načítám produkt..." />
         </div>
       </div>
     );
@@ -1417,6 +1417,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   </div>
                   <div className="p-4 space-y-3">
                     {/* Gallery - First */}
+                    {((galleryImages && galleryImages.length > 0) || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                         galleryImages && galleryImages.length > 0
                           ? "bg-purple-50 border border-purple-200"
@@ -1548,8 +1549,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       )}
                     </div>
+                    )}
 
                     {/* Banners */}
+                    {((productBanners && productBanners.length > 0) || canEdit) && (
                     <div
                       className={`w-full rounded-xl transition-colors ${
                         productBanners && productBanners.length > 0
@@ -1695,8 +1698,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         )}
                       </div>
                     </div>
+                    )}
 
                     {/* Facebook & Instagram Images */}
+                    {(product.socialFacebookImage || product.socialInstagramImage || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                         product.socialFacebookImage || product.socialInstagramImage
                           ? "bg-pink-50 border border-pink-200"
@@ -1905,7 +1910,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* Download Materials */}
+                    {(product.pdfUrl || (product.bannerUrls && product.bannerUrls.length > 0) || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                         product.pdfUrl || (product.bannerUrls && product.bannerUrls.length > 0)
                           ? "bg-blue-50 border border-blue-200"
@@ -2063,7 +2071,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* Product video - Fifth */}
+                    {(product.videoUrl || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                         product.videoUrl
                           ? "bg-red-50 border border-red-200"
@@ -2202,6 +2213,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* View on e-shop */}
                     {product.productUrl && (
                       <a
@@ -2226,6 +2239,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     )}
 
                     {/* Quick Reference Card */}
+                    {(product.quickReferenceCard || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.quickReferenceCard
                         ? "bg-cyan-50 border border-cyan-200"
@@ -2300,7 +2314,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* Articles Section */}
+                    {((product.articleUrls && product.articleUrls.length > 0) || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.articleUrls && product.articleUrls.length > 0
                         ? "bg-blue-50 border border-blue-200"
@@ -2450,7 +2467,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* Top 20 Selector */}
+                    {canEdit && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.isTop
                         ? "bg-amber-100 border-2 border-amber-400"
@@ -2571,6 +2591,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       </div>
                     </div>
 
+                    )}
+
                     {/* Last Uploaded Images */}
                     {galleryImages && galleryImages.length > 0 && (
                       <div className="w-full bg-gray-50 rounded-xl p-4">
@@ -2635,6 +2657,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   </div>
                   <div className="p-4 space-y-3">
                     {/* 3 Hlavní benefity */}
+                    {(product.mainBenefits || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.mainBenefits
                         ? "bg-amber-50 border border-amber-200"
@@ -2742,7 +2765,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* Herb Composition */}
+                    {(product.herbComposition || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.herbComposition
                         ? "bg-lime-50 border border-lime-200"
@@ -2836,7 +2862,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* Seasonal Opportunities (formerly Sales Forecast) */}
+                    {(seasonalOpportunitiesText || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       seasonalOpportunitiesText
                         ? "bg-purple-50 border border-purple-200"
@@ -2930,7 +2959,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* FAQ Section */}
+                    {(product.faqText || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.faqText
                         ? "bg-[#f8f5f0] border border-amber-200"
@@ -3027,7 +3059,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       )}
                     </div>
 
+                    )}
+
                     {/* Cílová skupina Section - Editable */}
+                    {(product.targetAudience || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.targetAudience
                         ? "bg-[#f5f9ff] border border-blue-200"
@@ -3119,8 +3154,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       )}
                     </div>
+                    )}
 
                     {/* Senzorický profil Section - Editable */}
+                    {(product.sensoryProfile || canEdit) && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.sensoryProfile
                         ? "bg-[#f5f0f8] border border-purple-200"
@@ -3214,6 +3251,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
                 </div>
                 </div>
