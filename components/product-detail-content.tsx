@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductImageSlider } from "@/components/product-image-slider";
 import { useAccess } from "@/components/access-context";
+import { NeuronLoader } from "@/components/ui/neuron-loader";
 
 type MenuSection = "dashboard" | "eshop" | "marketing" | "social" | "gallery" | "materials" | "edit";
 type MobileView = "product" | "data";
@@ -613,10 +614,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     return (
       <div className="min-h-screen bg-background flex">
         <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-muted-foreground">Načítám produkt...</p>
-          </div>
+          <NeuronLoader size={88} label="Načítám produkt..." />
         </div>
       </div>
     );
