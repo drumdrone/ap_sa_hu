@@ -139,7 +139,6 @@ export function PosmPageContent() {
   const deleteItem = useMutation(api.posm.deleteItem);
   const createOrder = useMutation(api.posm.createOrder);
   const updateOrderStatus = useMutation(api.posm.updateOrderStatus);
-  const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
 
   const [showAddItem, setShowAddItem] = useState(false);
   const [showOrder, setShowOrder] = useState(false);
@@ -175,9 +174,9 @@ export function PosmPageContent() {
   // POSM KIT state
   const [posmKit, setPosmKit] = useState<PosmKitItem[]>([]);
   const [showPosmKit, setShowPosmKit] = useState(false);
-  const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [emailTo, setEmailTo] = useState("");
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
 
   // Inline name editing in the detail dialog
   const [editingName, setEditingName] = useState(false);
@@ -376,6 +375,54 @@ export function PosmPageContent() {
     });
   };
 
+  const generatePosmKitShareUrl = (): string => {
+    if (posmKit.length === 0 || typeof window === "undefined") return "";
+    try {
+      const payload = {
+        generatedAt: new Date().toISOString(),
+        items: posmKit.map((k) => {
+          const def = getTypeDef(k.type);
+          return {
+            name: k.name,
+            typeLabel: def.label,
+            typeColor: def.color,
+            distributionType: k.distributionType,
+            imageUrl: k.imageUrl,
+            downloadUrl: k.downloadUrl,
+            quantity: k.quantity,
+            selectedSize: k.selectedSize,
+          };
+        }),
+      };
+      const json = JSON.stringify(payload);
+      const utf8 = unescape(encodeURIComponent(json));
+      const base64 = btoa(utf8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      return `${window.location.origin}/posm-kit?data=${base64}`;
+    } catch (error) {
+      console.error("Failed to generate POSM kit share URL:", error);
+      return "";
+    }
+  };
+
+  const openShareDialog = () => {
+    const url = generatePosmKitShareUrl();
+    if (!url) return;
+    setShareUrl(url);
+    setShareCopied(false);
+    setShowShareDialog(true);
+  };
+
+  const copyShareUrl = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
   const exportPosmKitToTxt = () => {
     if (posmKit.length === 0) return;
     const lines: string[] = [
@@ -429,67 +476,6 @@ export function PosmPageContent() {
     a.download = `posm_kit_${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const sendPosmKitEmail = async () => {
-    if (!emailTo || posmKit.length === 0) return;
-    setIsSendingEmail(true);
-    try {
-      const lines = [
-        "POSM KIT - Objednavka materialu",
-        "",
-        `Datum: ${new Date().toLocaleDateString("cs-CZ")}`,
-        "",
-        "---",
-        "",
-      ];
-
-      const orderItems = posmKit.filter(k => k.distributionType === "order");
-      const downloadItemsList = posmKit.filter(k => k.distributionType === "download");
-
-      if (orderItems.length > 0) {
-        lines.push("K OBJEDNANI:");
-        lines.push("");
-        orderItems.forEach(item => {
-          lines.push(`  - ${item.name}`);
-          lines.push(`    Typ: ${getTypeDef(item.type).label}`);
-          lines.push(`    Mnozstvi: ${item.quantity} ks`);
-          if (item.selectedSize) lines.push(`    Velikost: ${item.selectedSize}`);
-          lines.push("");
-        });
-        lines.push("---");
-        lines.push("");
-      }
-
-      if (downloadItemsList.length > 0) {
-        lines.push("KE STAZENI:");
-        lines.push("");
-        downloadItemsList.forEach(item => {
-          lines.push(`  - ${item.name}`);
-          const url = item.downloadUrl || item.imageUrl;
-          if (url) lines.push(`    Odkaz: ${url}`);
-          lines.push("");
-        });
-        lines.push("---");
-        lines.push("");
-      }
-
-      lines.push(`Vygenerovano: ${new Date().toLocaleString("cs-CZ")}`);
-
-      await sendSalesKitEmail({
-        email: emailTo,
-        subject: "POSM KIT - Objednavka materialu",
-        content: lines.join("\n"),
-      });
-      setShowEmailDialog(false);
-      setEmailTo("");
-      alert("Email odeslan!");
-    } catch (error) {
-      console.error("Error sending email:", error);
-      alert("Chyba pri odesilani emailu");
-    } finally {
-      setIsSendingEmail(false);
-    }
   };
 
   // Virtual POSM items synthesized from product sheets (pdfUrl).
@@ -1715,13 +1701,13 @@ export function PosmPageContent() {
                     Export TXT
                   </button>
                   <button
-                    onClick={() => setShowEmailDialog(true)}
+                    onClick={openShareDialog}
                     className="flex items-center justify-center gap-1 px-2 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
-                    Email
+                    Sdílet odkaz
                   </button>
                 </div>
               </div>
@@ -1751,31 +1737,32 @@ export function PosmPageContent() {
           onDelete={async (key) => { await deletePosmType({ key }); }}
         />
 
-        {/* Email Dialog for POSM Kit */}
-        <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
-          <DialogContent className="sm:max-w-md">
+        {/* Share-link Dialog for POSM Kit */}
+        <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
-                Odeslat POSM KIT emailem
+                Sdílet POSM KIT
               </DialogTitle>
+              <DialogDescription>
+                Veřejný odkaz – příjemce nemusí být přihlášený. Materiály ke stažení jsou k dispozici přímo z odkazu.
+              </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-4">
+            <div className="space-y-4 pt-2">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Email prijemce
-                </label>
-                <Input
-                  type="email"
-                  placeholder="kolega@apotheke.cz"
-                  value={emailTo}
-                  onChange={(e) => setEmailTo(e.target.value)}
-                />
+                <Label className="block text-sm font-medium text-foreground mb-2">Odkaz</Label>
+                <div className="flex gap-2">
+                  <Input value={shareUrl} readOnly onFocus={(e) => e.currentTarget.select()} className="font-mono text-xs" />
+                  <Button onClick={copyShareUrl} className="bg-green-600 hover:bg-green-700 whitespace-nowrap">
+                    {shareCopied ? "Zkopírováno" : "Kopírovat"}
+                  </Button>
+                </div>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm text-muted-foreground mb-2">Bude odeslano:</p>
+                <p className="text-sm text-muted-foreground mb-2">Obsah:</p>
                 <ul className="text-sm space-y-1">
                   {posmKit.map((item) => (
                     <li key={item.id} className="flex items-center gap-2">
@@ -1789,27 +1776,19 @@ export function PosmPageContent() {
                 </ul>
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setShowEmailDialog(false)}
-                >
-                  Zrusit
+                <Button variant="outline" className="flex-1" onClick={() => setShowShareDialog(false)}>
+                  Zavřít
                 </Button>
-                <Button
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                  onClick={sendPosmKitEmail}
-                  disabled={!emailTo || isSendingEmail}
-                >
-                  {isSendingEmail ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      Odesilam...
-                    </>
-                  ) : (
-                    "Odeslat"
-                  )}
-                </Button>
+                {shareUrl && (
+                  <a
+                    href={shareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium"
+                  >
+                    Otevřít
+                  </a>
+                )}
               </div>
             </div>
           </DialogContent>
