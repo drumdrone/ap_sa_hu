@@ -3132,6 +3132,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
                             <pre className="text-[10px] text-blue-300 font-mono whitespace-pre leading-tight">{product.targetAudience}</pre>
                           </div>
+                          {renderEditorStamp("targetAudience")}
                         </div>
                       ) : (
                         <div className="flex items-center gap-4 p-4">
