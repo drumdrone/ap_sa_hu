@@ -65,6 +65,8 @@ export function PosmPageContent() {
   const orders = useQuery(api.posm.listOrders, {});
   const stats = useQuery(api.posm.getStats);
   const productsWithPdf = useQuery(api.products.list, { withPdf: true });
+  const productSheetNames = useQuery(api.posm.listProductSheetNames, {});
+  const setProductSheetName = useMutation(api.posm.setProductSheetName);
 
   const createItem = useMutation(api.posm.createItem);
   const updateItem = useMutation(api.posm.updateItem);
@@ -428,6 +430,7 @@ export function PosmPageContent() {
   type DisplayItem = NonNullable<typeof items>[number] & {
     isVirtual?: boolean;
     productCount?: number;
+    sheetPdfUrl?: string;
   };
 
   const deriveSheetName = (pdfUrl: string): string => {
@@ -455,6 +458,10 @@ export function PosmPageContent() {
     }
   });
 
+  const productSheetNameMap = new Map<string, string>(
+    (productSheetNames ?? []).map((n) => [n.pdfUrl, n.displayName]),
+  );
+
   const virtualProductSheetItems: DisplayItem[] = Array.from(productSheetGroups.values()).map(
     ({ pdfUrl, products }) => {
       const first = products[0];
@@ -463,10 +470,11 @@ export function PosmPageContent() {
         : first.brand
           ? `${first.brand}${first.feedCategory ? " – " + first.feedCategory : ""}`
           : first.feedCategory;
+      const overrideName = productSheetNameMap.get(pdfUrl);
       return {
         _id: (`virtual-sheet-${pdfUrl}`) as unknown as Id<"posmItems">,
         _creationTime: first._creationTime,
-        name: deriveSheetName(pdfUrl),
+        name: overrideName || deriveSheetName(pdfUrl),
         description,
         type: "product_list" as PosmType,
         imageUrl: pdfUrl,
@@ -479,6 +487,7 @@ export function PosmPageContent() {
         createdAt: first._creationTime,
         isVirtual: true,
         productCount: products.length,
+        sheetPdfUrl: pdfUrl,
       };
     },
   );
@@ -1125,7 +1134,7 @@ export function PosmPageContent() {
               <>
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-3 flex-wrap">
-                    {editingName && !selectedItemData.isVirtual ? (
+                    {editingName ? (
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Input
                           autoFocus
@@ -1137,7 +1146,14 @@ export function PosmPageContent() {
                               if (!trimmed) return;
                               setSavingName(true);
                               try {
-                                await updateItem({ id: selectedItemData._id, name: trimmed });
+                                if (selectedItemData.isVirtual && selectedItemData.sheetPdfUrl) {
+                                  await setProductSheetName({
+                                    pdfUrl: selectedItemData.sheetPdfUrl,
+                                    displayName: trimmed,
+                                  });
+                                } else {
+                                  await updateItem({ id: selectedItemData._id, name: trimmed });
+                                }
                                 setEditingName(false);
                               } finally {
                                 setSavingName(false);
@@ -1157,7 +1173,14 @@ export function PosmPageContent() {
                             if (!trimmed) return;
                             setSavingName(true);
                             try {
-                              await updateItem({ id: selectedItemData._id, name: trimmed });
+                              if (selectedItemData.isVirtual && selectedItemData.sheetPdfUrl) {
+                                await setProductSheetName({
+                                  pdfUrl: selectedItemData.sheetPdfUrl,
+                                  displayName: trimmed,
+                                });
+                              } else {
+                                await updateItem({ id: selectedItemData._id, name: trimmed });
+                              }
                               setEditingName(false);
                             } finally {
                               setSavingName(false);
@@ -1182,21 +1205,19 @@ export function PosmPageContent() {
                     ) : (
                       <>
                         <span>{selectedItemData.name}</span>
-                        {!selectedItemData.isVirtual && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNameDraft(selectedItemData.name);
-                              setEditingName(true);
-                            }}
-                            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Upravit nazev"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNameDraft(selectedItemData.name);
+                            setEditingName(true);
+                          }}
+                          className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Upravit nazev"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
                         <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || ""}>
                           {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
                         </Badge>
