@@ -156,6 +156,15 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_category", ["category"]),
   
+  // Custom display names for product sheets (PDFs from products.pdfUrl),
+  // keyed by pdfUrl. Used by the POSM "Produktové listy" virtual catalog so
+  // a single PDF shared by many products can be renamed once.
+  productSheetNames: defineTable({
+    pdfUrl: v.string(),
+    displayName: v.string(),
+    updatedAt: v.number(),
+  }).index("by_pdfUrl", ["pdfUrl"]),
+
   // POSM Items - catalog of available materials
   posmItems: defineTable({
     name: v.string(),

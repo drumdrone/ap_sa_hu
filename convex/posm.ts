@@ -281,6 +281,43 @@ export const deleteOrder = mutation({
   },
 });
 
+// ============ PRODUCT SHEET NAMES ============
+// Custom display names for product sheets (shared PDFs from products.pdfUrl),
+// surfaced in the POSM "Produktové listy" virtual catalog.
+
+export const listProductSheetNames = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("productSheetNames").collect();
+  },
+});
+
+export const setProductSheetName = mutation({
+  args: {
+    pdfUrl: v.string(),
+    displayName: v.string(),
+  },
+  handler: async (ctx, { pdfUrl, displayName }) => {
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      throw new Error("Display name is required");
+    }
+    const existing = await ctx.db
+      .query("productSheetNames")
+      .withIndex("by_pdfUrl", (q) => q.eq("pdfUrl", pdfUrl))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { displayName: trimmed, updatedAt: Date.now() });
+      return existing._id;
+    }
+    return await ctx.db.insert("productSheetNames", {
+      pdfUrl,
+      displayName: trimmed,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // ============ STATS ============
 
 export const getStats = query({

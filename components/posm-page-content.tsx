@@ -65,6 +65,8 @@ export function PosmPageContent() {
   const orders = useQuery(api.posm.listOrders, {});
   const stats = useQuery(api.posm.getStats);
   const productsWithPdf = useQuery(api.products.list, { withPdf: true });
+  const productSheetNames = useQuery(api.posm.listProductSheetNames, {});
+  const setProductSheetName = useMutation(api.posm.setProductSheetName);
 
   const createItem = useMutation(api.posm.createItem);
   const updateItem = useMutation(api.posm.updateItem);
@@ -108,6 +110,11 @@ export function PosmPageContent() {
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  // Inline name editing in the detail dialog
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   // Handle file upload
   const handleFileUpload = useCallback(async (file: File) => {
@@ -423,6 +430,7 @@ export function PosmPageContent() {
   type DisplayItem = NonNullable<typeof items>[number] & {
     isVirtual?: boolean;
     productCount?: number;
+    sheetPdfUrl?: string;
   };
 
   const deriveSheetName = (pdfUrl: string): string => {
@@ -450,6 +458,10 @@ export function PosmPageContent() {
     }
   });
 
+  const productSheetNameMap = new Map<string, string>(
+    (productSheetNames ?? []).map((n) => [n.pdfUrl, n.displayName]),
+  );
+
   const virtualProductSheetItems: DisplayItem[] = Array.from(productSheetGroups.values()).map(
     ({ pdfUrl, products }) => {
       const first = products[0];
@@ -458,10 +470,11 @@ export function PosmPageContent() {
         : first.brand
           ? `${first.brand}${first.feedCategory ? " – " + first.feedCategory : ""}`
           : first.feedCategory;
+      const overrideName = productSheetNameMap.get(pdfUrl);
       return {
         _id: (`virtual-sheet-${pdfUrl}`) as unknown as Id<"posmItems">,
         _creationTime: first._creationTime,
-        name: deriveSheetName(pdfUrl),
+        name: overrideName || deriveSheetName(pdfUrl),
         description,
         type: "product_list" as PosmType,
         imageUrl: pdfUrl,
@@ -474,6 +487,7 @@ export function PosmPageContent() {
         createdAt: first._creationTime,
         isVirtual: true,
         productCount: products.length,
+        sheetPdfUrl: pdfUrl,
       };
     },
   );
@@ -1111,20 +1125,108 @@ export function PosmPageContent() {
         </Dialog>
 
         {/* Item Detail Dialog */}
-        <Dialog open={showDetail} onOpenChange={setShowDetail}>
+        <Dialog open={showDetail} onOpenChange={(open) => {
+          setShowDetail(open);
+          if (!open) setEditingName(false);
+        }}>
           <DialogContent className="max-w-2xl">
             {selectedItemData && (
               <>
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-3">
-                    {selectedItemData.name}
-                    <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || ""}>
-                      {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
-                    </Badge>
-                    {selectedItemData.distributionType && (
-                      <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
-                        {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
-                      </Badge>
+                  <DialogTitle className="flex items-center gap-3 flex-wrap">
+                    {editingName ? (
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Input
+                          autoFocus
+                          value={nameDraft}
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                              const trimmed = nameDraft.trim();
+                              if (!trimmed) return;
+                              setSavingName(true);
+                              try {
+                                if (selectedItemData.isVirtual && selectedItemData.sheetPdfUrl) {
+                                  await setProductSheetName({
+                                    pdfUrl: selectedItemData.sheetPdfUrl,
+                                    displayName: trimmed,
+                                  });
+                                } else {
+                                  await updateItem({ id: selectedItemData._id, name: trimmed });
+                                }
+                                setEditingName(false);
+                              } finally {
+                                setSavingName(false);
+                              }
+                            } else if (e.key === "Escape") {
+                              setEditingName(false);
+                              setNameDraft(selectedItemData.name);
+                            }
+                          }}
+                          className="text-base h-9"
+                          disabled={savingName}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            const trimmed = nameDraft.trim();
+                            if (!trimmed) return;
+                            setSavingName(true);
+                            try {
+                              if (selectedItemData.isVirtual && selectedItemData.sheetPdfUrl) {
+                                await setProductSheetName({
+                                  pdfUrl: selectedItemData.sheetPdfUrl,
+                                  displayName: trimmed,
+                                });
+                              } else {
+                                await updateItem({ id: selectedItemData._id, name: trimmed });
+                              }
+                              setEditingName(false);
+                            } finally {
+                              setSavingName(false);
+                            }
+                          }}
+                          disabled={savingName || !nameDraft.trim() || nameDraft.trim() === selectedItemData.name}
+                        >
+                          {savingName ? "Ukladam..." : "Ulozit"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingName(false);
+                            setNameDraft(selectedItemData.name);
+                          }}
+                          disabled={savingName}
+                        >
+                          Zrusit
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span>{selectedItemData.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNameDraft(selectedItemData.name);
+                            setEditingName(true);
+                          }}
+                          className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Upravit nazev"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || ""}>
+                          {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
+                        </Badge>
+                        {selectedItemData.distributionType && (
+                          <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
+                            {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
+                          </Badge>
+                        )}
+                      </>
                     )}
                   </DialogTitle>
                   <DialogDescription>
