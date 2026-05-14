@@ -1,18 +1,26 @@
 "use client";
 
 import { ReactNode, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useAccess } from "./access-context";
 
 type Props = {
   children: ReactNode;
 };
 
+const PUBLIC_PATH_PREFIXES = ["/sales-kit"];
+
 export function AccessGate({ children }: Props) {
   const { role, setRole } = useAccess();
+  const pathname = usePathname();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  if (role === "viewer" || role === "editor") {
+  const isPublicRoute = PUBLIC_PATH_PREFIXES.some((prefix) =>
+    pathname?.startsWith(prefix)
+  );
+
+  if (isPublicRoute || role === "viewer" || role === "editor") {
     return <>{children}</>;
   }
 
