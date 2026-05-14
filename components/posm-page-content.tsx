@@ -21,8 +21,15 @@ const POSM_TYPES = {
   wobler: { label: "Wobler", color: "bg-yellow-100 text-yellow-700" },
   display: { label: "Display", color: "bg-orange-100 text-orange-700" },
   cenovka: { label: "Cenovka", color: "bg-pink-100 text-pink-700" },
+  product_list: { label: "Produktové listy", color: "bg-rose-100 text-rose-700" },
   other: { label: "Jine", color: "bg-gray-100 text-gray-700" },
 } as const;
+
+// Types that can be created manually via the Add Item dialog.
+// product_list items are auto-populated from products with a pdfUrl.
+const MANUAL_POSM_TYPES = Object.fromEntries(
+  Object.entries(POSM_TYPES).filter(([key]) => key !== "product_list")
+) as Omit<typeof POSM_TYPES, "product_list">;
 
 const ORDER_STATUSES = {
   new: { label: "Nova", color: "bg-blue-100 text-blue-700" },
@@ -57,6 +64,7 @@ export function PosmPageContent() {
   const items = useQuery(api.posm.listItems, {});
   const orders = useQuery(api.posm.listOrders, {});
   const stats = useQuery(api.posm.getStats);
+  const productsWithPdf = useQuery(api.products.list, { withPdf: true });
 
   const createItem = useMutation(api.posm.createItem);
   const updateItem = useMutation(api.posm.updateItem);
@@ -409,19 +417,48 @@ export function PosmPageContent() {
     }
   };
 
+  // Virtual POSM items synthesized from products with a pdfUrl ("Produktové listy")
+  type DisplayItem = NonNullable<typeof items>[number] & {
+    isVirtual?: boolean;
+    productId?: Id<"products">;
+  };
+  const virtualProductSheetItems: DisplayItem[] = (productsWithPdf ?? [])
+    .filter(p => !!p.pdfUrl)
+    .map(p => ({
+      _id: (`virtual-product-${p._id}`) as unknown as Id<"posmItems">,
+      _creationTime: p._creationTime,
+      name: p.name,
+      description: p.brand ? `${p.brand}${p.feedCategory ? " – " + p.feedCategory : ""}` : p.feedCategory,
+      type: "product_list" as PosmType,
+      imageUrl: p.image || p.pdfUrl,
+      fileType: p.image ? undefined : "application/pdf",
+      downloadUrl: p.pdfUrl,
+      distributionType: "download" as DistributionType,
+      sizes: undefined,
+      storageId: undefined,
+      isActive: true,
+      createdAt: p._creationTime,
+      isVirtual: true,
+      productId: p._id,
+    }));
+
+  const allItems: DisplayItem[] | undefined = items
+    ? [...virtualProductSheetItems, ...items]
+    : undefined;
+
   // Get all unique sizes from items
-  const allSizes: string[] = items
-    ? Array.from(new Set(items.flatMap(item => item.sizes || [])) as Set<string>).sort()
+  const allSizes: string[] = allItems
+    ? Array.from(new Set(allItems.flatMap(item => item.sizes || [])) as Set<string>).sort()
     : [];
 
-  const filteredItems = items?.filter(item => {
+  const filteredItems = allItems?.filter(item => {
     const matchesType = filterType === "all" || item.type === filterType;
     const matchesSize = filterSize === "all" || (item.sizes && item.sizes.includes(filterSize));
     const matchesDistribution = filterDistribution === "all" || item.distributionType === filterDistribution;
     return matchesType && matchesSize && matchesDistribution;
   });
 
-  const selectedItemData = items?.find(i => i._id === selectedItem);
+  const selectedItemData = allItems?.find(i => i._id === selectedItem);
 
   if (items === undefined || orders === undefined) {
     return (
@@ -727,21 +764,23 @@ export function PosmPageContent() {
                         </Button>
                       )}
 
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm("Opravdu chcete tento material smazat?")) {
-                            deleteItem({ id: item._id });
-                          }
-                        }}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </Button>
+                      {!item.isVirtual && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Opravdu chcete tento material smazat?")) {
+                              deleteItem({ id: item._id });
+                            }
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 ))}
@@ -877,7 +916,7 @@ export function PosmPageContent() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(POSM_TYPES).map(([key, { label }]) => (
+                      {Object.entries(MANUAL_POSM_TYPES).map(([key, { label }]) => (
                         <SelectItem key={key} value={key}>{label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1095,23 +1134,29 @@ export function PosmPageContent() {
                     <div>
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Distribuce</span>
                       <div className="mt-1">
-                        <Select
-                          value={selectedItemData.distributionType || "order"}
-                          onValueChange={async (value) => {
-                            await updateItem({
-                              id: selectedItemData._id,
-                              distributionType: value as DistributionType
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-auto text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="download">Ke stazeni</SelectItem>
-                            <SelectItem value="order">K objednani</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {selectedItemData.isVirtual ? (
+                          <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
+                            {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
+                          </Badge>
+                        ) : (
+                          <Select
+                            value={selectedItemData.distributionType || "order"}
+                            onValueChange={async (value) => {
+                              await updateItem({
+                                id: selectedItemData._id,
+                                distributionType: value as DistributionType
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-7 w-auto text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="download">Ke stazeni</SelectItem>
+                              <SelectItem value="order">K objednani</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
                     </div>
                     {selectedItemData.sizes && selectedItemData.sizes.length > 0 && (
