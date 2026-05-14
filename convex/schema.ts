@@ -165,19 +165,27 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_pdfUrl", ["pdfUrl"]),
 
+  // POSM type catalog. Holds overrides for built-in types and full
+  // definitions for user-created custom types. Rows are merged with
+  // the hardcoded built-in defaults in the frontend (DB row wins).
+  posmTypes: defineTable({
+    key: v.string(),                    // stable identifier, e.g. "letak" or "custom-abc"
+    label: v.string(),
+    color: v.string(),                  // Tailwind class string, e.g. "bg-blue-100 text-blue-700"
+    order: v.optional(v.number()),
+    isHidden: v.optional(v.boolean()),  // soft-hide from filters and add dropdown
+    isBuiltIn: v.optional(v.boolean()), // true means delete is blocked
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   // POSM Items - catalog of available materials
   posmItems: defineTable({
     name: v.string(),
     description: v.optional(v.string()),
-    type: v.union(
-      v.literal("letak"),
-      v.literal("stojan"),
-      v.literal("plakat"),
-      v.literal("wobler"),
-      v.literal("display"),
-      v.literal("cenovka"),
-      v.literal("other")
-    ),
+    // Type key; resolved against the posmTypes table merged with built-in
+    // defaults. Existing values like "letak", "stojan" etc. remain valid.
+    type: v.string(),
     imageUrl: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")), // Convex storage ID for uploaded files
     fileType: v.optional(v.string()), // MIME type of uploaded file (e.g. application/pdf)
