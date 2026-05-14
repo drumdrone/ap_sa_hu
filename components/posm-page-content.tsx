@@ -82,6 +82,7 @@ export function PosmPageContent() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterSize, setFilterSize] = useState<string>("all");
   const [filterDistribution, setFilterDistribution] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Add item form
   const [newItem, setNewItem] = useState({
@@ -501,11 +502,13 @@ export function PosmPageContent() {
     ? Array.from(new Set(allItems.flatMap(item => item.sizes || [])) as Set<string>).sort()
     : [];
 
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("cs");
   const filteredItems = allItems?.filter(item => {
     const matchesType = filterType === "all" || item.type === filterType;
     const matchesSize = filterSize === "all" || (item.sizes && item.sizes.includes(filterSize));
     const matchesDistribution = filterDistribution === "all" || item.distributionType === filterDistribution;
-    return matchesType && matchesSize && matchesDistribution;
+    const matchesSearch = normalizedQuery === "" || item.name.toLocaleLowerCase("cs").includes(normalizedQuery);
+    return matchesType && matchesSize && matchesDistribution && matchesSearch;
   });
 
   const selectedItemData = allItems?.find(i => i._id === selectedItem);
@@ -678,6 +681,35 @@ export function PosmPageContent() {
                   ))}
                 </div>
               )}
+
+              <div className="relative ml-auto w-full sm:w-64">
+                <svg
+                  className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 18a7 7 0 110-14 7 7 0 010 14z" />
+                </svg>
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Hledat podle nazvu..."
+                  className="h-8 pl-8 pr-8 text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title="Vymazat"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Items Grid */}
