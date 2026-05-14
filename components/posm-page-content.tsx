@@ -14,22 +14,45 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const POSM_TYPES = {
-  letak: { label: "Letak", color: "bg-blue-100 text-blue-700" },
-  stojan: { label: "Stojan", color: "bg-green-100 text-green-700" },
-  plakat: { label: "Plakat", color: "bg-purple-100 text-purple-700" },
-  wobler: { label: "Wobler", color: "bg-yellow-100 text-yellow-700" },
-  display: { label: "Display", color: "bg-orange-100 text-orange-700" },
-  cenovka: { label: "Cenovka", color: "bg-pink-100 text-pink-700" },
-  product_list: { label: "Produktové listy", color: "bg-rose-100 text-rose-700" },
-  other: { label: "Jine", color: "bg-gray-100 text-gray-700" },
-} as const;
+// Hardcoded built-in defaults; overridable per-row via the posmTypes table.
+// product_list is reserved for the virtual "Produktové listy" cards and is
+// not creatable manually via the Add Item dialog.
+type PosmTypeDef = {
+  label: string;
+  color: string;
+  order: number;
+  isBuiltIn: boolean;
+  isHidden?: boolean;
+  reserved?: boolean; // not user-creatable / not deletable in management UI
+};
+const POSM_TYPE_DEFAULTS: Record<string, PosmTypeDef> = {
+  letak: { label: "Letak", color: "bg-blue-100 text-blue-700", order: 10, isBuiltIn: true },
+  stojan: { label: "Stojan", color: "bg-green-100 text-green-700", order: 20, isBuiltIn: true },
+  plakat: { label: "Plakat", color: "bg-purple-100 text-purple-700", order: 30, isBuiltIn: true },
+  wobler: { label: "Wobler", color: "bg-yellow-100 text-yellow-700", order: 40, isBuiltIn: true },
+  display: { label: "Display", color: "bg-orange-100 text-orange-700", order: 50, isBuiltIn: true },
+  cenovka: { label: "Cenovka", color: "bg-pink-100 text-pink-700", order: 60, isBuiltIn: true },
+  product_list: { label: "Produktové listy", color: "bg-rose-100 text-rose-700", order: 70, isBuiltIn: true, reserved: true },
+  other: { label: "Jine", color: "bg-gray-100 text-gray-700", order: 80, isBuiltIn: true },
+};
 
-// Types that can be created manually via the Add Item dialog.
-// product_list items are auto-populated from products with a pdfUrl.
-const MANUAL_POSM_TYPES = Object.fromEntries(
-  Object.entries(POSM_TYPES).filter(([key]) => key !== "product_list")
-) as Omit<typeof POSM_TYPES, "product_list">;
+// Color palette for new custom types and recoloring built-ins.
+const POSM_COLOR_PALETTE: { name: string; value: string }[] = [
+  { name: "Modra", value: "bg-blue-100 text-blue-700" },
+  { name: "Zelena", value: "bg-green-100 text-green-700" },
+  { name: "Fialova", value: "bg-purple-100 text-purple-700" },
+  { name: "Zluta", value: "bg-yellow-100 text-yellow-700" },
+  { name: "Oranzova", value: "bg-orange-100 text-orange-700" },
+  { name: "Ruzova", value: "bg-pink-100 text-pink-700" },
+  { name: "Ruzova tmava", value: "bg-rose-100 text-rose-700" },
+  { name: "Tyrkysova", value: "bg-teal-100 text-teal-700" },
+  { name: "Modrozelena", value: "bg-emerald-100 text-emerald-700" },
+  { name: "Indigo", value: "bg-indigo-100 text-indigo-700" },
+  { name: "Hneda", value: "bg-amber-100 text-amber-700" },
+  { name: "Seda", value: "bg-gray-100 text-gray-700" },
+];
+
+const FALLBACK_TYPE_COLOR = "bg-gray-100 text-gray-700";
 
 const ORDER_STATUSES = {
   new: { label: "Nova", color: "bg-blue-100 text-blue-700" },
@@ -44,7 +67,7 @@ const DISTRIBUTION_TYPES = {
   order: { label: "K objednani", icon: "OB", color: "bg-amber-100 text-amber-700" },
 } as const;
 
-type PosmType = keyof typeof POSM_TYPES;
+type PosmType = string;
 type OrderStatus = keyof typeof ORDER_STATUSES;
 type DistributionType = keyof typeof DISTRIBUTION_TYPES;
 
@@ -67,6 +90,49 @@ export function PosmPageContent() {
   const productsWithPdf = useQuery(api.products.list, { withPdf: true });
   const productSheetNames = useQuery(api.posm.listProductSheetNames, {});
   const setProductSheetName = useMutation(api.posm.setProductSheetName);
+  const dbPosmTypes = useQuery(api.posm.listTypes, {});
+  const upsertPosmType = useMutation(api.posm.upsertType);
+  const deletePosmType = useMutation(api.posm.deleteType);
+
+  // Resolve effective types: built-in defaults overridden by DB rows;
+  // plus any fully custom types from the DB.
+  const typesByKey: Record<string, PosmTypeDef> = (() => {
+    const map: Record<string, PosmTypeDef> = {};
+    for (const [key, def] of Object.entries(POSM_TYPE_DEFAULTS)) {
+      map[key] = { ...def };
+    }
+    for (const row of dbPosmTypes ?? []) {
+      const baseline = map[row.key];
+      map[row.key] = {
+        label: row.label,
+        color: row.color,
+        order: row.order ?? baseline?.order ?? 1000,
+        isBuiltIn: baseline?.isBuiltIn ?? row.isBuiltIn ?? false,
+        isHidden: row.isHidden,
+        reserved: baseline?.reserved,
+      };
+    }
+    return map;
+  })();
+
+  const getTypeDef = (key: string): PosmTypeDef => {
+    return typesByKey[key] ?? {
+      label: key,
+      color: FALLBACK_TYPE_COLOR,
+      order: 9999,
+      isBuiltIn: false,
+    };
+  };
+
+  // Visible (non-hidden) types, sorted by order for chip rendering.
+  const visibleTypeEntries: [string, PosmTypeDef][] = Object.entries(typesByKey)
+    .filter(([, def]) => !def.isHidden)
+    .sort((a, b) => a[1].order - b[1].order);
+
+  // Types selectable in the Add Item dialog: visible, non-reserved.
+  const manualTypeEntries: [string, PosmTypeDef][] = visibleTypeEntries.filter(
+    ([, def]) => !def.reserved,
+  );
 
   const createItem = useMutation(api.posm.createItem);
   const updateItem = useMutation(api.posm.updateItem);
@@ -83,6 +149,7 @@ export function PosmPageContent() {
   const [filterSize, setFilterSize] = useState<string>("all");
   const [filterDistribution, setFilterDistribution] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [showManageTypes, setShowManageTypes] = useState(false);
 
   // Add item form
   const [newItem, setNewItem] = useState({
@@ -330,7 +397,7 @@ export function PosmPageContent() {
       lines.push("");
       orderItems.forEach(item => {
         lines.push(`  - ${item.name}`);
-        lines.push(`    Typ: ${POSM_TYPES[item.type].label}`);
+        lines.push(`    Typ: ${getTypeDef(item.type).label}`);
         lines.push(`    Mnozstvi: ${item.quantity} ks`);
         if (item.selectedSize) lines.push(`    Velikost: ${item.selectedSize}`);
         lines.push("");
@@ -344,7 +411,7 @@ export function PosmPageContent() {
       lines.push("");
       downloadItemsList.forEach(item => {
         lines.push(`  - ${item.name}`);
-        lines.push(`    Typ: ${POSM_TYPES[item.type].label}`);
+        lines.push(`    Typ: ${getTypeDef(item.type).label}`);
         const url = item.downloadUrl || item.imageUrl;
         if (url) lines.push(`    Odkaz: ${url}`);
         lines.push("");
@@ -385,7 +452,7 @@ export function PosmPageContent() {
         lines.push("");
         orderItems.forEach(item => {
           lines.push(`  - ${item.name}`);
-          lines.push(`    Typ: ${POSM_TYPES[item.type].label}`);
+          lines.push(`    Typ: ${getTypeDef(item.type).label}`);
           lines.push(`    Mnozstvi: ${item.quantity} ks`);
           if (item.selectedSize) lines.push(`    Velikost: ${item.selectedSize}`);
           lines.push("");
@@ -599,7 +666,7 @@ export function PosmPageContent() {
           <TabsContent value="catalog" className="space-y-6">
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-sm font-medium text-muted-foreground mr-1">Typ:</span>
                 <button
                   onClick={() => setFilterType("all")}
@@ -611,7 +678,19 @@ export function PosmPageContent() {
                 >
                   Vse
                 </button>
-                {Object.entries(POSM_TYPES).map(([key, { label, color }]) => (
+                <button
+                  type="button"
+                  onClick={() => setShowManageTypes(true)}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors inline-flex items-center gap-1"
+                  title="Spravovat typy"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Spravovat
+                </button>
+                {visibleTypeEntries.map(([key, { label, color }]) => (
                   <button
                     key={key}
                     onClick={() => setFilterType(filterType === key ? "all" : key)}
@@ -768,8 +847,8 @@ export function PosmPageContent() {
                       <CardContent className="p-4">
                         <h3 className="font-semibold text-foreground line-clamp-2 mb-2">{item.name}</h3>
                         <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                          <Badge className={POSM_TYPES[item.type as PosmType]?.color || "bg-gray-100"}>
-                            {POSM_TYPES[item.type as PosmType]?.label || item.type}
+                          <Badge className={getTypeDef(item.type).color}>
+                            {getTypeDef(item.type).label}
                           </Badge>
                           {item.distributionType && (
                             <Badge className={DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.color || "bg-gray-100 text-gray-700"}>
@@ -894,8 +973,8 @@ export function PosmPageContent() {
                             {ORDER_STATUSES[order.status].label}
                           </Badge>
                           {order.item && (
-                            <Badge variant="outline" className={POSM_TYPES[order.item.type as PosmType]?.color || ""}>
-                              {POSM_TYPES[order.item.type as PosmType]?.label || order.item.type}
+                            <Badge variant="outline" className={getTypeDef(order.item.type).color}>
+                              {getTypeDef(order.item.type).label}
                             </Badge>
                           )}
                         </div>
@@ -998,7 +1077,7 @@ export function PosmPageContent() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(MANUAL_POSM_TYPES).map(([key, { label }]) => (
+                      {manualTypeEntries.map(([key, { label }]) => (
                         <SelectItem key={key} value={key}>{label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1250,8 +1329,8 @@ export function PosmPageContent() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                           </svg>
                         </button>
-                        <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || ""}>
-                          {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
+                        <Badge className={getTypeDef(selectedItemData.type).color}>
+                          {getTypeDef(selectedItemData.type).label}
                         </Badge>
                         {selectedItemData.distributionType && (
                           <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
@@ -1296,8 +1375,8 @@ export function PosmPageContent() {
                     <div>
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typ</span>
                       <div className="mt-1">
-                        <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || "bg-gray-100"}>
-                          {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
+                        <Badge className={getTypeDef(selectedItemData.type).color}>
+                          {getTypeDef(selectedItemData.type).label}
                         </Badge>
                       </div>
                     </div>
@@ -1625,6 +1704,17 @@ export function PosmPageContent() {
           </button>
         )}
 
+        {/* Manage Types Dialog */}
+        <ManageTypesDialog
+          open={showManageTypes}
+          onOpenChange={setShowManageTypes}
+          typeEntries={Object.entries(typesByKey).sort((a, b) => a[1].order - b[1].order)}
+          colorPalette={POSM_COLOR_PALETTE}
+          fallbackColor={FALLBACK_TYPE_COLOR}
+          onUpsert={async (input) => { await upsertPosmType(input); }}
+          onDelete={async (key) => { await deletePosmType({ key }); }}
+        />
+
         {/* Email Dialog for POSM Kit */}
         <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
           <DialogContent className="sm:max-w-md">
@@ -1691,4 +1781,253 @@ export function PosmPageContent() {
       </div>
     </div>
   );
+}
+
+type ManageTypesDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  typeEntries: [string, PosmTypeDef][];
+  colorPalette: { name: string; value: string }[];
+  fallbackColor: string;
+  onUpsert: (input: { key: string; label: string; color: string; order?: number; isHidden?: boolean; isBuiltIn?: boolean }) => Promise<void>;
+  onDelete: (key: string) => Promise<void>;
+};
+
+function ManageTypesDialog({ open, onOpenChange, typeEntries, colorPalette, fallbackColor, onUpsert, onDelete }: ManageTypesDialogProps) {
+  const [newLabel, setNewLabel] = useState("");
+  const [newColor, setNewColor] = useState(colorPalette[0]?.value || fallbackColor);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const slugify = (s: string): string => {
+    const base = s
+      .normalize("NFD")
+      // strip combining diacritical marks (U+0300–U+036F)
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
+    return base || `custom-${Math.random().toString(36).slice(2, 8)}`;
+  };
+
+  const handleCreate = async () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const existingKeys = new Set(typeEntries.map(([k]) => k));
+      let key = slugify(label);
+      let i = 2;
+      while (existingKeys.has(key)) {
+        key = `${slugify(label)}-${i++}`;
+      }
+      await onUpsert({ key, label, color: newColor, isBuiltIn: false, order: 100 + typeEntries.length });
+      setNewLabel("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba pri ukladani");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Spravovat typy POSM</DialogTitle>
+          <DialogDescription>
+            Prejmenovani / prebarveni vychozich typu, pridani vlastnich. Vestavene typy nelze smazat, jen skryt.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Existing types list */}
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            {typeEntries.map(([key, def]) => (
+              <ManageTypeRow
+                key={key}
+                typeKey={key}
+                def={def}
+                colorPalette={colorPalette}
+                onUpsert={onUpsert}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+
+          {/* Add new type */}
+          <div className="border-t pt-4 space-y-2">
+            <Label className="text-sm font-medium">Pridat novy typ</Label>
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="Nazev typu..."
+                className="flex-1 min-w-[180px] h-9"
+                disabled={saving}
+              />
+              <Select value={newColor} onValueChange={setNewColor} disabled={saving}>
+                <SelectTrigger className="w-44 h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {colorPalette.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${c.value.split(" ")[0]}`} />
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleCreate} disabled={saving || !newLabel.trim()}>
+                {saving ? "Ukladam..." : "Pridat"}
+              </Button>
+            </div>
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <div>
+              <Badge className={newColor}>
+                {newLabel.trim() || "Nahled"}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Zavrit</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type ManageTypeRowProps = {
+  typeKey: string;
+  def: PosmTypeDef;
+  colorPalette: { name: string; value: string }[];
+  onUpsert: (input: { key: string; label: string; color: string; order?: number; isHidden?: boolean; isBuiltIn?: boolean }) => Promise<void>;
+  onDelete: (key: string) => Promise<void>;
+};
+
+function ManageTypeRow({ typeKey, def, colorPalette, onUpsert, onDelete }: ManageTypeRowProps) {
+  const [label, setLabel] = useState(def.label);
+  const [color, setColor] = useState(def.color);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset local state when underlying def changes (e.g. after upsert refresh)
+  useRefSync(def.label, setLabel);
+  useRefSync(def.color, setColor);
+
+  const dirty = label.trim() !== def.label || color !== def.color;
+
+  const handleSave = async () => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onUpsert({
+        key: typeKey,
+        label: trimmed,
+        color,
+        order: def.order,
+        isHidden: def.isHidden,
+        isBuiltIn: def.isBuiltIn,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleHidden = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onUpsert({
+        key: typeKey,
+        label: def.label,
+        color: def.color,
+        order: def.order,
+        isHidden: !def.isHidden,
+        isBuiltIn: def.isBuiltIn,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (def.isBuiltIn) return;
+    if (!confirm(`Opravdu smazat typ "${def.label}"? Pokud je nekde pouzity, smazani selze.`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await onDelete(typeKey);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nelze smazat");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg border bg-card">
+      <Badge className={`${color} flex-shrink-0`}>{label || typeKey}</Badge>
+      <Input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        className="flex-1 min-w-[140px] h-8 text-sm"
+        disabled={saving || deleting}
+      />
+      <Select value={color} onValueChange={setColor} disabled={saving || deleting}>
+        <SelectTrigger className="w-40 h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {colorPalette.map((c) => (
+            <SelectItem key={c.value} value={c.value}>
+              <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${c.value.split(" ")[0]}`} />
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button size="sm" onClick={handleSave} disabled={!dirty || saving || deleting || !label.trim()}>
+        {saving ? "..." : "Ulozit"}
+      </Button>
+      <Button size="sm" variant="outline" onClick={handleToggleHidden} disabled={saving || deleting} title={def.isHidden ? "Zobrazit" : "Skryt"}>
+        {def.isHidden ? "Zobrazit" : "Skryt"}
+      </Button>
+      {!def.isBuiltIn && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-red-600 hover:text-red-700"
+          onClick={handleDelete}
+          disabled={saving || deleting}
+        >
+          {deleting ? "..." : "Smazat"}
+        </Button>
+      )}
+      {def.isBuiltIn && (
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">vestaveny</span>
+      )}
+      {error && <span className="text-xs text-red-600 w-full">{error}</span>}
+    </div>
+  );
+}
+
+// Sync local state with prop changes (used to refresh row state when DB updates).
+function useRefSync<T>(value: T, setter: (v: T) => void) {
+  const prev = useRef(value);
+  if (prev.current !== value) {
+    prev.current = value;
+    setter(value);
+  }
 }
