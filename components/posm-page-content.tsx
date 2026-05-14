@@ -417,30 +417,66 @@ export function PosmPageContent() {
     }
   };
 
-  // Virtual POSM items synthesized from products with a pdfUrl ("Produktové listy")
+  // Virtual POSM items synthesized from product sheets (pdfUrl).
+  // One product sheet (PDF) is typically shared by many products, so we
+  // deduplicate by pdfUrl and show the sheet itself, not the products.
   type DisplayItem = NonNullable<typeof items>[number] & {
     isVirtual?: boolean;
-    productId?: Id<"products">;
+    productCount?: number;
   };
-  const virtualProductSheetItems: DisplayItem[] = (productsWithPdf ?? [])
-    .filter(p => !!p.pdfUrl)
-    .map(p => ({
-      _id: (`virtual-product-${p._id}`) as unknown as Id<"posmItems">,
-      _creationTime: p._creationTime,
-      name: p.name,
-      description: p.brand ? `${p.brand}${p.feedCategory ? " – " + p.feedCategory : ""}` : p.feedCategory,
-      type: "product_list" as PosmType,
-      imageUrl: p.image || p.pdfUrl,
-      fileType: p.image ? undefined : "application/pdf",
-      downloadUrl: p.pdfUrl,
-      distributionType: "download" as DistributionType,
-      sizes: undefined,
-      storageId: undefined,
-      isActive: true,
-      createdAt: p._creationTime,
-      isVirtual: true,
-      productId: p._id,
-    }));
+
+  const deriveSheetName = (pdfUrl: string): string => {
+    try {
+      const raw = pdfUrl.split("?")[0].split("#")[0].split("/").pop() || "produktovy-list.pdf";
+      const decoded = decodeURIComponent(raw).replace(/\.pdf$/i, "");
+      const cleaned = decoded.replace(/[-_]+/g, " ").trim();
+      return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Produktový list";
+    } catch {
+      return "Produktový list";
+    }
+  };
+
+  const productSheetGroups = new Map<
+    string,
+    { pdfUrl: string; products: NonNullable<typeof productsWithPdf>[number][] }
+  >();
+  (productsWithPdf ?? []).forEach((p) => {
+    if (!p.pdfUrl) return;
+    const existing = productSheetGroups.get(p.pdfUrl);
+    if (existing) {
+      existing.products.push(p);
+    } else {
+      productSheetGroups.set(p.pdfUrl, { pdfUrl: p.pdfUrl, products: [p] });
+    }
+  });
+
+  const virtualProductSheetItems: DisplayItem[] = Array.from(productSheetGroups.values()).map(
+    ({ pdfUrl, products }) => {
+      const first = products[0];
+      const description = products.length > 1
+        ? `Použito u ${products.length} produktů`
+        : first.brand
+          ? `${first.brand}${first.feedCategory ? " – " + first.feedCategory : ""}`
+          : first.feedCategory;
+      return {
+        _id: (`virtual-sheet-${pdfUrl}`) as unknown as Id<"posmItems">,
+        _creationTime: first._creationTime,
+        name: deriveSheetName(pdfUrl),
+        description,
+        type: "product_list" as PosmType,
+        imageUrl: pdfUrl,
+        fileType: "application/pdf",
+        downloadUrl: pdfUrl,
+        distributionType: "download" as DistributionType,
+        sizes: undefined,
+        storageId: undefined,
+        isActive: true,
+        createdAt: first._creationTime,
+        isVirtual: true,
+        productCount: products.length,
+      };
+    },
+  );
 
   const allItems: DisplayItem[] | undefined = items
     ? [...virtualProductSheetItems, ...items]
