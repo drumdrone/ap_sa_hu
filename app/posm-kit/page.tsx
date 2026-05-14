@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import JSZip from "jszip";
 
 type SharedPosmKitItem = {
   name: string;
@@ -58,6 +59,44 @@ function getFilenameFromUrl(url: string, fallback: string): string {
   return fallback;
 }
 
+function sanitizeName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, "_")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "soubor";
+}
+
+function getZipEntryName(item: SharedPosmKitItem, url: string): string {
+  let ext = "";
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split("/").filter(Boolean).pop() || "";
+    const m = last.match(/\.([a-zA-Z0-9]{1,8})$/);
+    if (m) ext = `.${m[1].toLowerCase()}`;
+  } catch {}
+  const base = sanitizeName(item.name);
+  if (ext && !base.toLowerCase().endsWith(ext)) return `${base}${ext}`;
+  return base;
+}
+
+function makeUnique(name: string, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name);
+    return name;
+  }
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  let i = 2;
+  while (used.has(`${stem}_${i}${ext}`)) i++;
+  const final = `${stem}_${i}${ext}`;
+  used.add(final);
+  return final;
+}
+
 function PosmKitContent() {
   const searchParams = useSearchParams();
   const encodedData = searchParams.get("data") || "";
@@ -88,10 +127,13 @@ function PosmKitContent() {
 
   const downloadAll = async () => {
     if (downloadingAll) return;
-    setDownloadingAll(true);
-    for (const item of downloadItems) {
-      const url = item.downloadUrl || item.imageUrl;
-      if (!url) continue;
+    const targets = downloadItems
+      .map((item) => ({ item, url: item.downloadUrl || item.imageUrl }))
+      .filter((t): t is { item: SharedPosmKitItem; url: string } => Boolean(t.url));
+    if (targets.length === 0) return;
+
+    if (targets.length === 1) {
+      const { item, url } = targets[0];
       const a = document.createElement("a");
       a.href = url;
       a.download = getFilenameFromUrl(url, item.name);
@@ -99,9 +141,48 @@ function PosmKitContent() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      await new Promise((r) => setTimeout(r, 300));
+      return;
     }
-    setDownloadingAll(false);
+
+    setDownloadingAll(true);
+    try {
+      const zip = new JSZip();
+      const used = new Set<string>();
+      const failed: string[] = [];
+
+      for (const { item, url } of targets) {
+        try {
+          const res = await fetch(url, { mode: "cors" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          zip.file(makeUnique(getZipEntryName(item, url), used), blob);
+        } catch (e) {
+          console.error("Failed to fetch", url, e);
+          failed.push(item.name);
+        }
+      }
+
+      if (Object.keys(zip.files).length === 0) {
+        alert("Materiály se nepodařilo stáhnout (CORS/síť). Zkuste je stáhnout jednotlivě.");
+        return;
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipUrl = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = zipUrl;
+      a.download = `posm_kit_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(zipUrl);
+
+      if (failed.length > 0) {
+        alert(`ZIP připraven, ale tyto materiály se nepodařilo přibalit:\n- ${failed.join("\n- ")}`);
+      }
+    } finally {
+      setDownloadingAll(false);
+    }
   };
 
   return (
@@ -126,7 +207,11 @@ function PosmKitContent() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              {downloadingAll ? "Stahuji…" : `Stáhnout všechny materiály (${downloadItems.length})`}
+              {downloadingAll
+                ? "Připravuji ZIP…"
+                : downloadItems.length > 1
+                  ? `Stáhnout všechny v ZIPu (${downloadItems.length})`
+                  : "Stáhnout materiál"}
             </button>
           )}
         </div>

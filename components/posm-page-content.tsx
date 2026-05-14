@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import JSZip from "jszip";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -82,6 +83,44 @@ type PosmKitItem = {
   quantity: number;
   selectedSize?: string;
 };
+
+function sanitizeFilename(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, "_")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "soubor";
+}
+
+function getFilenameForKitItem(item: PosmKitItem, url: string): string {
+  let extFromUrl = "";
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split("/").filter(Boolean).pop() || "";
+    const m = last.match(/\.([a-zA-Z0-9]{1,8})$/);
+    if (m) extFromUrl = `.${m[1].toLowerCase()}`;
+  } catch {}
+  const base = sanitizeFilename(item.name);
+  if (extFromUrl && !base.toLowerCase().endsWith(extFromUrl)) return `${base}${extFromUrl}`;
+  return base;
+}
+
+function uniqueFilename(name: string, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name);
+    return name;
+  }
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  let i = 2;
+  while (used.has(`${stem}_${i}${ext}`)) i++;
+  const final = `${stem}_${i}${ext}`;
+  used.add(final);
+  return final;
+}
 
 export function PosmPageContent() {
   const items = useQuery(api.posm.listItems, {});
@@ -177,6 +216,7 @@ export function PosmPageContent() {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   // Inline name editing in the detail dialog
   const [editingName, setEditingName] = useState(false);
@@ -361,18 +401,70 @@ export function PosmPageContent() {
     setPosmKit(prev => prev.map(k => k.id === itemId ? { ...k, selectedSize: size } : k));
   };
 
-  const downloadKitItems = () => {
+  const downloadKitItems = async () => {
+    if (isDownloadingZip) return;
     const downloadItems = posmKit.filter(k => k.distributionType === "download");
-    downloadItems.forEach(item => {
-      const url = item.downloadUrl || item.imageUrl;
-      if (url) {
-        const a = document.createElement("a");
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.click();
+    const targets = downloadItems
+      .map(item => ({ item, url: item.downloadUrl || item.imageUrl }))
+      .filter((t): t is { item: PosmKitItem; url: string } => Boolean(t.url));
+
+    if (targets.length === 0) return;
+
+    // Single file: keep the original direct-download behavior so the user
+    // gets the file as-is instead of a one-file zip.
+    if (targets.length === 1) {
+      const { item, url } = targets[0];
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getFilenameForKitItem(item, url);
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    setIsDownloadingZip(true);
+    try {
+      const zip = new JSZip();
+      const usedNames = new Set<string>();
+      const failed: string[] = [];
+
+      for (const { item, url } of targets) {
+        try {
+          const res = await fetch(url, { mode: "cors" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const name = uniqueFilename(getFilenameForKitItem(item, url), usedNames);
+          zip.file(name, blob);
+        } catch (e) {
+          console.error("Failed to fetch", url, e);
+          failed.push(item.name);
+        }
       }
-    });
+
+      if (Object.keys(zip.files).length === 0) {
+        alert("Materiály se nepodařilo stáhnout (CORS/síť). Zkuste je stáhnout jednotlivě z detailu.");
+        return;
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipUrl = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = zipUrl;
+      a.download = `posm_kit_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(zipUrl);
+
+      if (failed.length > 0) {
+        alert(`ZIP připraven, ale tyto materiály se nepodařilo přibalit:\n- ${failed.join("\n- ")}`);
+      }
+    } finally {
+      setIsDownloadingZip(false);
+    }
   };
 
   const generatePosmKitShareUrl = (): string => {
@@ -1642,17 +1734,30 @@ export function PosmPageContent() {
             {posmKit.length > 0 && (
               <div className="p-3 border-t border-border space-y-2">
                 {/* Download items if any are downloadable */}
-                {posmKit.some(k => k.distributionType === "download") && (
-                  <button
-                    onClick={downloadKitItems}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Stahnout materialy ({posmKit.filter(k => k.distributionType === "download").length})
-                  </button>
-                )}
+                {posmKit.some(k => k.distributionType === "download") && (() => {
+                  const dlCount = posmKit.filter(k => k.distributionType === "download").length;
+                  const asZip = dlCount > 1;
+                  return (
+                    <button
+                      onClick={downloadKitItems}
+                      disabled={isDownloadingZip}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isDownloadingZip ? (
+                        <div className="w-4 h-4 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                      )}
+                      {isDownloadingZip
+                        ? "Připravuji ZIP…"
+                        : asZip
+                          ? `Stahnout materialy v ZIPu (${dlCount})`
+                          : `Stahnout materialy (${dlCount})`}
+                    </button>
+                  );
+                })()}
 
                 <div className="grid grid-cols-2 gap-2">
                   <button
