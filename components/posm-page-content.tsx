@@ -1375,9 +1375,45 @@ export function PosmPageContent() {
                     <div>
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typ</span>
                       <div className="mt-1">
-                        <Badge className={getTypeDef(selectedItemData.type).color}>
-                          {getTypeDef(selectedItemData.type).label}
-                        </Badge>
+                        {selectedItemData.isVirtual ? (
+                          <Badge className={getTypeDef(selectedItemData.type).color}>
+                            {getTypeDef(selectedItemData.type).label}
+                          </Badge>
+                        ) : (
+                          <Select
+                            value={selectedItemData.type}
+                            onValueChange={async (value) => {
+                              await updateItem({
+                                id: selectedItemData._id,
+                                type: value,
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-8 w-full">
+                              <SelectValue>
+                                <Badge className={getTypeDef(selectedItemData.type).color}>
+                                  {getTypeDef(selectedItemData.type).label}
+                                </Badge>
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {manualTypeEntries.map(([key, def]) => (
+                                <SelectItem key={key} value={key}>
+                                  <span className="inline-flex items-center gap-2">
+                                    <span className={`inline-block w-3 h-3 rounded-full ${def.color.split(" ")[0]}`} />
+                                    {def.label}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                              {/* Fallback: ensure current type stays selectable even if hidden */}
+                              {!manualTypeEntries.some(([k]) => k === selectedItemData.type) && (
+                                <SelectItem value={selectedItemData.type}>
+                                  {getTypeDef(selectedItemData.type).label}
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
                     </div>
                     <div>
