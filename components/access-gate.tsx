@@ -44,7 +44,10 @@ export function AccessGate({ children }: Props) {
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-white text-slate-900">
+    <div
+      className="min-h-screen w-full flex bg-white text-slate-900"
+      style={{ backgroundColor: "#ffffff" }}
+    >
       <div className="flex-1 md:basis-2/3 flex items-center justify-center px-6 py-10">
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-1.5">
