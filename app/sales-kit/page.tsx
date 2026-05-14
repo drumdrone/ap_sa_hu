@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -102,7 +102,18 @@ function openPrintablePdf(payload: SharedSalesKitPayload) {
   printWindow.document.close();
 }
 
-export default function SalesKitSharePage() {
+function SalesKitFallback() {
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="max-w-3xl mx-auto px-4 py-10">
+        <h1 className="text-2xl font-bold mb-4">Sales Kit</h1>
+        <p className="text-muted-foreground">Načítání…</p>
+      </div>
+    </main>
+  );
+}
+
+function SalesKitContent() {
   const searchParams = useSearchParams();
   const encodedData = searchParams.get("data") || "";
   const autoTriggered = useRef(false);
@@ -171,5 +182,13 @@ export default function SalesKitSharePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function SalesKitSharePage() {
+  return (
+    <Suspense fallback={<SalesKitFallback />}>
+      <SalesKitContent />
+    </Suspense>
   );
 }
