@@ -1338,7 +1338,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                         return {
                                           id: "pdf-link",
                                           type: "materials",
-                                          label: "PDF odkaz",
+                                          label: "Produktový list",
                                           content: product.pdfUrl,
                                         };
                                       }
