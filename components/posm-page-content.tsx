@@ -109,6 +109,11 @@ export function PosmPageContent() {
   const [emailTo, setEmailTo] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
+  // Inline name editing in the detail dialog
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
+
   // Handle file upload
   const handleFileUpload = useCallback(async (file: File) => {
     const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
@@ -1111,20 +1116,96 @@ export function PosmPageContent() {
         </Dialog>
 
         {/* Item Detail Dialog */}
-        <Dialog open={showDetail} onOpenChange={setShowDetail}>
+        <Dialog open={showDetail} onOpenChange={(open) => {
+          setShowDetail(open);
+          if (!open) setEditingName(false);
+        }}>
           <DialogContent className="max-w-2xl">
             {selectedItemData && (
               <>
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-3">
-                    {selectedItemData.name}
-                    <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || ""}>
-                      {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
-                    </Badge>
-                    {selectedItemData.distributionType && (
-                      <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
-                        {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
-                      </Badge>
+                  <DialogTitle className="flex items-center gap-3 flex-wrap">
+                    {editingName && !selectedItemData.isVirtual ? (
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Input
+                          autoFocus
+                          value={nameDraft}
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                              const trimmed = nameDraft.trim();
+                              if (!trimmed) return;
+                              setSavingName(true);
+                              try {
+                                await updateItem({ id: selectedItemData._id, name: trimmed });
+                                setEditingName(false);
+                              } finally {
+                                setSavingName(false);
+                              }
+                            } else if (e.key === "Escape") {
+                              setEditingName(false);
+                              setNameDraft(selectedItemData.name);
+                            }
+                          }}
+                          className="text-base h-9"
+                          disabled={savingName}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            const trimmed = nameDraft.trim();
+                            if (!trimmed) return;
+                            setSavingName(true);
+                            try {
+                              await updateItem({ id: selectedItemData._id, name: trimmed });
+                              setEditingName(false);
+                            } finally {
+                              setSavingName(false);
+                            }
+                          }}
+                          disabled={savingName || !nameDraft.trim() || nameDraft.trim() === selectedItemData.name}
+                        >
+                          {savingName ? "Ukladam..." : "Ulozit"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingName(false);
+                            setNameDraft(selectedItemData.name);
+                          }}
+                          disabled={savingName}
+                        >
+                          Zrusit
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span>{selectedItemData.name}</span>
+                        {!selectedItemData.isVirtual && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNameDraft(selectedItemData.name);
+                              setEditingName(true);
+                            }}
+                            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Upravit nazev"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                        )}
+                        <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || ""}>
+                          {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
+                        </Badge>
+                        {selectedItemData.distributionType && (
+                          <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
+                            {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
+                          </Badge>
+                        )}
+                      </>
                     )}
                   </DialogTitle>
                   <DialogDescription>
