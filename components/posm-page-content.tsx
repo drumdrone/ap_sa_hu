@@ -1453,9 +1453,30 @@ export function PosmPageContent() {
                     <div>
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typ</span>
                       <div className="mt-1">
-                        <Badge className={getTypeDef(selectedItemData.type).color}>
-                          {getTypeDef(selectedItemData.type).label}
-                        </Badge>
+                        {selectedItemData.isVirtual ? (
+                          <Badge className={getTypeDef(selectedItemData.type).color}>
+                            {getTypeDef(selectedItemData.type).label}
+                          </Badge>
+                        ) : (
+                          <Select
+                            value={selectedItemData.type}
+                            onValueChange={async (value) => {
+                              await updateItem({
+                                id: selectedItemData._id,
+                                type: value,
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-7 w-auto text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {manualTypeEntries.map(([key, def]) => (
+                                <SelectItem key={key} value={key}>{def.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
                     </div>
                     <div>
