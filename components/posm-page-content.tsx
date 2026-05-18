@@ -223,6 +223,10 @@ export function PosmPageContent() {
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
 
+  // Inline type editing in the detail dialog
+  const [editingType, setEditingType] = useState(false);
+  const [savingType, setSavingType] = useState(false);
+
   // Handle file upload
   const handleFileUpload = useCallback(async (file: File) => {
     const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
@@ -1407,9 +1411,48 @@ export function PosmPageContent() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                           </svg>
                         </button>
-                        <Badge className={getTypeDef(selectedItemData.type).color}>
-                          {getTypeDef(selectedItemData.type).label}
-                        </Badge>
+                        {editingType && !selectedItemData.isVirtual ? (
+                          <Select
+                            value={selectedItemData.type}
+                            onValueChange={async (value) => {
+                              setSavingType(true);
+                              try {
+                                await updateItem({ id: selectedItemData._id, type: value });
+                              } finally {
+                                setSavingType(false);
+                                setEditingType(false);
+                              }
+                            }}
+                            disabled={savingType}
+                          >
+                            <SelectTrigger className="h-7 w-auto text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {manualTypeEntries.map(([key, def]) => (
+                                <SelectItem key={key} value={key}>{def.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Badge className={getTypeDef(selectedItemData.type).color}>
+                              {getTypeDef(selectedItemData.type).label}
+                            </Badge>
+                            {!selectedItemData.isVirtual && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingType(true)}
+                                className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                title="Upravit kategorii"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {selectedItemData.distributionType && (
                           <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
                             {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
@@ -1453,30 +1496,9 @@ export function PosmPageContent() {
                     <div>
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typ</span>
                       <div className="mt-1">
-                        {selectedItemData.isVirtual ? (
-                          <Badge className={getTypeDef(selectedItemData.type).color}>
-                            {getTypeDef(selectedItemData.type).label}
-                          </Badge>
-                        ) : (
-                          <Select
-                            value={selectedItemData.type}
-                            onValueChange={async (value) => {
-                              await updateItem({
-                                id: selectedItemData._id,
-                                type: value,
-                              });
-                            }}
-                          >
-                            <SelectTrigger className="h-7 w-auto text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {manualTypeEntries.map(([key, def]) => (
-                                <SelectItem key={key} value={key}>{def.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <Badge className={getTypeDef(selectedItemData.type).color}>
+                          {getTypeDef(selectedItemData.type).label}
+                        </Badge>
                       </div>
                     </div>
                     <div>
