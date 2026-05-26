@@ -27,6 +27,87 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 
+const SELLER_FIELDS = [
+  { key: "salesClaim", label: "Prodejni claim" },
+  { key: "quickReferenceCard", label: "Quick Reference Card" },
+  { key: "mainBenefits", label: "3 hlavni benefity" },
+  { key: "herbComposition", label: "Slozeni bylin" },
+  { key: "salesForecast", label: "Prodejni vyhled" },
+  { key: "sensoryProfile", label: "Senzoricky profil" },
+  { key: "targetAudience", label: "Cilova skupina" },
+  { key: "faqText", label: "FAQ" },
+] as const;
+
+const FILL_LEVELS = [
+  { label: "Nizka", color: "bg-red-500" },
+  { label: "Slusna", color: "bg-orange-400" },
+  { label: "Dobra", color: "bg-yellow-400" },
+  { label: "Skvela", color: "bg-green-500" },
+  { label: "Vyjimecna", color: "bg-emerald-600" },
+] as const;
+
+function isFieldFilled(product: Record<string, unknown>, key: string): boolean {
+  if (key === "faqText") {
+    const faqText = product.faqText;
+    if (typeof faqText === "string" && faqText.trim().length > 0) return true;
+    const faq = product.faq;
+    return Array.isArray(faq) && faq.length > 0;
+  }
+  const value = product[key];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function computeFillLevel(filled: number, total: number): number {
+  if (total === 0) return 0;
+  const ratio = filled / total;
+  if (ratio <= 0) return 0;
+  if (ratio < 0.4) return 1;
+  if (ratio < 0.6) return 2;
+  if (ratio < 0.8) return 3;
+  if (ratio < 1) return 4;
+  return 5;
+}
+
+function SellerFillIndicator({ product }: { product: Record<string, unknown> }) {
+  const filledKeys = SELLER_FIELDS.filter((f) => isFieldFilled(product, f.key));
+  const level = computeFillLevel(filledKeys.length, SELLER_FIELDS.length);
+  const labelIndex = Math.max(0, Math.min(FILL_LEVELS.length - 1, level - 1));
+  const labelText = level === 0 ? "Nevyplneno" : FILL_LEVELS[labelIndex].label;
+  const missing = SELLER_FIELDS.filter((f) => !isFieldFilled(product, f.key));
+  const tooltip = [
+    `Vyplneno ${filledKeys.length} / ${SELLER_FIELDS.length}`,
+    "",
+    "Vyplnena pole:",
+    ...(filledKeys.length ? filledKeys.map((f) => `+ ${f.label}`) : ["(zadna)"]),
+    "",
+    "Chybi:",
+    ...(missing.length ? missing.map((f) => `- ${f.label}`) : ["(nic)"]),
+  ].join("\n");
+
+  return (
+    <div className="w-44" title={tooltip}>
+      <div
+        className={`text-xs font-semibold mb-1 ${
+          level === 0 ? "text-muted-foreground" : "text-foreground"
+        }`}
+      >
+        {labelText}
+        <span className="ml-1 font-normal text-muted-foreground">
+          ({filledKeys.length}/{SELLER_FIELDS.length})
+        </span>
+      </div>
+      <div className="flex gap-0.5 h-2 rounded overflow-hidden">
+        {FILL_LEVELS.map((seg, i) => (
+          <div
+            key={seg.label}
+            className={`flex-1 ${i < level ? seg.color : "bg-muted"}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // AI suggestion state type
 interface AiSuggestionState {
   loading: boolean;
@@ -198,6 +279,7 @@ export default function AdminTableContent() {
               <TableRow className="bg-muted/50">
                 <TableHead className="w-[80px]">Obrázek</TableHead>
                 <TableHead className="w-[250px]">Název</TableHead>
+                <TableHead className="w-[200px]">Pro prodejce</TableHead>
                 <TableHead>Quick Reference Card</TableHead>
                 <TableHead>Prodejní Claim</TableHead>
                 <TableHead className="w-[100px] text-center">Akce</TableHead>
@@ -249,6 +331,11 @@ export default function AdminTableContent() {
                     )}
                   </TableCell>
                   
+                  {/* Pro prodejce – completeness */}
+                  <TableCell>
+                    <SellerFillIndicator product={product as unknown as Record<string, unknown>} />
+                  </TableCell>
+
                   {/* Quick Reference Card */}
                   <TableCell>
                     {product.quickReferenceCard ? (
