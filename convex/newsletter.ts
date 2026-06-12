@@ -228,8 +228,8 @@ export const getContent = query({
     const byType = (type: Doc<"news">["type"]): ContentItem[] =>
       newsItems.filter((n) => n.type === type).map((n) => n.item);
 
-    // TOP products (curated list) - link to public e-shop URL when available,
-    // otherwise to the product detail page in the app
+    // TOP products (curated list) - always link to the product detail page in
+    // the Apotheke Sales Hub (not the public e-shop)
     const topProducts = await ctx.db
       .query("products")
       .withIndex("by_isTop", (q) => q.eq("isTop", true))
@@ -241,7 +241,7 @@ export const getContent = query({
       .map((p) => ({
         id: p._id,
         title: p.name,
-        url: p.productUrl || `${siteUrl}/product/${p._id}`,
+        url: `${siteUrl}/product/${p._id}`,
         imageUrl: p.image || undefined,
         blocks: productBlocks(p),
       }));
@@ -327,7 +327,9 @@ function buildBody(intro: string | undefined, sections: ComposedSection[]): stri
       for (const block of item.blocks ?? []) {
         parts.push("");
         parts.push(`  ── ${block.label} ──`);
-        parts.push(block.content.split("\n").map((l) => `  ${l}`).join("\n"));
+        // Drop **bold** markers - they only make sense in the HTML version.
+        const plain = block.content.replace(/\*\*(.+?)\*\*/g, "$1");
+        parts.push(plain.split("\n").map((l) => `  ${l}`).join("\n"));
       }
     }
     parts.push("");
@@ -345,8 +347,18 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Turn a plain-text content block (with simple **bold** markers and bullet /
+// numbered lines) into email-safe HTML. Outlook renders <pre>/monospace
+// poorly, so we use a normal proportional font with <br> line breaks.
+function formatBlockContent(text: string): string {
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\r?\n/g, "<br>");
+}
+
 // Build an HTML newsletter body with section headings, linked titles and
 // image previews. Inline styles only - email clients ignore stylesheets.
+// Uses a centered, fixed-width table layout for reliable Outlook rendering.
 function buildHtml(intro: string | undefined, sections: ComposedSection[]): string {
   const blocks: string[] = [];
 
@@ -359,7 +371,7 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
   for (const section of sections) {
     if (section.items.length === 0) continue;
     blocks.push(
-      `<h2 style="margin:28px 0 12px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#166534;border-bottom:2px solid #166534;padding-bottom:6px;">${escapeHtml(section.title)}</h2>`
+      `<h2 style="margin:28px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#166534;border-bottom:2px solid #166534;padding-bottom:6px;">${escapeHtml(section.title)}</h2>`
     );
     for (const item of section.items) {
       const title = escapeHtml(item.title);
@@ -367,32 +379,49 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
         ? `<a href="${escapeHtml(item.url)}" style="color:#2563eb;text-decoration:none;font-weight:600;">${title}</a>`
         : `<span style="font-weight:600;color:#111827;">${title}</span>`;
       const imageHtml = item.imageUrl
-        ? `<td style="width:72px;padding-right:12px;vertical-align:top;"><img src="${escapeHtml(item.imageUrl)}" alt="" width="64" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;display:block;" /></td>`
+        ? `<td style="width:76px;padding-right:14px;vertical-align:top;"><img src="${escapeHtml(item.imageUrl)}" alt="" width="64" height="64" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;display:block;" /></td>`
         : "";
       const urlNote = item.url
-        ? `<div style="font-size:12px;color:#9ca3af;word-break:break-all;margin-top:2px;">${escapeHtml(item.url)}</div>`
+        ? `<div style="font-size:12px;color:#9ca3af;word-break:break-all;margin-top:3px;">${escapeHtml(item.url)}</div>`
         : "";
       const blocksHtml = (item.blocks ?? [])
         .map(
           (b) =>
-            `<div style="margin-top:10px;"><div style="font-size:11px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:#166534;margin-bottom:4px;">${escapeHtml(b.label)}</div><pre style="margin:0;padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;font-family:'Courier New',monospace;color:#374151;">${escapeHtml(b.content)}</pre></div>`
+            `<div style="margin-top:12px;"><div style="font-size:11px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:#166534;margin-bottom:6px;">${escapeHtml(b.label)}</div><div style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.6;color:#374151;">${formatBlockContent(b.content)}</div></div>`
         )
         .join("");
       blocks.push(
-        `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 12px;"><tr>${imageHtml}<td style="vertical-align:top;font-size:14px;line-height:1.5;">${titleHtml}${urlNote}${blocksHtml}</td></tr></table>`
+        `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;margin:0 0 18px;"><tr>${imageHtml}<td style="vertical-align:top;font-size:14px;line-height:1.5;">${titleHtml}${urlNote}${blocksHtml}</td></tr></table>`
       );
     }
   }
 
   return `<!DOCTYPE html>
-<html lang="cs">
-<body style="margin:0;padding:0;background:#f3f4f6;">
-  <div style="max-width:600px;margin:0 auto;padding:24px 16px;font-family:Arial,Helvetica,sans-serif;">
-    <div style="background:#ffffff;border-radius:12px;padding:28px;border:1px solid #e5e7eb;">
-      ${blocks.join("\n")}
-    </div>
-    <p style="text-align:center;font-size:11px;color:#9ca3af;margin-top:16px;">Apotheke Sales Hub</p>
-  </div>
+<html lang="cs" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;">
+          <tr>
+            <td style="padding:28px;font-family:Arial,Helvetica,sans-serif;color:#374151;">
+              ${blocks.join("\n")}
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+          <tr>
+            <td style="padding:16px;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;">Apotheke Sales Hub</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }
