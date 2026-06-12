@@ -242,10 +242,11 @@ export const sendNewsletter = mutation({
 
     const body = buildBody(args.intro, nonEmptySections);
 
-    // Schedule one email per recipient
-    for (const email of emails) {
-      await ctx.scheduler.runAfter(0, internal.emails.deliverEmail, {
-        email,
+    // Schedule one email per recipient, staggered ~2/s to respect
+    // the email provider's rate limit (Resend allows 2 req/s).
+    for (let i = 0; i < emails.length; i++) {
+      await ctx.scheduler.runAfter(i * 600, internal.emails.deliverEmail, {
+        email: emails[i],
         subject,
         content: body,
       });
