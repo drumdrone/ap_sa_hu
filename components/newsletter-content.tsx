@@ -18,16 +18,19 @@ import {
   ToggleRight,
   ExternalLink,
   History,
+  Eye,
+  X,
 } from "lucide-react";
 
-type ContentItem = { id: string; title: string; url?: string };
+type ContentItem = { id: string; title: string; url?: string; imageUrl?: string };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
 
 // Hint text shown under each section label in the composer
 const SECTION_HINTS: Record<string, string> = {
   product: "Označ produktové novinky, které chceš zahrnout.",
   company: "Co se děje ve firmě.",
-  materials: "Nové letáky, stojany a další materiály.",
+  materials: "Novinky z aktualit o materiálech.",
+  posm: "Materiály z POSM katalogu — články, letáky, stojany…",
   top: "Aktuální TOP produkty z katalogu.",
 };
 
@@ -64,6 +67,7 @@ export function NewsletterContent() {
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const activeCount = useMemo(
     () => (subscribers ?? []).filter((s) => s.isActive).length,
@@ -117,6 +121,25 @@ export function NewsletterContent() {
   const urlFor = (item: ContentItem) =>
     editedUrls[item.id] !== undefined ? editedUrls[item.id] : (item.url ?? "");
 
+  // Composed sections from the current selection - used for preview and send
+  const composedSections = useMemo(
+    () =>
+      (content ?? [])
+        .map((section) => ({
+          title: section.label,
+          items: section.items
+            .filter((item) => selectedIds.has(item.id))
+            .map((item) => ({
+              title: titleFor(item).trim() || item.title,
+              url: urlFor(item).trim() || undefined,
+              imageUrl: item.imageUrl,
+            })),
+        }))
+        .filter((section) => section.items.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [content, selectedIds, editedTitles, editedUrls]
+  );
+
   const handleSend = async () => {
     setSendError(null);
     setSendMessage(null);
@@ -134,19 +157,6 @@ export function NewsletterContent() {
       return;
     }
 
-    // Build sections from selected items, preserving section grouping & order
-    const sections = (content ?? [])
-      .map((section) => ({
-        title: section.label,
-        items: section.items
-          .filter((item) => selectedIds.has(item.id))
-          .map((item) => ({
-            title: titleFor(item).trim() || item.title,
-            url: urlFor(item).trim() || undefined,
-          })),
-      }))
-      .filter((section) => section.items.length > 0);
-
     if (
       !confirm(
         `Odeslat newsletter "${subject.trim()}" na ${activeCount} aktivních odběratelů?`
@@ -160,7 +170,7 @@ export function NewsletterContent() {
       const res = await sendNewsletter({
         subject: subject.trim(),
         intro: intro.trim() || undefined,
-        sections,
+        sections: composedSections,
       });
       setSendMessage(`Newsletter odeslán na ${res.sent} odběratelů.`);
       setSelectedIds(new Set());
@@ -168,6 +178,7 @@ export function NewsletterContent() {
       setEditedUrls({});
       setSubject("");
       setIntro("");
+      setShowPreview(false);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Odeslání selhalo.");
     } finally {
@@ -275,42 +286,54 @@ export function NewsletterContent() {
                     {selectedItems.map((item) => (
                       <div
                         key={item.id}
-                        className="rounded-lg border border-border bg-muted/30 p-3 space-y-2"
+                        className="rounded-lg border border-border bg-muted/30 p-3"
                       >
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground">
-                            Název v e-mailu
-                          </label>
-                          <Input
-                            value={titleFor(item)}
-                            onChange={(e) =>
-                              setEditedTitles((prev) => ({ ...prev, [item.id]: e.target.value }))
-                            }
-                            className="mt-1 bg-background"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground">Odkaz</label>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <Input
-                              value={urlFor(item)}
-                              onChange={(e) =>
-                                setEditedUrls((prev) => ({ ...prev, [item.id]: e.target.value }))
-                              }
-                              placeholder="https://… (volitelné)"
-                              className="text-sm text-blue-700 bg-background"
+                        <div className="flex gap-3">
+                          {item.imageUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.imageUrl}
+                              alt=""
+                              className="w-14 h-14 rounded-lg object-cover border border-border shrink-0 mt-1 bg-white"
                             />
-                            {urlFor(item).trim() && (
-                              <a
-                                href={urlFor(item).trim()}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="shrink-0 text-muted-foreground hover:text-primary p-1.5"
-                                title="Otevřít odkaz"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
-                            )}
+                          )}
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Název v e-mailu
+                              </label>
+                              <Input
+                                value={titleFor(item)}
+                                onChange={(e) =>
+                                  setEditedTitles((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                }
+                                className="mt-1 bg-background"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground">Odkaz</label>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <Input
+                                  value={urlFor(item)}
+                                  onChange={(e) =>
+                                    setEditedUrls((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  placeholder="https://… (volitelné)"
+                                  className="text-sm text-blue-700 bg-background"
+                                />
+                                {urlFor(item).trim() && (
+                                  <a
+                                    href={urlFor(item).trim()}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="shrink-0 text-muted-foreground hover:text-primary p-1.5"
+                                    title="Otevřít odkaz"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -328,10 +351,20 @@ export function NewsletterContent() {
               <span className="text-sm text-muted-foreground">
                 Vybráno {selectedCount} položek · pošle se {activeCount} odběratelům
               </span>
-              <Button onClick={handleSend} disabled={sending}>
-                <Send className="w-4 h-4 mr-1" />
-                {sending ? "Odesílám…" : "Odeslat newsletter"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPreview(true)}
+                  disabled={selectedCount === 0}
+                >
+                  <Eye className="w-4 h-4 mr-1" />
+                  Náhled
+                </Button>
+                <Button onClick={handleSend} disabled={sending}>
+                  <Send className="w-4 h-4 mr-1" />
+                  {sending ? "Odesílám…" : "Odeslat newsletter"}
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -467,6 +500,89 @@ export function NewsletterContent() {
           </Card>
         )}
       </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* Email preview modal                                            */}
+      {/* ------------------------------------------------------------- */}
+      {showPreview && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto p-4 sm:p-8"
+          onClick={() => setShowPreview(false)}
+        >
+          <div
+            className="bg-gray-100 rounded-xl shadow-xl w-full max-w-2xl my-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white rounded-t-xl">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold truncate">
+                  {subject.trim() || "(bez předmětu)"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Náhled e-mailu · takto ho uvidí příjemci
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                className="text-muted-foreground hover:text-foreground p-1"
+                title="Zavřít"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6">
+              <div className="bg-white border border-gray-200 rounded-xl p-6 font-[Arial,Helvetica,sans-serif]">
+                {intro.trim() && (
+                  <p className="text-[15px] leading-relaxed text-gray-700 whitespace-pre-line mb-6">
+                    {intro.trim()}
+                  </p>
+                )}
+                {composedSections.map((section) => (
+                  <div key={section.title} className="mb-5">
+                    <h2 className="text-sm uppercase tracking-wide text-green-800 border-b-2 border-green-800 pb-1.5 mb-3 font-semibold">
+                      {section.title}
+                    </h2>
+                    <div className="space-y-3">
+                      {section.items.map((item, idx) => (
+                        <div key={idx} className="flex gap-3">
+                          {item.imageUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.imageUrl}
+                              alt=""
+                              className="w-16 h-16 rounded-lg object-cover border border-gray-200 shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0 text-sm">
+                            {item.url ? (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 font-semibold hover:underline"
+                              >
+                                {item.title}
+                              </a>
+                            ) : (
+                              <span className="font-semibold text-gray-900">{item.title}</span>
+                            )}
+                            {item.url && (
+                              <p className="text-xs text-gray-400 break-all mt-0.5">{item.url}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <p className="text-center text-[11px] text-gray-400 mt-6">Apotheke Sales Hub</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

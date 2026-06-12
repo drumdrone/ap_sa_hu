@@ -406,6 +406,7 @@ export default defineSchema({
       items: v.array(v.object({
         title: v.string(),
         url: v.optional(v.string()),
+        imageUrl: v.optional(v.string()),
       })),
     })),
     recipientCount: v.number(),
