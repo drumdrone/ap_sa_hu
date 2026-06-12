@@ -135,7 +135,7 @@ export const removeSubscriber = mutation({
 // Each item carries a default title (pre-filled, editable in the UI) and a link.
 // ---------------------------------------------------------------------------
 
-type ContentItem = { id: string; title: string; url?: string };
+type ContentItem = { id: string; title: string; url?: string; imageUrl?: string };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
 
 export const getContent = query({
@@ -147,10 +147,23 @@ export const getContent = query({
 
     const news = await ctx.db.query("news").withIndex("by_createdAt").order("desc").take(100);
 
+    // Resolve uploaded news images so the composer/email can show previews
+    const newsItems = await Promise.all(
+      news.map(async (n) => ({
+        type: n.type,
+        item: {
+          id: n._id as string,
+          title: n.title,
+          url: n.url || undefined,
+          imageUrl: n.imageStorageId
+            ? (await ctx.storage.getUrl(n.imageStorageId)) ?? undefined
+            : undefined,
+        } satisfies ContentItem,
+      }))
+    );
+
     const byType = (type: Doc<"news">["type"]): ContentItem[] =>
-      news
-        .filter((n) => n.type === type)
-        .map((n) => ({ id: n._id, title: n.title, url: n.url || undefined }));
+      newsItems.filter((n) => n.type === type).map((n) => n.item);
 
     // TOP products (curated list) - link to public e-shop URL when available,
     // otherwise to the product detail page in the app
@@ -162,12 +175,44 @@ export const getContent = query({
     const topItems: ContentItem[] = topProducts
       .sort((a, b) => (a.topOrder ?? 99) - (b.topOrder ?? 99))
       .slice(0, 20)
-      .map((p) => ({ id: p._id, title: p.name, url: p.productUrl || `${siteUrl}/product/${p._id}` }));
+      .map((p) => ({
+        id: p._id,
+        title: p.name,
+        url: p.productUrl || `${siteUrl}/product/${p._id}`,
+        imageUrl: p.image || undefined,
+      }));
+
+    // POSM materials (articles, flyers, stands...). Link priority: external
+    // download URL > uploaded file > image > POSM page in the app.
+    const posmItems = await ctx.db
+      .query("posmItems")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+
+    const posmContent: ContentItem[] = await Promise.all(
+      posmItems
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map(async (item) => {
+          let storageUrl: string | undefined;
+          if (item.storageId) {
+            storageUrl = (await ctx.storage.getUrl(item.storageId)) ?? undefined;
+          }
+          const isImageFile = item.fileType?.startsWith("image/") ?? false;
+          return {
+            id: item._id,
+            title: item.name,
+            url: item.downloadUrl || storageUrl || item.imageUrl || `${siteUrl}/posm`,
+            // Preview only when we actually have an image (not e.g. a PDF)
+            imageUrl: item.imageUrl || (isImageFile ? storageUrl : undefined),
+          };
+        })
+    );
 
     return [
       { key: "product", label: "Nové produkty", items: byType("product") },
       { key: "company", label: "Novinky z firmy", items: byType("company") },
       { key: "materials", label: "Nové materiály", items: byType("materials") },
+      { key: "posm", label: "POSM materiály", items: posmContent },
       { key: "top", label: "TOP produkty", items: topItems },
     ];
   },
@@ -182,14 +227,17 @@ const sectionValidator = v.object({
   items: v.array(v.object({
     title: v.string(),
     url: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
   })),
 });
 
+type ComposedSection = {
+  title: string;
+  items: Array<{ title: string; url?: string; imageUrl?: string }>;
+};
+
 // Build a clean, readable plain-text newsletter body from the composed sections.
-function buildBody(
-  intro: string | undefined,
-  sections: Array<{ title: string; items: Array<{ title: string; url?: string }> }>
-): string {
+function buildBody(intro: string | undefined, sections: ComposedSection[]): string {
   const parts: string[] = [];
   if (intro && intro.trim()) {
     parts.push(intro.trim());
@@ -208,6 +256,61 @@ function buildBody(
   }
 
   return parts.join("\n").trimEnd();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Build an HTML newsletter body with section headings, linked titles and
+// image previews. Inline styles only - email clients ignore stylesheets.
+function buildHtml(intro: string | undefined, sections: ComposedSection[]): string {
+  const blocks: string[] = [];
+
+  if (intro && intro.trim()) {
+    blocks.push(
+      `<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;white-space:pre-line;">${escapeHtml(intro.trim())}</p>`
+    );
+  }
+
+  for (const section of sections) {
+    if (section.items.length === 0) continue;
+    blocks.push(
+      `<h2 style="margin:28px 0 12px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#166534;border-bottom:2px solid #166534;padding-bottom:6px;">${escapeHtml(section.title)}</h2>`
+    );
+    for (const item of section.items) {
+      const title = escapeHtml(item.title);
+      const titleHtml = item.url
+        ? `<a href="${escapeHtml(item.url)}" style="color:#2563eb;text-decoration:none;font-weight:600;">${title}</a>`
+        : `<span style="font-weight:600;color:#111827;">${title}</span>`;
+      const imageHtml = item.imageUrl
+        ? `<td style="width:72px;padding-right:12px;vertical-align:top;"><img src="${escapeHtml(item.imageUrl)}" alt="" width="64" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;display:block;" /></td>`
+        : "";
+      const urlNote = item.url
+        ? `<div style="font-size:12px;color:#9ca3af;word-break:break-all;margin-top:2px;">${escapeHtml(item.url)}</div>`
+        : "";
+      blocks.push(
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 12px;"><tr>${imageHtml}<td style="vertical-align:top;font-size:14px;line-height:1.5;">${titleHtml}${urlNote}</td></tr></table>`
+      );
+    }
+  }
+
+  return `<!DOCTYPE html>
+<html lang="cs">
+<body style="margin:0;padding:0;background:#f3f4f6;">
+  <div style="max-width:600px;margin:0 auto;padding:24px 16px;font-family:Arial,Helvetica,sans-serif;">
+    <div style="background:#ffffff;border-radius:12px;padding:28px;border:1px solid #e5e7eb;">
+      ${blocks.join("\n")}
+    </div>
+    <p style="text-align:center;font-size:11px;color:#9ca3af;margin-top:16px;">Apotheke Sales Hub</p>
+  </div>
+</body>
+</html>`;
 }
 
 // Send the composed newsletter. If `recipients` is omitted, sends to all active
@@ -246,6 +349,7 @@ export const sendNewsletter = mutation({
     }
 
     const body = buildBody(args.intro, nonEmptySections);
+    const html = buildHtml(args.intro, nonEmptySections);
 
     // Schedule one email per recipient, staggered ~2/s to respect
     // the email provider's rate limit (Resend allows 2 req/s).
@@ -254,6 +358,7 @@ export const sendNewsletter = mutation({
         email: emails[i],
         subject,
         content: body,
+        html,
       });
     }
 

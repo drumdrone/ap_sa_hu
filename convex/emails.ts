@@ -33,6 +33,7 @@ export const deliverEmail = internalAction({
     email: v.string(),
     subject: v.string(),
     content: v.string(),
+    html: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const resendApiKey = process.env.RESEND_API_KEY;
@@ -58,6 +59,7 @@ export const deliverEmail = internalAction({
           to: args.email,
           subject: args.subject,
           text: args.content,
+          ...(args.html ? { html: args.html } : {}),
           ...(replyTo ? { reply_to: replyTo } : {}),
         }),
       });
