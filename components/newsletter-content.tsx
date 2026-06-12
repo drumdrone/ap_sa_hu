@@ -24,7 +24,14 @@ import {
   ListChecks,
 } from "lucide-react";
 
-type ContentItem = { id: string; title: string; url?: string; imageUrl?: string };
+type ContentBlock = { key: string; label: string; content: string };
+type ContentItem = {
+  id: string;
+  title: string;
+  url?: string;
+  imageUrl?: string;
+  blocks?: ContentBlock[];
+};
 type ContentSection = { key: string; label: string; items: ContentItem[] };
 
 // Hint text shown under each section label in the content tab
@@ -69,6 +76,8 @@ export function NewsletterContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
   const [editedUrls, setEditedUrls] = useState<Record<string, string>>({});
+  // Per item: which product content blocks (salesClaim, mainBenefits...) to attach
+  const [selectedBlocks, setSelectedBlocks] = useState<Record<string, string[]>>({});
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -126,6 +135,21 @@ export function NewsletterContent() {
   const urlFor = (item: ContentItem) =>
     editedUrls[item.id] !== undefined ? editedUrls[item.id] : (item.url ?? "");
 
+  const toggleBlock = (itemId: string, blockKey: string) => {
+    setSelectedBlocks((prev) => {
+      const current = prev[itemId] ?? [];
+      return {
+        ...prev,
+        [itemId]: current.includes(blockKey)
+          ? current.filter((k) => k !== blockKey)
+          : [...current, blockKey],
+      };
+    });
+  };
+
+  const blocksFor = (item: ContentItem) =>
+    (item.blocks ?? []).filter((b) => (selectedBlocks[item.id] ?? []).includes(b.key));
+
   // Composed sections from the current selection - used for recap, preview and send
   const composedSections = useMemo(
     () =>
@@ -134,15 +158,19 @@ export function NewsletterContent() {
           title: section.label,
           items: section.items
             .filter((item) => selectedIds.has(item.id))
-            .map((item) => ({
-              title: titleFor(item).trim() || item.title,
-              url: urlFor(item).trim() || undefined,
-              imageUrl: item.imageUrl,
-            })),
+            .map((item) => {
+              const blocks = blocksFor(item).map(({ label, content }) => ({ label, content }));
+              return {
+                title: titleFor(item).trim() || item.title,
+                url: urlFor(item).trim() || undefined,
+                imageUrl: item.imageUrl,
+                ...(blocks.length > 0 ? { blocks } : {}),
+              };
+            }),
         }))
         .filter((section) => section.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [content, selectedIds, editedTitles, editedUrls]
+    [content, selectedIds, editedTitles, editedUrls, selectedBlocks]
   );
 
   const handleSend = async () => {
@@ -181,6 +209,7 @@ export function NewsletterContent() {
       setSelectedIds(new Set());
       setEditedTitles({});
       setEditedUrls({});
+      setSelectedBlocks({});
       setSubject("");
       setIntro("");
       setShowPreview(false);
@@ -215,24 +244,33 @@ export function NewsletterContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="sestaveni">
+        <TabsList className="flex-wrap h-auto bg-transparent p-0 gap-2 justify-start">
+          <TabsTrigger
+            value="sestaveni"
+            className="rounded-lg border px-4 py-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 data-[state=active]:bg-blue-600 data-[state=active]:border-blue-600 data-[state=active]:text-white data-[state=active]:shadow"
+          >
             <Send className="w-4 h-4 mr-1.5" />
             Sestavení newsletteru
           </TabsTrigger>
-          <TabsTrigger value="obsah">
+          <TabsTrigger
+            value="obsah"
+            className="rounded-lg border px-4 py-2 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 data-[state=active]:bg-emerald-600 data-[state=active]:border-emerald-600 data-[state=active]:text-white data-[state=active]:shadow"
+          >
             <ListChecks className="w-4 h-4 mr-1.5" />
             Obsah
             {selectedCount > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] leading-none">
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/90 text-emerald-700 text-[10px] leading-none font-semibold">
                 {selectedCount}
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="prijemci">
+          <TabsTrigger
+            value="prijemci"
+            className="rounded-lg border px-4 py-2 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 data-[state=active]:bg-amber-500 data-[state=active]:border-amber-500 data-[state=active]:text-white data-[state=active]:shadow"
+          >
             <Users className="w-4 h-4 mr-1.5" />
             Nastavení příjemců
-            <span className="ml-1.5 text-xs text-muted-foreground">({activeCount})</span>
+            <span className="ml-1.5 text-xs opacity-75">({activeCount})</span>
           </TabsTrigger>
         </TabsList>
 
@@ -304,6 +342,11 @@ export function NewsletterContent() {
                                 />
                               )}
                               <span className="truncate">{item.title}</span>
+                              {(item.blocks?.length ?? 0) > 0 && (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
+                                  +{item.blocks!.length} {item.blocks!.length === 1 ? "sekce" : "sekcí"}
+                                </span>
+                              )}
                               {item.url && (
                                 <a
                                   href={item.url}
@@ -484,6 +527,40 @@ export function NewsletterContent() {
                                     )}
                                   </div>
                                 </div>
+
+                                {/* Product content blocks (Rychlé akce / Pro prodejce) */}
+                                {(item.blocks?.length ?? 0) > 0 && (
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground">
+                                      Přibalit sekce z produktu
+                                      {(selectedBlocks[item.id]?.length ?? 0) > 0 && (
+                                        <span className="ml-1 text-primary font-semibold">
+                                          ({selectedBlocks[item.id]!.length})
+                                        </span>
+                                      )}
+                                    </label>
+                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                      {item.blocks!.map((block) => {
+                                        const blockChecked = (selectedBlocks[item.id] ?? []).includes(block.key);
+                                        return (
+                                          <button
+                                            key={block.key}
+                                            type="button"
+                                            onClick={() => toggleBlock(item.id, block.key)}
+                                            title={block.content.slice(0, 300)}
+                                            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                                              blockChecked
+                                                ? "bg-emerald-600 text-white border-emerald-600 font-medium"
+                                                : "bg-background text-muted-foreground border-border hover:border-emerald-500 hover:text-foreground"
+                                            }`}
+                                          >
+                                            {block.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -668,7 +745,7 @@ export function NewsletterContent() {
                               className="w-16 h-16 rounded-lg object-cover border border-gray-200 shrink-0"
                             />
                           )}
-                          <div className="min-w-0 text-sm">
+                          <div className="min-w-0 flex-1 text-sm">
                             {item.url ? (
                               <a
                                 href={item.url}
@@ -684,6 +761,16 @@ export function NewsletterContent() {
                             {item.url && (
                               <p className="text-xs text-gray-400 break-all mt-0.5">{item.url}</p>
                             )}
+                            {(item.blocks ?? []).map((block, bIdx) => (
+                              <div key={bIdx} className="mt-2.5">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-green-800 mb-1">
+                                  {block.label}
+                                </p>
+                                <pre className="m-0 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs leading-relaxed whitespace-pre-wrap break-words font-mono text-gray-700">
+                                  {block.content}
+                                </pre>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       ))}

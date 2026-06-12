@@ -407,6 +407,10 @@ export default defineSchema({
         title: v.string(),
         url: v.optional(v.string()),
         imageUrl: v.optional(v.string()),
+        blocks: v.optional(v.array(v.object({
+          label: v.string(),
+          content: v.string(),
+        }))),
       })),
     })),
     recipientCount: v.number(),
