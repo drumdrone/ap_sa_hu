@@ -385,4 +385,31 @@ export default defineSchema({
   })
     .index("by_shortcut", ["shortcut"])
     .index("by_active", ["isActive"]),
+
+  // Newsletter subscribers - people who agreed to receive newsletters
+  newsletterSubscribers: defineTable({
+    email: v.string(),
+    name: v.optional(v.string()), // optional display name
+    isActive: v.boolean(), // can be paused without deleting
+    createdAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_active", ["isActive"]),
+
+  // Log of sent newsletter campaigns (for history / audit)
+  newsletterLogs: defineTable({
+    subject: v.string(),
+    intro: v.optional(v.string()),
+    // Snapshot of the composed sections that were sent
+    sections: v.array(v.object({
+      title: v.string(),
+      items: v.array(v.object({
+        title: v.string(),
+        url: v.optional(v.string()),
+      })),
+    })),
+    recipientCount: v.number(),
+    recipients: v.array(v.string()), // emails it was sent to
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
 })
