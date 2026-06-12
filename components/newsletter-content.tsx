@@ -54,6 +54,7 @@ export function NewsletterContent() {
   const [intro, setIntro] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
+  const [editedUrls, setEditedUrls] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -107,6 +108,9 @@ export function NewsletterContent() {
   const titleFor = (item: ContentItem) =>
     editedTitles[item.id] !== undefined ? editedTitles[item.id] : item.title;
 
+  const urlFor = (item: ContentItem) =>
+    editedUrls[item.id] !== undefined ? editedUrls[item.id] : (item.url ?? "");
+
   const handleSend = async () => {
     setSendError(null);
     setSendMessage(null);
@@ -132,7 +136,7 @@ export function NewsletterContent() {
           .filter((item) => selectedIds.has(item.id))
           .map((item) => ({
             title: titleFor(item).trim() || item.title,
-            url: item.url,
+            url: urlFor(item).trim() || undefined,
           })),
       }))
       .filter((section) => section.items.length > 0);
@@ -155,6 +159,7 @@ export function NewsletterContent() {
       setSendMessage(`Newsletter odeslán na ${res.sent} odběratelů.`);
       setSelectedIds(new Set());
       setEditedTitles({});
+      setEditedUrls({});
       setSubject("");
       setIntro("");
     } catch (err) {
@@ -352,7 +357,7 @@ export function NewsletterContent() {
                                 onCheckedChange={() => toggleItem(item.id)}
                                 className="mt-1.5"
                               />
-                              <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0 space-y-1">
                                 <Input
                                   value={titleFor(item)}
                                   onChange={(e) =>
@@ -361,17 +366,28 @@ export function NewsletterContent() {
                                   disabled={!checked}
                                   className="text-sm"
                                 />
-                                {item.url && (
-                                  <a
-                                    href={item.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1 truncate max-w-full"
-                                  >
-                                    <ExternalLink className="w-3 h-3 shrink-0" />
-                                    <span className="truncate">{item.url}</span>
-                                  </a>
-                                )}
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    value={urlFor(item)}
+                                    onChange={(e) =>
+                                      setEditedUrls((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                    }
+                                    disabled={!checked}
+                                    placeholder="https://… (odkaz, volitelné)"
+                                    className="text-xs h-8 text-blue-700"
+                                  />
+                                  {urlFor(item).trim() && (
+                                    <a
+                                      href={urlFor(item).trim()}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="shrink-0 text-blue-600 hover:text-blue-800 p-1"
+                                      title="Otevřít odkaz"
+                                    >
+                                      <ExternalLink className="w-4 h-4" />
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
