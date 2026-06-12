@@ -43,6 +43,9 @@ export const deliverEmail = internalAction({
       // "onboarding@resend.dev" works only for test sends to your own
       // Resend account email.
       const from = process.env.EMAIL_FROM || "Apotheke Sales Hub <onboarding@resend.dev>";
+      // Optional: where replies should go (the sender address usually has
+      // no mailbox), e.g. EMAIL_REPLY_TO=honza@firma.cz
+      const replyTo = process.env.EMAIL_REPLY_TO;
 
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -55,6 +58,7 @@ export const deliverEmail = internalAction({
           to: args.email,
           subject: args.subject,
           text: args.content,
+          ...(replyTo ? { reply_to: replyTo } : {}),
         }),
       });
 
