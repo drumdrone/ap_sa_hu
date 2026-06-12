@@ -228,8 +228,8 @@ export const getContent = query({
     const byType = (type: Doc<"news">["type"]): ContentItem[] =>
       newsItems.filter((n) => n.type === type).map((n) => n.item);
 
-    // TOP products (curated list) - link to public e-shop URL when available,
-    // otherwise to the product detail page in the app
+    // TOP products (curated list) - always link to the product detail page in
+    // the Apotheke Sales Hub (not the public e-shop)
     const topProducts = await ctx.db
       .query("products")
       .withIndex("by_isTop", (q) => q.eq("isTop", true))
@@ -241,7 +241,7 @@ export const getContent = query({
       .map((p) => ({
         id: p._id,
         title: p.name,
-        url: p.productUrl || `${siteUrl}/product/${p._id}`,
+        url: `${siteUrl}/product/${p._id}`,
         imageUrl: p.image || undefined,
         blocks: productBlocks(p),
       }));
