@@ -135,8 +135,52 @@ export const removeSubscriber = mutation({
 // Each item carries a default title (pre-filled, editable in the UI) and a link.
 // ---------------------------------------------------------------------------
 
-type ContentItem = { id: string; title: string; url?: string; imageUrl?: string };
+type ContentBlock = { key: string; label: string; content: string };
+type ContentItem = {
+  id: string;
+  title: string;
+  url?: string;
+  imageUrl?: string;
+  blocks?: ContentBlock[];
+};
 type ContentSection = { key: string; label: string; items: ContentItem[] };
+
+// Marketing content blocks of a product that can be attached to a newsletter
+// item. Mirrors the "Rychlé akce" and "Pro prodejce" sections of the product
+// detail page; only blocks with content are offered.
+function productBlocks(p: Doc<"products">): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  const add = (key: string, label: string, content?: string | null) => {
+    if (content && content.trim()) blocks.push({ key, label, content: content.trim() });
+  };
+
+  // Rychlé akce
+  add(
+    "salesClaim",
+    "Prodejní claim",
+    p.salesClaim && p.salesClaimSubtitle
+      ? `${p.salesClaim}\n${p.salesClaimSubtitle}`
+      : p.salesClaim
+  );
+  if (p.whyBuy?.length) {
+    add("whyBuy", "Proč koupit", p.whyBuy.map((w) => `${w.icon} ${w.text}`).join("\n"));
+  }
+  add("targetAudience", "Cílová skupina", p.targetAudience);
+  add("socialFacebook", "Facebook post", p.socialFacebook);
+  add("socialInstagram", "Instagram post", p.socialInstagram);
+
+  // Pro prodejce
+  add("mainBenefits", "3 hlavní benefity", p.mainBenefits);
+  add("quickReferenceCard", "Quick Reference Card", p.quickReferenceCard);
+  add("faqText", "FAQ", p.faqText);
+  add("salesForecast", "Prodejní prognóza", p.salesForecast);
+  add("sensoryProfile", "Senzorický profil", p.sensoryProfile);
+  add("seasonalOpportunities", "Sezónní příležitosti", p.seasonalOpportunities);
+  add("herbComposition", "Bylinné složení", p.herbComposition);
+  add("competitionComparison", "Srovnání s konkurencí", p.competitionComparison);
+
+  return blocks;
+}
 
 export const getContent = query({
   args: {},
@@ -180,6 +224,7 @@ export const getContent = query({
         title: p.name,
         url: p.productUrl || `${siteUrl}/product/${p._id}`,
         imageUrl: p.image || undefined,
+        blocks: productBlocks(p),
       }));
 
     // POSM materials (articles, flyers, stands...). Link priority: external
@@ -228,12 +273,21 @@ const sectionValidator = v.object({
     title: v.string(),
     url: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
+    blocks: v.optional(v.array(v.object({
+      label: v.string(),
+      content: v.string(),
+    }))),
   })),
 });
 
 type ComposedSection = {
   title: string;
-  items: Array<{ title: string; url?: string; imageUrl?: string }>;
+  items: Array<{
+    title: string;
+    url?: string;
+    imageUrl?: string;
+    blocks?: Array<{ label: string; content: string }>;
+  }>;
 };
 
 // Build a clean, readable plain-text newsletter body from the composed sections.
@@ -251,6 +305,11 @@ function buildBody(intro: string | undefined, sections: ComposedSection[]): stri
     for (const item of section.items) {
       parts.push(`• ${item.title}`);
       if (item.url) parts.push(`  ${item.url}`);
+      for (const block of item.blocks ?? []) {
+        parts.push("");
+        parts.push(`  ── ${block.label} ──`);
+        parts.push(block.content.split("\n").map((l) => `  ${l}`).join("\n"));
+      }
     }
     parts.push("");
   }
@@ -294,8 +353,14 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
       const urlNote = item.url
         ? `<div style="font-size:12px;color:#9ca3af;word-break:break-all;margin-top:2px;">${escapeHtml(item.url)}</div>`
         : "";
+      const blocksHtml = (item.blocks ?? [])
+        .map(
+          (b) =>
+            `<div style="margin-top:10px;"><div style="font-size:11px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:#166534;margin-bottom:4px;">${escapeHtml(b.label)}</div><pre style="margin:0;padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;font-family:'Courier New',monospace;color:#374151;">${escapeHtml(b.content)}</pre></div>`
+        )
+        .join("");
       blocks.push(
-        `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 12px;"><tr>${imageHtml}<td style="vertical-align:top;font-size:14px;line-height:1.5;">${titleHtml}${urlNote}</td></tr></table>`
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 12px;"><tr>${imageHtml}<td style="vertical-align:top;font-size:14px;line-height:1.5;">${titleHtml}${urlNote}${blocksHtml}</td></tr></table>`
       );
     }
   }
