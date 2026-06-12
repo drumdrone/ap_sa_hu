@@ -141,6 +141,10 @@ type ContentSection = { key: string; label: string; items: ContentItem[] };
 export const getContent = query({
   args: {},
   handler: async (ctx): Promise<ContentSection[]> => {
+    // Base URL of the app, used as a link fallback for items without an
+    // external URL. Override with the SITE_URL env var if the domain changes.
+    const siteUrl = (process.env.SITE_URL || "https://apsahu.netlify.app").replace(/\/+$/, "");
+
     const news = await ctx.db.query("news").withIndex("by_createdAt").order("desc").take(100);
 
     const byType = (type: Doc<"news">["type"]): ContentItem[] =>
@@ -148,7 +152,8 @@ export const getContent = query({
         .filter((n) => n.type === type)
         .map((n) => ({ id: n._id, title: n.title, url: n.url || undefined }));
 
-    // TOP products (curated list) - link to public e-shop URL when available
+    // TOP products (curated list) - link to public e-shop URL when available,
+    // otherwise to the product detail page in the app
     const topProducts = await ctx.db
       .query("products")
       .withIndex("by_isTop", (q) => q.eq("isTop", true))
@@ -157,7 +162,7 @@ export const getContent = query({
     const topItems: ContentItem[] = topProducts
       .sort((a, b) => (a.topOrder ?? 99) - (b.topOrder ?? 99))
       .slice(0, 20)
-      .map((p) => ({ id: p._id, title: p.name, url: p.productUrl || undefined }));
+      .map((p) => ({ id: p._id, title: p.name, url: p.productUrl || `${siteUrl}/product/${p._id}` }));
 
     return [
       { key: "product", label: "Nové produkty", items: byType("product") },

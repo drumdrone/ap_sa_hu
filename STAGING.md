@@ -29,8 +29,8 @@
 
 | Prostředí  | URL                                     | Git branch | Convex URL |
 |------------|-----------------------------------------|------------|------------|
-| Production | https://apsahu.netlify.app              | `main`     | `https://exuberant-koala-3.eu-west-1.convex.cloud` |
-| Staging    | https://staging--apsahu.netlify.app     | `staging`  | `https://exuberant-koala-3.eu-west-1.convex.cloud` |
+| Production | https://apsahu.netlify.app              | `main`     | `https://efficient-basilisk-904.convex.cloud` |
+| Staging    | https://staging--apsahu.netlify.app     | `staging`  | `https://efficient-basilisk-904.convex.cloud` |
 
 ## Jak to funguje
 
