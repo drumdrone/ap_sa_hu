@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -33,6 +33,33 @@ type ContentItem = {
   blocks?: ContentBlock[];
 };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
+
+// --- Auto-fill defaults for the composer ---------------------------------
+// How many of the curated TOP products are pre-selected automatically.
+const TOP_AUTOSELECT = 10;
+// Token in the intro replaced per recipient with their first name at send time.
+const NAME_TOKEN = "{jmeno}";
+const DEFAULT_INTRO = `Dobrý den ${NAME_TOKEN}, posíláme Vám pravidelný přehled z APSAHU.`;
+
+// Subject: "Apotheke Sales Hub" + current date (e.g. "Apotheke Sales Hub – 12. 6. 2026").
+const defaultSubject = () => `Apotheke Sales Hub – ${new Date().toLocaleDateString("cs-CZ")}`;
+
+// IDs of the first N TOP products, in curated order (already sorted by topOrder
+// and capped at 20 by the backend).
+const topAutoselectIds = (content: ContentSection[] | undefined): string[] =>
+  (content?.find((s) => s.key === "top")?.items ?? [])
+    .slice(0, TOP_AUTOSELECT)
+    .map((i) => i.id);
+
+// Replace the name token for the in-app preview (the real per-recipient
+// personalization happens on the server at send time). Tidies up the spacing
+// left behind when the name is empty.
+const personalizeIntro = (intro: string, name: string): string =>
+  intro
+    .split(NAME_TOKEN)
+    .join(name)
+    .replace(/ {2,}/g, " ")
+    .replace(/\s+([,.])/g, "$1");
 
 // Hint text shown under each section label in the content tab
 const SECTION_HINTS: Record<string, string> = {
@@ -71,8 +98,9 @@ export function NewsletterContent() {
   const [showBulk, setShowBulk] = useState(false);
 
   // --- Composer state ---
+  // Subject is seeded on mount (in an effect) to avoid an SSR/CSR date mismatch.
   const [subject, setSubject] = useState("");
-  const [intro, setIntro] = useState("");
+  const [intro, setIntro] = useState(DEFAULT_INTRO);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
   const [editedUrls, setEditedUrls] = useState<Record<string, string>>({});
@@ -82,6 +110,28 @@ export function NewsletterContent() {
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Pre-fill the subject with the current date on mount. Done client-side so
+  // the server-rendered HTML doesn't disagree with the client about "today".
+  useEffect(() => {
+    setSubject((s) => s || defaultSubject());
+  }, []);
+
+  // Pre-select the top 10 TOP products once the content loads (only the first
+  // time, so later manual de-selections are respected).
+  const didAutoSelectRef = useRef(false);
+  useEffect(() => {
+    if (didAutoSelectRef.current || !content) return;
+    didAutoSelectRef.current = true;
+    const ids = topAutoselectIds(content);
+    if (ids.length > 0) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }, [content]);
 
   const activeCount = useMemo(
     () => (subscribers ?? []).filter((s) => s.isActive).length,
@@ -158,10 +208,13 @@ export function NewsletterContent() {
           title: section.label,
           items: section.items
             .filter((item) => selectedIds.has(item.id))
-            .map((item) => {
+            .map((item, idx) => {
               const blocks = blocksFor(item).map(({ label, content }) => ({ label, content }));
+              const baseTitle = titleFor(item).trim() || item.title;
+              // TOP products are presented as a numbered list (1., 2., …).
+              const title = section.key === "top" ? `${idx + 1}. ${baseTitle}` : baseTitle;
               return {
-                title: titleFor(item).trim() || item.title,
+                title,
                 url: urlFor(item).trim() || undefined,
                 imageUrl: item.imageUrl,
                 ...(blocks.length > 0 ? { blocks } : {}),
@@ -206,12 +259,13 @@ export function NewsletterContent() {
         sections: composedSections,
       });
       setSendMessage(`Newsletter odeslán na ${res.sent} odběratelů.`);
-      setSelectedIds(new Set());
+      // Re-seed the composer with the auto-fill defaults for the next newsletter.
+      setSelectedIds(new Set(topAutoselectIds(content)));
       setEditedTitles({});
       setEditedUrls({});
       setSelectedBlocks({});
-      setSubject("");
-      setIntro("");
+      setSubject(defaultSubject());
+      setIntro(DEFAULT_INTRO);
       setShowPreview(false);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Odeslání selhalo.");
@@ -300,7 +354,10 @@ export function NewsletterContent() {
                 <label className="block text-sm font-semibold text-foreground">
                   Úvodní text <span className="font-normal text-muted-foreground">(volitelné)</span>
                 </label>
-                <p className="text-xs text-muted-foreground mb-2">Jen pokud chceš newsletter uvést pár větami. Jinak přeskoč.</p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Předvyplněno. <code className="px-1 rounded bg-muted">{NAME_TOKEN}</code> se u každého
+                  příjemce nahradí jeho křestním jménem (z jména odběratele, jinak z e-mailu).
+                </p>
                 <Textarea
                   value={intro}
                   onChange={(e) => setIntro(e.target.value)}
@@ -726,7 +783,7 @@ export function NewsletterContent() {
               <div className="bg-white border border-gray-200 rounded-xl p-6 font-[Arial,Helvetica,sans-serif]">
                 {intro.trim() && (
                   <p className="text-[15px] leading-relaxed text-gray-700 whitespace-pre-line mb-6">
-                    {intro.trim()}
+                    {personalizeIntro(intro.trim(), "Jan")}
                   </p>
                 )}
                 {composedSections.map((section) => (

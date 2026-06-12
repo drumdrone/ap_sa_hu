@@ -16,6 +16,25 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+// Derive a recipient's first name: prefer their stored name, otherwise take the
+// first segment of the email's local part (e.g. "honza.hrodek@…" -> "Honza").
+function firstNameFor(email: string, name?: string): string {
+  if (name && name.trim()) return name.trim().split(/\s+/)[0];
+  const seg = (email.split("@")[0] || "").split(/[._\-+]/)[0];
+  return seg ? seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase() : "";
+}
+
+// Replace the {jmeno} token in the intro with the recipient's first name and
+// tidy up the spacing left behind when the name is empty.
+function personalizeIntro(intro: string | undefined, name: string): string | undefined {
+  if (!intro) return intro;
+  return intro
+    .split("{jmeno}")
+    .join(name)
+    .replace(/ {2,}/g, " ")
+    .replace(/\s+([,.])/g, "$1");
+}
+
 // List all subscribers (newest first)
 export const listSubscribers = query({
   args: {},
@@ -413,17 +432,25 @@ export const sendNewsletter = mutation({
       throw new Error("Žádní aktivní odběratelé k odeslání.");
     }
 
-    const body = buildBody(args.intro, nonEmptySections);
-    const html = buildHtml(args.intro, nonEmptySections);
+    // Look up subscriber names so the {jmeno} token can be personalized.
+    const allSubs = await ctx.db.query("newsletterSubscribers").collect();
+    const nameByEmail = new Map<string, string | undefined>(
+      allSubs.map((s) => [normalizeEmail(s.email), s.name])
+    );
 
     // Schedule one email per recipient, staggered ~2/s to respect
     // the email provider's rate limit (Resend allows 2 req/s).
     for (let i = 0; i < emails.length; i++) {
+      const email = emails[i];
+      const intro = personalizeIntro(
+        args.intro,
+        firstNameFor(email, nameByEmail.get(normalizeEmail(email)))
+      );
       await ctx.scheduler.runAfter(i * 600, internal.emails.deliverEmail, {
-        email: emails[i],
+        email,
         subject,
-        content: body,
-        html,
+        content: buildBody(intro, nonEmptySections),
+        html: buildHtml(intro, nonEmptySections),
       });
     }
 
