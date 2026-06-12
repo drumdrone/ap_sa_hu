@@ -61,6 +61,29 @@ const personalizeIntro = (intro: string, name: string): string =>
     .replace(/ {2,}/g, " ")
     .replace(/\s+([,.])/g, "$1");
 
+// Render a single line of block text, turning **bold** markers into <strong>.
+function renderInline(line: string) {
+  return line.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    /^\*\*[^*]+\*\*$/.test(part) ? (
+      <strong key={i}>{part.slice(2, -2)}</strong>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
+
+// Preview of a content block - mirrors the email HTML (proportional font,
+// preserved line breaks, **bold** rendered) rather than raw monospace.
+function BlockContent({ text }: { text: string }) {
+  return (
+    <div className="px-3.5 py-3 bg-gray-50 border border-gray-200 rounded-lg text-[13px] leading-relaxed text-gray-700">
+      {text.split("\n").map((line, i) => (
+        <div key={i}>{line === "" ? " " : renderInline(line)}</div>
+      ))}
+    </div>
+  );
+}
+
 // Hint text shown under each section label in the content tab
 const SECTION_HINTS: Record<string, string> = {
   product: "Označ produktové novinky, které chceš zahrnout.",
@@ -820,12 +843,10 @@ export function NewsletterContent() {
                             )}
                             {(item.blocks ?? []).map((block, bIdx) => (
                               <div key={bIdx} className="mt-2.5">
-                                <p className="text-[11px] font-bold uppercase tracking-wide text-green-800 mb-1">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-green-800 mb-1.5">
                                   {block.label}
                                 </p>
-                                <pre className="m-0 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs leading-relaxed whitespace-pre-wrap break-words font-mono text-gray-700">
-                                  {block.content}
-                                </pre>
+                                <BlockContent text={block.content} />
                               </div>
                             ))}
                           </div>
