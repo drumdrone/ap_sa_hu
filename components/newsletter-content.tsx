@@ -23,6 +23,7 @@ import {
   X,
   ListChecks,
   ArrowRightLeft,
+  Check,
 } from "lucide-react";
 
 type ContentBlock = { key: string; label: string; content: string };
@@ -537,7 +538,7 @@ export function NewsletterContent() {
                     {section.items.length === 0 ? (
                       <p className="text-sm text-muted-foreground italic">Žádné položky.</p>
                     ) : (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
                         {section.items.map((item) => {
                           const checked = selectedIds[contentGroup].has(item.id);
                           return (
@@ -545,14 +546,25 @@ export function NewsletterContent() {
                               key={item.id}
                               type="button"
                               onClick={() => toggleItem(item.id)}
-                              className={`rounded-full border px-4 py-1.5 text-sm transition-colors max-w-[320px] truncate ${
+                              className={`flex items-center gap-2 w-full text-left rounded-md border px-2 py-1 text-sm transition-colors ${
                                 checked
-                                  ? "bg-primary text-primary-foreground border-primary font-medium"
+                                  ? "bg-primary/10 border-primary font-medium text-foreground"
                                   : "bg-background text-foreground border-border hover:border-primary/60"
                               }`}
                               title={item.title}
                             >
-                              {item.title}
+                              {item.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={item.imageUrl}
+                                  alt=""
+                                  className="w-7 h-7 rounded object-cover border border-border bg-white shrink-0"
+                                />
+                              ) : (
+                                <span className="w-7 h-7 rounded bg-muted shrink-0" />
+                              )}
+                              <span className="truncate flex-1">{item.title}</span>
+                              {checked && <Check className="w-4 h-4 text-primary shrink-0" />}
                             </button>
                           );
                         })}
