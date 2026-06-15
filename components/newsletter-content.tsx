@@ -860,7 +860,7 @@ export function NewsletterContent() {
                 )}
                 {composedByGroup[previewGroup].map((section) => (
                   <div key={section.title} className="mb-5">
-                    <h2 className="text-sm uppercase tracking-wide text-white bg-gray-900 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
+                    <h2 className="text-sm uppercase tracking-wide text-white bg-red-700 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
                       {section.title}
                     </h2>
                     <div className="space-y-3">
@@ -882,7 +882,7 @@ export function NewsletterContent() {
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 font-semibold hover:underline"
+                                className="text-gray-900 font-semibold underline"
                               >
                                 {item.title}
                               </a>
@@ -897,7 +897,7 @@ export function NewsletterContent() {
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block text-xs text-gray-400 hover:text-gray-600 mt-0.5"
+                                className="block text-xs text-gray-500 hover:text-gray-700 underline mt-0.5"
                                 title={item.url}
                               >
                                 {shortenUrl(item.url)}
@@ -905,7 +905,7 @@ export function NewsletterContent() {
                             )}
                             {(item.blocks ?? []).map((block, bIdx) => (
                               <div key={bIdx} className="mt-2.5">
-                                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-900 mb-1.5">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-red-700 mb-1.5">
                                   {block.label}
                                 </p>
                                 <BlockContent text={block.content} />
