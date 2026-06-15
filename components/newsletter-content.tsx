@@ -24,6 +24,7 @@ import {
   ListChecks,
   ArrowRightLeft,
   Check,
+  Pencil,
 } from "lucide-react";
 
 type ContentBlock = { key: string; label: string; content: string };
@@ -193,6 +194,8 @@ export function NewsletterContent() {
   });
   // Which group's content is currently being edited on the "Obsah" tab.
   const [contentGroup, setContentGroup] = useState<GroupKey>("mediate");
+  // Item whose edit drawer (slides in from the right) is open, if any.
+  const [editItemId, setEditItemId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewGroup, setPreviewGroup] = useState<GroupKey>("mediate");
 
@@ -349,6 +352,16 @@ export function NewsletterContent() {
     return { mediate: build("mediate"), sales: build("sales") };
   }, [content, selectedIds, editedTitles, editedUrls, selectedBlocks]);
 
+  // The item currently open in the edit drawer (looked up across all sections).
+  const editItem = useMemo(() => {
+    if (!editItemId || !content) return null;
+    for (const section of content) {
+      const found = section.items.find((i) => i.id === editItemId);
+      if (found) return found;
+    }
+    return null;
+  }, [editItemId, content]);
+
   const openPreview = (group: GroupKey) => {
     setPreviewGroup(group);
     setShowPreview(true);
@@ -469,7 +482,10 @@ export function NewsletterContent() {
                     <button
                       key={g.key}
                       type="button"
-                      onClick={() => setContentGroup(g.key)}
+                      onClick={() => {
+                        setContentGroup(g.key);
+                        setEditItemId(null);
+                      }}
                       className={`rounded-lg border px-3 py-1.5 text-sm font-semibold flex items-center gap-1.5 transition-colors ${
                         active ? g.banner : "bg-background text-muted-foreground border-border hover:bg-muted"
                       }`}
@@ -520,7 +536,6 @@ export function NewsletterContent() {
                 {/* Right content column */}
                 <div className="flex-1 min-w-0 space-y-7">
               {(content ?? []).map((section) => {
-                const selectedItems = section.items.filter((i) => selectedIds[contentGroup].has(i.id));
                 return (
                   <div
                     key={section.key}
@@ -542,123 +557,48 @@ export function NewsletterContent() {
                         {section.items.map((item) => {
                           const checked = selectedIds[contentGroup].has(item.id);
                           return (
-                            <button
+                            <div
                               key={item.id}
-                              type="button"
-                              onClick={() => toggleItem(item.id)}
-                              className={`flex items-center gap-2 w-full text-left rounded-md border px-2 py-1 text-sm transition-colors ${
+                              className={`flex items-center rounded-md border text-sm transition-colors ${
                                 checked
-                                  ? "bg-primary/10 border-primary font-medium text-foreground"
+                                  ? "bg-primary/10 border-primary text-foreground"
                                   : "bg-background text-foreground border-border hover:border-primary/60"
                               }`}
-                              title={item.title}
                             >
-                              {item.imageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={item.imageUrl}
-                                  alt=""
-                                  className="w-7 h-7 rounded object-cover border border-border bg-white shrink-0"
-                                />
-                              ) : (
-                                <span className="w-7 h-7 rounded bg-muted shrink-0" />
+                              <button
+                                type="button"
+                                onClick={() => toggleItem(item.id)}
+                                className="flex items-center gap-2 flex-1 min-w-0 text-left px-2 py-1"
+                                title={item.title}
+                              >
+                                {item.imageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={item.imageUrl}
+                                    alt=""
+                                    className="w-7 h-7 rounded object-cover border border-border bg-white shrink-0"
+                                  />
+                                ) : (
+                                  <span className="w-7 h-7 rounded bg-muted shrink-0" />
+                                )}
+                                <span className={`truncate flex-1 ${checked ? "font-medium" : ""}`}>
+                                  {item.title}
+                                </span>
+                                {checked && <Check className="w-4 h-4 text-primary shrink-0" />}
+                              </button>
+                              {checked && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditItemId(item.id)}
+                                  className="shrink-0 p-1.5 mr-0.5 rounded text-muted-foreground hover:text-primary hover:bg-background"
+                                  title="Upravit název, odkaz a sekce"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
                               )}
-                              <span className="truncate flex-1">{item.title}</span>
-                              {checked && <Check className="w-4 h-4 text-primary shrink-0" />}
-                            </button>
+                            </div>
                           );
                         })}
-                      </div>
-                    )}
-
-                    {/* Edit fields for selected items */}
-                    {selectedItems.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {selectedItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className="rounded-lg border border-border bg-muted/30 p-3"
-                          >
-                            <div className="flex gap-3">
-                              {item.imageUrl && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={item.imageUrl}
-                                  alt=""
-                                  className="w-14 h-14 rounded-lg object-cover border border-border shrink-0 mt-1 bg-white"
-                                />
-                              )}
-                              <div className="flex-1 min-w-0 space-y-2">
-                                <div>
-                                  <label className="text-xs font-medium text-muted-foreground">
-                                    Název v e-mailu
-                                  </label>
-                                  <Input
-                                    value={titleFor(item)}
-                                    onChange={(e) => setTitle(item.id, e.target.value)}
-                                    className="mt-1 bg-background"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-xs font-medium text-muted-foreground">Odkaz</label>
-                                  <div className="flex items-center gap-1.5 mt-1">
-                                    <Input
-                                      value={urlFor(item)}
-                                      onChange={(e) => setUrl(item.id, e.target.value)}
-                                      placeholder="https://… (volitelné)"
-                                      className="text-sm text-blue-700 bg-background"
-                                    />
-                                    {urlFor(item).trim() && (
-                                      <a
-                                        href={urlFor(item).trim()}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="shrink-0 text-muted-foreground hover:text-primary p-1.5"
-                                        title="Otevřít odkaz"
-                                      >
-                                        <ExternalLink className="w-4 h-4" />
-                                      </a>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Product content blocks (Rychlé akce / Pro prodejce) */}
-                                {(item.blocks?.length ?? 0) > 0 && (
-                                  <div>
-                                    <label className="text-xs font-medium text-muted-foreground">
-                                      Přibalit sekce z produktu
-                                      {(selectedBlocks[contentGroup][item.id]?.length ?? 0) > 0 && (
-                                        <span className="ml-1 text-primary font-semibold">
-                                          ({selectedBlocks[contentGroup][item.id]!.length})
-                                        </span>
-                                      )}
-                                    </label>
-                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                      {item.blocks!.map((block) => {
-                                        const blockChecked = (selectedBlocks[contentGroup][item.id] ?? []).includes(block.key);
-                                        return (
-                                          <button
-                                            key={block.key}
-                                            type="button"
-                                            onClick={() => toggleBlock(item.id, block.key)}
-                                            title={block.content.slice(0, 300)}
-                                            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                                              blockChecked
-                                                ? "bg-emerald-600 text-white border-emerald-600 font-medium"
-                                                : "bg-background text-muted-foreground border-border hover:border-emerald-500 hover:text-foreground"
-                                            }`}
-                                          >
-                                            {block.label}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
                       </div>
                     )}
                   </div>
@@ -692,6 +632,127 @@ export function NewsletterContent() {
           ))}
         </TabsContent>
       </Tabs>
+
+      {/* ------------------------------------------------------------- */}
+      {/* Item edit drawer — slides in from the right                    */}
+      {/* ------------------------------------------------------------- */}
+      {editItem && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/40 animate-in fade-in duration-200"
+            onClick={() => setEditItemId(null)}
+          />
+          <div className="relative h-full w-full max-w-md bg-background shadow-2xl border-l border-border flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="flex items-start gap-3 p-4 border-b border-border">
+              {editItem.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={editItem.imageUrl}
+                  alt=""
+                  className="w-12 h-12 rounded-lg object-cover border border-border bg-white shrink-0"
+                />
+              ) : (
+                <span className="w-12 h-12 rounded-lg bg-muted shrink-0" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${groupMeta(contentGroup).dot}`} />
+                  Úprava položky · {groupMeta(contentGroup).label}
+                </p>
+                <p className="font-semibold truncate mt-0.5">{editItem.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditItemId(null)}
+                className="text-muted-foreground hover:text-foreground p-1 shrink-0"
+                title="Zavřít"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Název v e-mailu</label>
+                <Input
+                  value={titleFor(editItem)}
+                  onChange={(e) => setTitle(editItem.id, e.target.value)}
+                  className="mt-1 bg-background"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Odkaz</label>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Input
+                    value={urlFor(editItem)}
+                    onChange={(e) => setUrl(editItem.id, e.target.value)}
+                    placeholder="https://… (volitelné)"
+                    className="text-sm text-blue-700 bg-background"
+                  />
+                  {urlFor(editItem).trim() && (
+                    <a
+                      href={urlFor(editItem).trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-muted-foreground hover:text-primary p-1.5"
+                      title="Otevřít odkaz"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {(editItem.blocks?.length ?? 0) > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Přibalit sekce z produktu
+                    {(selectedBlocks[contentGroup][editItem.id]?.length ?? 0) > 0 && (
+                      <span className="ml-1 text-primary font-semibold">
+                        ({selectedBlocks[contentGroup][editItem.id]!.length})
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {editItem.blocks!.map((block) => {
+                      const blockChecked = (selectedBlocks[contentGroup][editItem.id] ?? []).includes(block.key);
+                      return (
+                        <button
+                          key={block.key}
+                          type="button"
+                          onClick={() => toggleBlock(editItem.id, block.key)}
+                          title={block.content.slice(0, 300)}
+                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                            blockChecked
+                              ? "bg-emerald-600 text-white border-emerald-600 font-medium"
+                              : "bg-background text-muted-foreground border-border hover:border-emerald-500 hover:text-foreground"
+                          }`}
+                        >
+                          {block.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-border flex items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  toggleItem(editItem.id);
+                  setEditItemId(null);
+                }}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Odebrat z výběru
+              </Button>
+              <Button onClick={() => setEditItemId(null)}>Hotovo</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------- */}
       {/* Email preview modal                                            */}
