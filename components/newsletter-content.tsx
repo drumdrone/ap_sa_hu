@@ -35,6 +35,8 @@ type ContentItem = {
   imageUrl?: string;
   // PDF rendered as an <iframe> thumbnail in the compose UI when there's no image.
   pdfPreviewUrl?: string;
+  // Editor-set product rating (0-5), shown as stars next to the title.
+  rating?: number;
   blocks?: ContentBlock[];
 };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
@@ -46,9 +48,32 @@ type ComposedSection = {
     url?: string;
     imageUrl?: string;
     pdfPreviewUrl?: string;
+    rating?: number;
     blocks?: Array<{ label: string; content: string }>;
   }>;
 };
+
+// 5-star rendering — mirrors the email rendering (Unicode is universal).
+function ratingStars(rating: number | undefined): string | undefined {
+  if (typeof rating !== "number" || rating <= 0) return undefined;
+  const clamped = Math.max(0, Math.min(5, rating));
+  const full = Math.round(clamped);
+  return "★".repeat(full) + "☆".repeat(5 - full);
+}
+
+// Display the link as just its host (and a trimmed path) so long product URLs
+// don't dominate each row. The actual link target is unchanged.
+function shortenUrl(url: string, maxLen = 38): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname === "/" ? "" : u.pathname;
+    const display = `${u.host}${path}${u.search ? "?…" : ""}`;
+    if (display.length <= maxLen) return display;
+    return display.slice(0, maxLen - 1) + "…";
+  } catch {
+    return url.length > maxLen ? url.slice(0, maxLen - 1) + "…" : url;
+  }
+}
 
 // Thumbnail for a content row: image for image files, an iframe for PDFs (same
 // trick the POSM catalog uses), or a neutral placeholder. `size` is the tailwind
@@ -387,6 +412,7 @@ export function NewsletterContent() {
                 url,
                 imageUrl: item.imageUrl,
                 pdfPreviewUrl: item.pdfPreviewUrl,
+                rating: item.rating,
                 ...(blocks.length > 0 ? { blocks } : {}),
               };
             }),
@@ -622,6 +648,11 @@ export function NewsletterContent() {
                                 <span className={`truncate flex-1 ${checked ? "font-medium" : ""}`}>
                                   {item.title}
                                 </span>
+                                {ratingStars(item.rating) && (
+                                  <span className="shrink-0 text-amber-500 text-xs tracking-wide">
+                                    {ratingStars(item.rating)}
+                                  </span>
+                                )}
                                 {checked && <Check className="w-4 h-4 text-primary shrink-0" />}
                               </button>
                               {checked && (
@@ -829,11 +860,13 @@ export function NewsletterContent() {
                 )}
                 {composedByGroup[previewGroup].map((section) => (
                   <div key={section.title} className="mb-5">
-                    <h2 className="text-sm uppercase tracking-wide text-white bg-green-800 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
+                    <h2 className="text-sm uppercase tracking-wide text-white bg-gray-900 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
                       {section.title}
                     </h2>
                     <div className="space-y-3">
-                      {section.items.map((item, idx) => (
+                      {section.items.map((item, idx) => {
+                        const stars = ratingStars(item.rating);
+                        return (
                         <div key={idx} className="flex gap-3">
                           {item.imageUrl && (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -856,12 +889,23 @@ export function NewsletterContent() {
                             ) : (
                               <span className="font-semibold text-gray-900">{item.title}</span>
                             )}
+                            {stars && (
+                              <span className="ml-2 text-amber-500 tracking-wide">{stars}</span>
+                            )}
                             {item.url && (
-                              <p className="text-xs text-gray-400 break-all mt-0.5">{item.url}</p>
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-xs text-gray-400 hover:text-gray-600 mt-0.5"
+                                title={item.url}
+                              >
+                                {shortenUrl(item.url)}
+                              </a>
                             )}
                             {(item.blocks ?? []).map((block, bIdx) => (
                               <div key={bIdx} className="mt-2.5">
-                                <p className="text-[11px] font-bold uppercase tracking-wide text-green-800 mb-1.5">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-900 mb-1.5">
                                   {block.label}
                                 </p>
                                 <BlockContent text={block.content} />
@@ -869,7 +913,8 @@ export function NewsletterContent() {
                             ))}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -1045,6 +1090,11 @@ function ComposeTab({
                             size="w-7 h-7"
                           />
                           <span className="truncate">{item.title}</span>
+                          {ratingStars(item.rating) && (
+                            <span className="shrink-0 text-amber-500 text-xs tracking-wide">
+                              {ratingStars(item.rating)}
+                            </span>
+                          )}
                           {(item.blocks?.length ?? 0) > 0 && (
                             <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
                               +{item.blocks!.length} {item.blocks!.length === 1 ? "sekce" : "sekcí"}

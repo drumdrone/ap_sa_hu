@@ -415,6 +415,7 @@ export default defineSchema({
         title: v.string(),
         url: v.optional(v.string()),
         imageUrl: v.optional(v.string()),
+        rating: v.optional(v.number()),
         blocks: v.optional(v.array(v.object({
           label: v.string(),
           content: v.string(),
