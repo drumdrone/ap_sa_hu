@@ -502,7 +502,7 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
   for (const section of sections) {
     if (section.items.length === 0) continue;
     blocks.push(
-      `<h2 style="margin:28px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#ffffff;background:#111827;padding:10px 14px;border-radius:6px;">${escapeHtml(section.title)}</h2>`
+      `<h2 style="margin:28px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#ffffff;background:#b91c1c;padding:10px 14px;border-radius:6px;">${escapeHtml(section.title)}</h2>`
     );
     for (const item of section.items) {
       const title = escapeHtml(item.title);
@@ -511,7 +511,7 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
         ? ` <span style="color:#f59e0b;letter-spacing:1px;font-weight:normal;">${stars}</span>`
         : "";
       const titleHtml = item.url
-        ? `<a href="${escapeHtml(item.url)}" style="color:#2563eb;text-decoration:none;font-weight:600;">${title}</a>${starsHtml}`
+        ? `<a href="${escapeHtml(item.url)}" style="color:#000000;text-decoration:underline;text-underline-offset:2px;font-weight:600;">${title}</a>${starsHtml}`
         : `<span style="font-weight:600;color:#111827;">${title}</span>${starsHtml}`;
       const imageHtml = item.imageUrl
         ? `<td style="width:76px;padding-right:14px;vertical-align:top;"><img src="${escapeHtml(item.imageUrl)}" alt="" width="64" height="64" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;display:block;" /></td>`
@@ -519,12 +519,12 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
       // Render a shortened link (host + trimmed path) instead of the raw URL —
       // it stays clickable through the <a> tag and doesn't visually swamp the row.
       const urlNote = item.url
-        ? `<div style="font-size:12px;margin-top:3px;"><a href="${escapeHtml(item.url)}" style="color:#9ca3af;text-decoration:none;">${escapeHtml(shortenUrl(item.url))}</a></div>`
+        ? `<div style="font-size:12px;margin-top:3px;"><a href="${escapeHtml(item.url)}" style="color:#000000;text-decoration:underline;text-underline-offset:2px;">${escapeHtml(shortenUrl(item.url))}</a></div>`
         : "";
       const blocksHtml = (item.blocks ?? [])
         .map(
           (b) =>
-            `<div style="margin-top:12px;"><div style="font-size:11px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:#111827;margin-bottom:6px;">${escapeHtml(b.label)}</div><div style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.6;color:#374151;">${formatBlockContent(b.content)}</div></div>`
+            `<div style="margin-top:12px;"><div style="font-size:11px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:#b91c1c;margin-bottom:6px;">${escapeHtml(b.label)}</div><div style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.6;color:#374151;">${formatBlockContent(b.content)}</div></div>`
         )
         .join("");
       blocks.push(

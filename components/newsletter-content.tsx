@@ -860,7 +860,7 @@ export function NewsletterContent() {
                 )}
                 {composedByGroup[previewGroup].map((section) => (
                   <div key={section.title} className="mb-5">
-                    <h2 className="text-sm uppercase tracking-wide text-white bg-gray-900 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
+                    <h2 className="text-sm uppercase tracking-wide text-white bg-red-700 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
                       {section.title}
                     </h2>
                     <div className="space-y-3">
@@ -882,7 +882,7 @@ export function NewsletterContent() {
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 font-semibold hover:underline"
+                                className="text-black font-semibold underline decoration-2 underline-offset-2 hover:decoration-red-700"
                               >
                                 {item.title}
                               </a>
@@ -897,7 +897,7 @@ export function NewsletterContent() {
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block text-xs text-gray-400 hover:text-gray-600 mt-0.5"
+                                className="block text-xs text-black underline underline-offset-2 hover:text-red-700 mt-0.5"
                                 title={item.url}
                               >
                                 {shortenUrl(item.url)}
@@ -905,7 +905,7 @@ export function NewsletterContent() {
                             )}
                             {(item.blocks ?? []).map((block, bIdx) => (
                               <div key={bIdx} className="mt-2.5">
-                                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-900 mb-1.5">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-red-700 mb-1.5">
                                   {block.label}
                                 </p>
                                 <BlockContent text={block.content} />
@@ -996,10 +996,16 @@ function ComposeTab({
 
     setSending(true);
     try {
+      // pdfPreviewUrl is a compose-UI-only field. Strip it before sending —
+      // the server's sectionValidator rejects unknown keys.
+      const sectionsForSend = composedSections.map((s) => ({
+        title: s.title,
+        items: s.items.map(({ pdfPreviewUrl: _omit, ...rest }) => rest),
+      }));
       const res = await sendNewsletter({
         subject: subject.trim(),
         intro: intro.trim() || undefined,
-        sections: composedSections,
+        sections: sectionsForSend,
         group,
       });
       setSendMessage(`Newsletter odeslán ${res.sent} příjemcům skupiny ${meta.label}.`);
