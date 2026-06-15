@@ -882,7 +882,7 @@ export function NewsletterContent() {
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-gray-900 font-semibold underline"
+                                className="text-black font-semibold underline decoration-2 underline-offset-2 hover:decoration-red-700"
                               >
                                 {item.title}
                               </a>
@@ -897,7 +897,7 @@ export function NewsletterContent() {
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="block text-xs text-gray-500 hover:text-gray-700 underline mt-0.5"
+                                className="block text-xs text-black underline underline-offset-2 hover:text-red-700 mt-0.5"
                                 title={item.url}
                               >
                                 {shortenUrl(item.url)}
