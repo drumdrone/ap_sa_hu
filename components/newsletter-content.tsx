@@ -22,6 +22,7 @@ import {
   Eye,
   X,
   ListChecks,
+  ArrowRightLeft,
 } from "lucide-react";
 
 type ContentBlock = { key: string; label: string; content: string };
@@ -33,6 +34,57 @@ type ContentItem = {
   blocks?: ContentBlock[];
 };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
+
+type ComposedSection = {
+  title: string;
+  items: Array<{
+    title: string;
+    url?: string;
+    imageUrl?: string;
+    blocks?: Array<{ label: string; content: string }>;
+  }>;
+};
+
+// --- Recipient groups -----------------------------------------------------
+// A subscriber belongs to exactly one group; the same e-mail can live in
+// several groups. Each group has its own compose tab and its own colour so
+// it's always obvious who the newsletter will go to.
+type GroupKey = "mediate" | "sales";
+
+type GroupMeta = {
+  key: GroupKey;
+  label: string; // full name
+  composeLabel: string; // compose tab caption
+  tab: string; // <TabsTrigger> classes (light + active)
+  banner: string; // accent banner inside the compose card
+  badge: string; // small pill
+  dot: string; // colour dot
+};
+
+const GROUPS: GroupMeta[] = [
+  {
+    key: "mediate",
+    label: "Mediate",
+    composeLabel: "Sestavení – Mediate",
+    tab: "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100 data-[state=active]:bg-violet-600 data-[state=active]:border-violet-600 data-[state=active]:text-white data-[state=active]:shadow",
+    banner: "bg-violet-50 border-violet-200 text-violet-800",
+    badge: "bg-violet-100 text-violet-700",
+    dot: "bg-violet-500",
+  },
+  {
+    key: "sales",
+    label: "Obchodní zástupci",
+    composeLabel: "Sestavení – OZ",
+    tab: "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 data-[state=active]:bg-rose-600 data-[state=active]:border-rose-600 data-[state=active]:text-white data-[state=active]:shadow",
+    banner: "bg-rose-50 border-rose-200 text-rose-800",
+    badge: "bg-rose-100 text-rose-700",
+    dot: "bg-rose-500",
+  },
+];
+
+const groupMeta = (key: GroupKey): GroupMeta => GROUPS.find((g) => g.key === key)!;
+const groupOf = (g?: string | null): GroupKey => (g === "sales" ? "sales" : "mediate");
+const otherGroup = (g: GroupKey): GroupKey => (g === "mediate" ? "sales" : "mediate");
 
 // --- Auto-fill defaults for the composer ---------------------------------
 // How many of the curated TOP products are pre-selected automatically.
@@ -78,7 +130,7 @@ function BlockContent({ text }: { text: string }) {
   return (
     <div className="px-3.5 py-3 bg-gray-50 border border-gray-200 rounded-lg text-[13px] leading-relaxed text-gray-700">
       {text.split("\n").map((line, i) => (
-        <div key={i}>{line === "" ? " " : renderInline(line)}</div>
+        <div key={i}>{line === "" ? " " : renderInline(line)}</div>
       ))}
     </div>
   );
@@ -101,43 +153,34 @@ export function NewsletterContent() {
     | ContentSection[]
     | undefined;
   const subscribers = useQuery(api.newsletter.listSubscribers, isEditor ? {} : "skip");
-  const logs = useQuery(api.newsletter.listLogs, isEditor ? { limit: 10 } : "skip");
-
-  const addSubscriber = useMutation(api.newsletter.addSubscriber);
-  const addSubscribersBulk = useMutation(api.newsletter.addSubscribersBulk);
-  const toggleSubscriber = useMutation(api.newsletter.toggleSubscriber);
-  const removeSubscriber = useMutation(api.newsletter.removeSubscriber);
-  const sendNewsletter = useMutation(api.newsletter.sendNewsletter);
+  const logs = useQuery(api.newsletter.listLogs, isEditor ? { limit: 20 } : "skip");
 
   // --- UI state ---
-  const [activeTab, setActiveTab] = useState("sestaveni");
-
-  // --- Subscriber form state ---
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [subError, setSubError] = useState<string | null>(null);
-  const [bulkRaw, setBulkRaw] = useState("");
-  const [bulkResult, setBulkResult] = useState<string | null>(null);
-  const [showBulk, setShowBulk] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("mediate");
 
   // --- Composer state ---
-  // Subject is seeded on mount (in an effect) to avoid an SSR/CSR date mismatch.
-  const [subject, setSubject] = useState("");
-  const [intro, setIntro] = useState(DEFAULT_INTRO);
+  // Subject and intro are kept per group so each audience can have its own
+  // heading. Content selection (below) is shared between both groups.
+  const [subjects, setSubjects] = useState<Record<GroupKey, string>>({ mediate: "", sales: "" });
+  const [intros, setIntros] = useState<Record<GroupKey, string>>({
+    mediate: DEFAULT_INTRO,
+    sales: DEFAULT_INTRO,
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
   const [editedUrls, setEditedUrls] = useState<Record<string, string>>({});
   // Per item: which product content blocks (salesClaim, mainBenefits...) to attach
   const [selectedBlocks, setSelectedBlocks] = useState<Record<string, string[]>>({});
-  const [sending, setSending] = useState(false);
-  const [sendMessage, setSendMessage] = useState<string | null>(null);
-  const [sendError, setSendError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewGroup, setPreviewGroup] = useState<GroupKey>("mediate");
 
-  // Pre-fill the subject with the current date on mount. Done client-side so
+  // Pre-fill both subjects with the current date on mount. Done client-side so
   // the server-rendered HTML doesn't disagree with the client about "today".
   useEffect(() => {
-    setSubject((s) => s || defaultSubject());
+    setSubjects((s) => ({
+      mediate: s.mediate || defaultSubject(),
+      sales: s.sales || defaultSubject(),
+    }));
   }, []);
 
   // Pre-select the top 10 TOP products once the content loads (only the first
@@ -156,42 +199,17 @@ export function NewsletterContent() {
     }
   }, [content]);
 
-  const activeCount = useMemo(
-    () => (subscribers ?? []).filter((s) => s.isActive).length,
-    [subscribers]
-  );
+  // Active recipients per group + total
+  const recipientCounts = useMemo(() => {
+    const counts: Record<GroupKey, number> = { mediate: 0, sales: 0 };
+    for (const s of subscribers ?? []) {
+      if (s.isActive) counts[groupOf(s.group)] += 1;
+    }
+    return counts;
+  }, [subscribers]);
+  const totalActive = recipientCounts.mediate + recipientCounts.sales;
 
   const selectedCount = selectedIds.size;
-
-  const handleAddSubscriber = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubError(null);
-    if (!email.trim()) {
-      setSubError("Zadej e-mailovou adresu.");
-      return;
-    }
-    try {
-      await addSubscriber({ email: email.trim(), name: name.trim() || undefined });
-      setEmail("");
-      setName("");
-    } catch (err) {
-      setSubError(err instanceof Error ? err.message : "Nepodařilo se přidat odběratele.");
-    }
-  };
-
-  const handleBulkAdd = async () => {
-    setBulkResult(null);
-    if (!bulkRaw.trim()) return;
-    try {
-      const res = await addSubscribersBulk({ raw: bulkRaw });
-      setBulkResult(
-        `Přidáno ${res.added}, přeskočeno (duplicit) ${res.skipped}, neplatných ${res.invalid}.`
-      );
-      setBulkRaw("");
-    } catch (err) {
-      setBulkResult(err instanceof Error ? err.message : "Hromadné přidání selhalo.");
-    }
-  };
 
   const toggleItem = (id: string) => {
     setSelectedIds((prev) => {
@@ -224,7 +242,7 @@ export function NewsletterContent() {
     (item.blocks ?? []).filter((b) => (selectedBlocks[item.id] ?? []).includes(b.key));
 
   // Composed sections from the current selection - used for recap, preview and send
-  const composedSections = useMemo(
+  const composedSections: ComposedSection[] = useMemo(
     () =>
       (content ?? [])
         .map((section) => ({
@@ -249,52 +267,18 @@ export function NewsletterContent() {
     [content, selectedIds, editedTitles, editedUrls, selectedBlocks]
   );
 
-  const handleSend = async () => {
-    setSendError(null);
-    setSendMessage(null);
+  const openPreview = (group: GroupKey) => {
+    setPreviewGroup(group);
+    setShowPreview(true);
+  };
 
-    if (!subject.trim()) {
-      setSendError("Vyplň předmět e-mailu.");
-      return;
-    }
-    if (selectedCount === 0) {
-      setSendError("Vyber alespoň jednu položku na záložce Obsah.");
-      return;
-    }
-    if (activeCount === 0) {
-      setSendError("Nemáš žádné aktivní odběratele (záložka Nastavení příjemců).");
-      return;
-    }
-
-    if (
-      !confirm(
-        `Odeslat newsletter "${subject.trim()}" na ${activeCount} aktivních odběratelů?`
-      )
-    ) {
-      return;
-    }
-
-    setSending(true);
-    try {
-      const res = await sendNewsletter({
-        subject: subject.trim(),
-        intro: intro.trim() || undefined,
-        sections: composedSections,
-      });
-      setSendMessage(`Newsletter odeslán na ${res.sent} odběratelů.`);
-      // Re-seed the composer with the auto-fill defaults for the next newsletter.
-      setSelectedIds(new Set(topAutoselectIds(content)));
-      setEditedTitles({});
-      setEditedUrls({});
-      setSelectedBlocks({});
-      setSubject(defaultSubject());
-      setIntro(DEFAULT_INTRO);
-      setShowPreview(false);
-    } catch (err) {
-      setSendError(err instanceof Error ? err.message : "Odeslání selhalo.");
-    } finally {
-      setSending(false);
-    }
+  // After a successful send, reset that group's heading back to the defaults.
+  // The shared content selection is intentionally kept so the same newsletter
+  // can still be sent to the other group.
+  const handleSent = (group: GroupKey) => {
+    setSubjects((s) => ({ ...s, [group]: defaultSubject() }));
+    setIntros((s) => ({ ...s, [group]: DEFAULT_INTRO }));
+    setShowPreview(false);
   };
 
   if (role === "viewer") {
@@ -316,19 +300,23 @@ export function NewsletterContent() {
           Newsletter
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Vyber obsah, zkontroluj náhled a odešli odběratelům.
+          Vyber obsah, zkontroluj náhled a odešli vybrané skupině.
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex-wrap h-auto bg-transparent p-0 gap-2 justify-start">
-          <TabsTrigger
-            value="sestaveni"
-            className="rounded-lg border px-4 py-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 data-[state=active]:bg-blue-600 data-[state=active]:border-blue-600 data-[state=active]:text-white data-[state=active]:shadow"
-          >
-            <Send className="w-4 h-4 mr-1.5" />
-            Sestavení newsletteru
-          </TabsTrigger>
+          {GROUPS.map((g) => (
+            <TabsTrigger
+              key={g.key}
+              value={g.key}
+              className={`rounded-lg border px-4 py-2 ${g.tab}`}
+            >
+              <Send className="w-4 h-4 mr-1.5" />
+              {g.composeLabel}
+              <span className="ml-1.5 text-xs opacity-75">({recipientCounts[g.key]})</span>
+            </TabsTrigger>
+          ))}
           <TabsTrigger
             value="obsah"
             className="rounded-lg border px-4 py-2 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 data-[state=active]:bg-emerald-600 data-[state=active]:border-emerald-600 data-[state=active]:text-white data-[state=active]:shadow"
@@ -347,175 +335,43 @@ export function NewsletterContent() {
           >
             <Users className="w-4 h-4 mr-1.5" />
             Nastavení příjemců
-            <span className="ml-1.5 text-xs opacity-75">({activeCount})</span>
+            <span className="ml-1.5 text-xs opacity-75">({totalActive})</span>
           </TabsTrigger>
         </TabsList>
 
         {/* ------------------------------------------------------------- */}
-        {/* Tab 1: Sestavení newsletteru                                   */}
+        {/* Compose tabs: one per recipient group                          */}
         {/* ------------------------------------------------------------- */}
-        <TabsContent value="sestaveni" className="space-y-6 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Sestavení newsletteru</CardTitle>
-              <CardDescription>
-                Vyplň předmět, zkontroluj vybraný obsah a odešli.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-foreground">Předmět</label>
-                <p className="text-xs text-muted-foreground mb-2">Co příjemci uvidí v hlavičce e-mailu.</p>
-                <Input
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Novinky Apotheke – červen"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-foreground">
-                  Úvodní text <span className="font-normal text-muted-foreground">(volitelné)</span>
-                </label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Předvyplněno. <code className="px-1 rounded bg-muted">{NAME_TOKEN}</code> se u každého
-                  příjemce nahradí jeho křestním jménem (z jména odběratele, jinak z e-mailu).
-                </p>
-                <Textarea
-                  value={intro}
-                  onChange={(e) => setIntro(e.target.value)}
-                  placeholder="Dobrý den, posíláme přehled novinek…"
-                  rows={3}
-                />
-              </div>
-
-              {/* Recap of selected content */}
-              <div>
-                <label className="block text-sm font-semibold text-foreground">Vybraný obsah</label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Položky vybíráš na záložce Obsah, tady je jen přehled.
-                </p>
-                {composedSections.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border p-5 text-center">
-                    <p className="text-sm text-muted-foreground mb-3">Zatím nejsou vybrané žádné položky.</p>
-                    <Button variant="outline" size="sm" onClick={() => setActiveTab("obsah")}>
-                      <ListChecks className="w-4 h-4 mr-1" />
-                      Vybrat obsah
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border divide-y divide-border">
-                    {composedSections.map((section) => (
-                      <div key={section.title} className="px-3 py-2.5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                          {section.title}
-                        </p>
-                        <ul className="space-y-1.5">
-                          {section.items.map((item, idx) => (
-                            <li key={idx} className="flex items-center gap-2 text-sm">
-                              {item.imageUrl && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={item.imageUrl}
-                                  alt=""
-                                  className="w-7 h-7 rounded object-cover border border-border shrink-0"
-                                />
-                              )}
-                              <span className="truncate">{item.title}</span>
-                              {(item.blocks?.length ?? 0) > 0 && (
-                                <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
-                                  +{item.blocks!.length} {item.blocks!.length === 1 ? "sekce" : "sekcí"}
-                                </span>
-                              )}
-                              {item.url && (
-                                <a
-                                  href={item.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="shrink-0 text-muted-foreground hover:text-primary"
-                                  title={item.url}
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                    <div className="px-3 py-2 bg-muted/30">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("obsah")}
-                        className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                      >
-                        Upravit výběr…
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-3 border-t border-border space-y-3">
-                {sendError && <p className="text-sm text-red-600">{sendError}</p>}
-                {sendMessage && <p className="text-sm text-emerald-600">{sendMessage}</p>}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-sm text-muted-foreground">
-                    Vybráno {selectedCount} položek · pošle se {activeCount} odběratelům
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowPreview(true)}
-                      disabled={selectedCount === 0}
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Náhled
-                    </Button>
-                    <Button onClick={handleSend} disabled={sending}>
-                      <Send className="w-4 h-4 mr-1" />
-                      {sending ? "Odesílám…" : "Odeslat newsletter"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {logs && logs.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="w-5 h-5" />
-                  Historie odeslání
-                </CardTitle>
-                <CardDescription>Posledních {logs.length} kampaní.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="divide-y divide-border">
-                  {logs.map((log) => (
-                    <div key={log._id} className="py-2">
-                      <p className="text-sm font-medium truncate">{log.subject}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(log.createdAt).toLocaleString("cs-CZ")} · {log.recipientCount} příjemců
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+        {GROUPS.map((g) => (
+          <TabsContent key={g.key} value={g.key} className="space-y-6 mt-4">
+            <ComposeTab
+              group={g.key}
+              subject={subjects[g.key]}
+              onSubjectChange={(value) => setSubjects((s) => ({ ...s, [g.key]: value }))}
+              intro={intros[g.key]}
+              onIntroChange={(value) => setIntros((s) => ({ ...s, [g.key]: value }))}
+              composedSections={composedSections}
+              selectedCount={selectedCount}
+              activeCount={recipientCounts[g.key]}
+              logs={logs ?? []}
+              onGoToContent={() => setActiveTab("obsah")}
+              onGoToRecipients={() => setActiveTab("prijemci")}
+              onPreview={() => openPreview(g.key)}
+              onSent={() => handleSent(g.key)}
+            />
+          </TabsContent>
+        ))}
 
         {/* ------------------------------------------------------------- */}
-        {/* Tab 2: Obsah                                                   */}
+        {/* Tab: Obsah (shared content selection)                          */}
         {/* ------------------------------------------------------------- */}
         <TabsContent value="obsah" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle>Obsah newsletteru</CardTitle>
               <CardDescription>
-                Klikni na položky, které chceš zahrnout. U vybraných můžeš upravit název i odkaz.
+                Klikni na položky, které chceš zahrnout. Stejný obsah se použije pro obě
+                skupiny — liší se jen předmět a úvod v jednotlivých záložkách sestavení.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-7">
@@ -655,7 +511,7 @@ export function NewsletterContent() {
                 <span className="text-sm text-muted-foreground">
                   Vybráno {selectedCount} položek
                 </span>
-                <Button onClick={() => setActiveTab("sestaveni")} disabled={selectedCount === 0}>
+                <Button onClick={() => setActiveTab("mediate")} disabled={selectedCount === 0}>
                   Pokračovat na sestavení
                 </Button>
               </div>
@@ -664,110 +520,16 @@ export function NewsletterContent() {
         </TabsContent>
 
         {/* ------------------------------------------------------------- */}
-        {/* Tab 3: Nastavení příjemců                                      */}
+        {/* Tab: Nastavení příjemců (per group)                            */}
         {/* ------------------------------------------------------------- */}
-        <TabsContent value="prijemci" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Odběratelé
-                <span className="ml-auto text-sm font-normal text-muted-foreground">
-                  {activeCount} aktivních / {subscribers?.length ?? 0}
-                </span>
-              </CardTitle>
-              <CardDescription>
-                Neaktivní adresy se při odeslání přeskakují.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <form onSubmit={handleAddSubscriber} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
-                <div className="flex-1">
-                  <label className="text-xs font-medium text-muted-foreground">E-mail</label>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="jan@firma.cz"
-                  />
-                </div>
-                <div className="w-full sm:w-44">
-                  <label className="text-xs font-medium text-muted-foreground">Jméno</label>
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="volitelné"
-                  />
-                </div>
-                <Button type="submit">Přidat</Button>
-              </form>
-              {subError && <p className="text-sm text-red-600">{subError}</p>}
-
-              <button
-                type="button"
-                onClick={() => setShowBulk((v) => !v)}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                {showBulk ? "Skrýt hromadné přidání" : "Hromadné přidání více adres…"}
-              </button>
-
-              {showBulk && (
-                <div className="space-y-2">
-                  <Textarea
-                    value={bulkRaw}
-                    onChange={(e) => setBulkRaw(e.target.value)}
-                    placeholder="anna@firma.cz, petr@firma.cz&#10;eva@firma.cz"
-                    rows={3}
-                  />
-                  <div className="flex items-center gap-3">
-                    <Button type="button" variant="outline" size="sm" onClick={handleBulkAdd}>
-                      Přidat hromadně
-                    </Button>
-                    {bulkResult && <span className="text-xs text-muted-foreground">{bulkResult}</span>}
-                  </div>
-                </div>
-              )}
-
-              <div className="divide-y divide-border border border-border rounded-lg max-h-96 overflow-y-auto">
-                {(subscribers ?? []).length === 0 && (
-                  <p className="text-sm text-muted-foreground p-4">Zatím žádní odběratelé.</p>
-                )}
-                {(subscribers ?? []).map((sub) => (
-                  <div key={sub._id} className="flex items-center gap-3 px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleSubscriber({ id: sub._id as Id<"newsletterSubscribers"> })}
-                      title={sub.isActive ? "Pozastavit" : "Aktivovat"}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      {sub.isActive ? (
-                        <ToggleRight className="w-6 h-6 text-emerald-600" />
-                      ) : (
-                        <ToggleLeft className="w-6 h-6" />
-                      )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm truncate ${sub.isActive ? "" : "text-muted-foreground line-through"}`}>
-                        {sub.email}
-                      </p>
-                      {sub.name && <p className="text-xs text-muted-foreground truncate">{sub.name}</p>}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Smazat odběratele ${sub.email}?`))
-                          removeSubscriber({ id: sub._id as Id<"newsletterSubscribers"> });
-                      }}
-                      className="text-muted-foreground hover:text-red-600"
-                      title="Smazat"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="prijemci" className="mt-4 space-y-6">
+          <p className="text-sm text-muted-foreground">
+            Příjemci jsou rozdělení do dvou skupin. Stejný e-mail můžeš mít v obou —
+            přidej ho v každé skupině zvlášť, nebo použij šipku pro přesun.
+          </p>
+          {GROUPS.map((g) => (
+            <GroupRecipients key={g.key} meta={g} subscribers={subscribers ?? []} />
+          ))}
         </TabsContent>
       </Tabs>
 
@@ -786,10 +548,11 @@ export function NewsletterContent() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white rounded-t-xl">
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">
-                  {subject.trim() || "(bez předmětu)"}
+                  {subjects[previewGroup].trim() || "(bez předmětu)"}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Náhled e-mailu · takto ho uvidí příjemci
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${groupMeta(previewGroup).dot}`} />
+                  Náhled pro skupinu {groupMeta(previewGroup).label}
                 </p>
               </div>
               <button
@@ -804,9 +567,9 @@ export function NewsletterContent() {
 
             <div className="p-4 sm:p-6">
               <div className="bg-white border border-gray-200 rounded-xl p-6 font-[Arial,Helvetica,sans-serif]">
-                {intro.trim() && (
+                {intros[previewGroup].trim() && (
                   <p className="text-[15px] leading-relaxed text-gray-700 whitespace-pre-line mb-6">
-                    {personalizeIntro(intro.trim(), "Jan")}
+                    {personalizeIntro(intros[previewGroup].trim(), "Jan")}
                   </p>
                 )}
                 {composedSections.map((section) => (
@@ -862,5 +625,446 @@ export function NewsletterContent() {
         </div>
       )}
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compose tab - one per recipient group. Owns the subject/intro inputs for its
+// group plus the send action; the content selection comes in via props.
+// ---------------------------------------------------------------------------
+function ComposeTab({
+  group,
+  subject,
+  onSubjectChange,
+  intro,
+  onIntroChange,
+  composedSections,
+  selectedCount,
+  activeCount,
+  logs,
+  onGoToContent,
+  onGoToRecipients,
+  onPreview,
+  onSent,
+}: {
+  group: GroupKey;
+  subject: string;
+  onSubjectChange: (value: string) => void;
+  intro: string;
+  onIntroChange: (value: string) => void;
+  composedSections: ComposedSection[];
+  selectedCount: number;
+  activeCount: number;
+  logs: Array<{ _id: string; subject: string; recipientCount: number; createdAt: number; group?: string }>;
+  onGoToContent: () => void;
+  onGoToRecipients: () => void;
+  onPreview: () => void;
+  onSent: () => void;
+}) {
+  const meta = groupMeta(group);
+  const sendNewsletter = useMutation(api.newsletter.sendNewsletter);
+  const [sending, setSending] = useState(false);
+  const [sendMessage, setSendMessage] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  const groupLogs = logs.filter((l) => groupOf(l.group) === group);
+
+  const handleSend = async () => {
+    setSendError(null);
+    setSendMessage(null);
+
+    if (!subject.trim()) {
+      setSendError("Vyplň předmět e-mailu.");
+      return;
+    }
+    if (selectedCount === 0) {
+      setSendError("Vyber alespoň jednu položku na záložce Obsah.");
+      return;
+    }
+    if (activeCount === 0) {
+      setSendError(`Skupina ${meta.label} nemá žádné aktivní příjemce (záložka Nastavení příjemců).`);
+      return;
+    }
+
+    if (
+      !confirm(
+        `Odeslat newsletter "${subject.trim()}" skupině ${meta.label} (${activeCount} příjemců)?`
+      )
+    ) {
+      return;
+    }
+
+    setSending(true);
+    try {
+      const res = await sendNewsletter({
+        subject: subject.trim(),
+        intro: intro.trim() || undefined,
+        sections: composedSections,
+        group,
+      });
+      setSendMessage(`Newsletter odeslán ${res.sent} příjemcům skupiny ${meta.label}.`);
+      onSent();
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Odeslání selhalo.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>{meta.composeLabel}</CardTitle>
+          <CardDescription>
+            Vyplň předmět a úvod pro tuto skupinu, zkontroluj vybraný obsah a odešli.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Prominent "who am I sending to" banner */}
+          <div className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 ${meta.banner}`}>
+            <span className={`inline-block w-2.5 h-2.5 rounded-full ${meta.dot}`} />
+            <span className="text-sm font-semibold">Posíláš skupině: {meta.label}</span>
+            <button
+              type="button"
+              onClick={onGoToRecipients}
+              className="ml-auto text-xs font-medium underline underline-offset-2 opacity-90 hover:opacity-100"
+            >
+              {activeCount} aktivních příjemců
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground">Předmět</label>
+            <p className="text-xs text-muted-foreground mb-2">Co příjemci uvidí v hlavičce e-mailu.</p>
+            <Input
+              value={subject}
+              onChange={(e) => onSubjectChange(e.target.value)}
+              placeholder="Novinky Apotheke – červen"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground">
+              Úvodní text <span className="font-normal text-muted-foreground">(volitelné)</span>
+            </label>
+            <p className="text-xs text-muted-foreground mb-2">
+              <code className="px-1 rounded bg-muted">{NAME_TOKEN}</code> se u každého
+              příjemce nahradí jeho křestním jménem (z jména odběratele, jinak z e-mailu).
+            </p>
+            <Textarea
+              value={intro}
+              onChange={(e) => onIntroChange(e.target.value)}
+              placeholder="Dobrý den, posíláme přehled novinek…"
+              rows={3}
+            />
+          </div>
+
+          {/* Recap of selected content */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground">Vybraný obsah</label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Položky vybíráš na záložce Obsah (společné pro obě skupiny), tady je jen přehled.
+            </p>
+            {composedSections.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-5 text-center">
+                <p className="text-sm text-muted-foreground mb-3">Zatím nejsou vybrané žádné položky.</p>
+                <Button variant="outline" size="sm" onClick={onGoToContent}>
+                  <ListChecks className="w-4 h-4 mr-1" />
+                  Vybrat obsah
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border divide-y divide-border">
+                {composedSections.map((section) => (
+                  <div key={section.title} className="px-3 py-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                      {section.title}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {section.items.map((item, idx) => (
+                        <li key={idx} className="flex items-center gap-2 text-sm">
+                          {item.imageUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.imageUrl}
+                              alt=""
+                              className="w-7 h-7 rounded object-cover border border-border shrink-0"
+                            />
+                          )}
+                          <span className="truncate">{item.title}</span>
+                          {(item.blocks?.length ?? 0) > 0 && (
+                            <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
+                              +{item.blocks!.length} {item.blocks!.length === 1 ? "sekce" : "sekcí"}
+                            </span>
+                          )}
+                          {item.url && (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 text-muted-foreground hover:text-primary"
+                              title={item.url}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <div className="px-3 py-2 bg-muted/30">
+                  <button
+                    type="button"
+                    onClick={onGoToContent}
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    Upravit výběr…
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-3 border-t border-border space-y-3">
+            {sendError && <p className="text-sm text-red-600">{sendError}</p>}
+            {sendMessage && <p className="text-sm text-emerald-600">{sendMessage}</p>}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground">
+                Vybráno {selectedCount} položek · pošle se {activeCount} příjemcům skupiny {meta.label}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={onPreview} disabled={selectedCount === 0}>
+                  <Eye className="w-4 h-4 mr-1" />
+                  Náhled
+                </Button>
+                <Button onClick={handleSend} disabled={sending}>
+                  <Send className="w-4 h-4 mr-1" />
+                  {sending ? "Odesílám…" : `Odeslat skupině ${meta.label}`}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {groupLogs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="w-5 h-5" />
+              Historie odeslání · {meta.label}
+            </CardTitle>
+            <CardDescription>Poslední kampaně pro tuto skupinu.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border">
+              {groupLogs.slice(0, 10).map((log) => (
+                <div key={log._id} className="py-2">
+                  <p className="text-sm font-medium truncate">{log.subject}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(log.createdAt).toLocaleString("cs-CZ")} · {log.recipientCount} příjemců
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Recipients of a single group - add form, bulk add and the subscriber list.
+// ---------------------------------------------------------------------------
+type Subscriber = {
+  _id: string;
+  email: string;
+  name?: string;
+  group?: string;
+  isActive: boolean;
+};
+
+function GroupRecipients({
+  meta,
+  subscribers,
+}: {
+  meta: GroupMeta;
+  subscribers: Subscriber[];
+}) {
+  const addSubscriber = useMutation(api.newsletter.addSubscriber);
+  const addSubscribersBulk = useMutation(api.newsletter.addSubscribersBulk);
+  const toggleSubscriber = useMutation(api.newsletter.toggleSubscriber);
+  const updateSubscriber = useMutation(api.newsletter.updateSubscriber);
+  const removeSubscriber = useMutation(api.newsletter.removeSubscriber);
+
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [subError, setSubError] = useState<string | null>(null);
+  const [bulkRaw, setBulkRaw] = useState("");
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
+  const [showBulk, setShowBulk] = useState(false);
+
+  const list = useMemo(
+    () =>
+      subscribers
+        .filter((s) => groupOf(s.group) === meta.key)
+        .sort((a, b) => Number(b.isActive) - Number(a.isActive)),
+    [subscribers, meta.key]
+  );
+  const activeCount = list.filter((s) => s.isActive).length;
+  const target = groupMeta(otherGroup(meta.key));
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubError(null);
+    if (!email.trim()) {
+      setSubError("Zadej e-mailovou adresu.");
+      return;
+    }
+    try {
+      await addSubscriber({ email: email.trim(), name: name.trim() || undefined, group: meta.key });
+      setEmail("");
+      setName("");
+    } catch (err) {
+      setSubError(err instanceof Error ? err.message : "Nepodařilo se přidat odběratele.");
+    }
+  };
+
+  const handleBulkAdd = async () => {
+    setBulkResult(null);
+    if (!bulkRaw.trim()) return;
+    try {
+      const res = await addSubscribersBulk({ raw: bulkRaw, group: meta.key });
+      setBulkResult(
+        `Přidáno ${res.added}, přeskočeno (duplicit) ${res.skipped}, neplatných ${res.invalid}.`
+      );
+      setBulkRaw("");
+    } catch (err) {
+      setBulkResult(err instanceof Error ? err.message : "Hromadné přidání selhalo.");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span className={`inline-block w-3 h-3 rounded-full ${meta.dot}`} />
+          {meta.label}
+          <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${meta.badge}`}>
+            {activeCount} aktivních
+          </span>
+          <span className="ml-auto text-sm font-normal text-muted-foreground">
+            {list.length} celkem
+          </span>
+        </CardTitle>
+        <CardDescription>Neaktivní adresy se při odeslání přeskakují.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+          <div className="flex-1">
+            <label className="text-xs font-medium text-muted-foreground">E-mail</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="jan@firma.cz"
+            />
+          </div>
+          <div className="w-full sm:w-44">
+            <label className="text-xs font-medium text-muted-foreground">Jméno</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="volitelné" />
+          </div>
+          <Button type="submit">Přidat</Button>
+        </form>
+        {subError && <p className="text-sm text-red-600">{subError}</p>}
+
+        <button
+          type="button"
+          onClick={() => setShowBulk((v) => !v)}
+          className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          {showBulk ? "Skrýt hromadné přidání" : "Hromadné přidání více adres…"}
+        </button>
+
+        {showBulk && (
+          <div className="space-y-2">
+            <Textarea
+              value={bulkRaw}
+              onChange={(e) => setBulkRaw(e.target.value)}
+              placeholder="anna@firma.cz, petr@firma.cz&#10;eva@firma.cz"
+              rows={3}
+            />
+            <div className="flex items-center gap-3">
+              <Button type="button" variant="outline" size="sm" onClick={handleBulkAdd}>
+                Přidat hromadně
+              </Button>
+              {bulkResult && <span className="text-xs text-muted-foreground">{bulkResult}</span>}
+            </div>
+          </div>
+        )}
+
+        <div className="divide-y divide-border border border-border rounded-lg max-h-96 overflow-y-auto">
+          {list.length === 0 && (
+            <p className="text-sm text-muted-foreground p-4">Zatím žádní odběratelé v této skupině.</p>
+          )}
+          {list.map((sub) => (
+            <div key={sub._id} className="flex items-center gap-3 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => toggleSubscriber({ id: sub._id as Id<"newsletterSubscribers"> })}
+                title={sub.isActive ? "Pozastavit" : "Aktivovat"}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {sub.isActive ? (
+                  <ToggleRight className="w-6 h-6 text-emerald-600" />
+                ) : (
+                  <ToggleLeft className="w-6 h-6" />
+                )}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm truncate ${sub.isActive ? "" : "text-muted-foreground line-through"}`}>
+                  {sub.email}
+                </p>
+                {sub.name && <p className="text-xs text-muted-foreground truncate">{sub.name}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    confirm(`Přesunout ${sub.email} do skupiny ${target.label}?`)
+                  ) {
+                    updateSubscriber({
+                      id: sub._id as Id<"newsletterSubscribers">,
+                      name: sub.name,
+                      group: target.key,
+                    }).catch((err) =>
+                      alert(err instanceof Error ? err.message : "Přesun selhal.")
+                    );
+                  }
+                }}
+                className="text-muted-foreground hover:text-foreground"
+                title={`Přesunout do skupiny ${target.label}`}
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`Smazat odběratele ${sub.email} ze skupiny ${meta.label}?`))
+                    removeSubscriber({ id: sub._id as Id<"newsletterSubscribers"> });
+                }}
+                className="text-muted-foreground hover:text-red-600"
+                title="Smazat"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
