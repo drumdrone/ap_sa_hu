@@ -581,7 +581,7 @@ export function NewsletterContent() {
                 )}
                 {composedSections.map((section) => (
                   <div key={section.title} className="mb-5">
-                    <h2 className="text-sm uppercase tracking-wide text-green-800 border-b-2 border-green-800 pb-1.5 mb-3 font-semibold">
+                    <h2 className="text-sm uppercase tracking-wide text-white bg-green-800 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
                       {section.title}
                     </h2>
                     <div className="space-y-3">
