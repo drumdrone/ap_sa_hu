@@ -91,10 +91,17 @@ const otherGroup = (g: GroupKey): GroupKey => (g === "mediate" ? "sales" : "medi
 const TOP_AUTOSELECT = 10;
 // Token in the intro replaced per recipient with their first name at send time.
 const NAME_TOKEN = "{jmeno}";
-const DEFAULT_INTRO = `Dobrý den ${NAME_TOKEN}, posíláme Vám pravidelný přehled z APSAHU.`;
 
-// Subject: "Apotheke Sales Hub" + current date (e.g. "Apotheke Sales Hub – 12. 6. 2026").
-const defaultSubject = () => `Apotheke Sales Hub – ${new Date().toLocaleDateString("cs-CZ")}`;
+// Default intro per group.
+const DEFAULT_INTROS: Record<GroupKey, string> = {
+  mediate: `Dobrý den ${NAME_TOKEN}, posíláme Vám pravidelný přehled z APSAHU.`,
+  sales: `Dobrý den ${NAME_TOKEN}, posíláme Vám informace pro obchodní zástupce.`,
+};
+
+// Default subject per group + current date (e.g. "Apotheke Sales Hub – 12. 6. 2026").
+// Obchodní zástupci get an "OZ " prefix so the audience is obvious in the inbox.
+const defaultSubject = (group: GroupKey) =>
+  `${group === "sales" ? "OZ " : ""}Apotheke Sales Hub – ${new Date().toLocaleDateString("cs-CZ")}`;
 
 // IDs of the first N TOP products, in curated order (already sorted by topOrder
 // and capped at 20 by the backend).
@@ -163,8 +170,8 @@ export function NewsletterContent() {
   // heading. Content selection (below) is shared between both groups.
   const [subjects, setSubjects] = useState<Record<GroupKey, string>>({ mediate: "", sales: "" });
   const [intros, setIntros] = useState<Record<GroupKey, string>>({
-    mediate: DEFAULT_INTRO,
-    sales: DEFAULT_INTRO,
+    mediate: DEFAULT_INTROS.mediate,
+    sales: DEFAULT_INTROS.sales,
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
@@ -178,8 +185,8 @@ export function NewsletterContent() {
   // the server-rendered HTML doesn't disagree with the client about "today".
   useEffect(() => {
     setSubjects((s) => ({
-      mediate: s.mediate || defaultSubject(),
-      sales: s.sales || defaultSubject(),
+      mediate: s.mediate || defaultSubject("mediate"),
+      sales: s.sales || defaultSubject("sales"),
     }));
   }, []);
 
@@ -276,8 +283,8 @@ export function NewsletterContent() {
   // The shared content selection is intentionally kept so the same newsletter
   // can still be sent to the other group.
   const handleSent = (group: GroupKey) => {
-    setSubjects((s) => ({ ...s, [group]: defaultSubject() }));
-    setIntros((s) => ({ ...s, [group]: DEFAULT_INTRO }));
+    setSubjects((s) => ({ ...s, [group]: defaultSubject(group) }));
+    setIntros((s) => ({ ...s, [group]: DEFAULT_INTROS[group] }));
     setShowPreview(false);
   };
 
