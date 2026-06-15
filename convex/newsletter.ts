@@ -203,6 +203,12 @@ type ContentItem = {
   title: string;
   url?: string;
   imageUrl?: string;
+  // PDF preview URL — rendered as an <iframe> thumbnail in the compose UI so
+  // PDF-only POSM materials and product sheets get a visible preview too.
+  // Not used in the email HTML (mail clients can't embed PDFs).
+  pdfPreviewUrl?: string;
+  // Editor-set product rating (0-5), rendered as stars next to the title.
+  rating?: number;
   blocks?: ContentBlock[];
 };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
@@ -286,6 +292,7 @@ export const getContent = query({
         title: p.name,
         url: `${siteUrl}/product/${p._id}`,
         imageUrl: p.image || undefined,
+        rating: typeof p.rating === "number" ? p.rating : undefined,
         blocks: productBlocks(p),
       }));
 
@@ -311,12 +318,21 @@ export const getContent = query({
             if (metadata?.contentType) fileType = metadata.contentType;
           }
           const isImageFile = fileType?.startsWith("image/") ?? false;
+          const isPdfFile =
+            fileType === "application/pdf" ||
+            (storageUrl?.toLowerCase().includes(".pdf") ?? false) ||
+            (item.downloadUrl?.toLowerCase().includes(".pdf") ?? false);
+          const imageUrl = (isImageFile ? storageUrl : undefined) || item.imageUrl;
           return {
             id: item._id,
             title: item.name,
             url: item.downloadUrl || storageUrl || item.imageUrl || `${siteUrl}/posm`,
             // Preview only when we actually have an image (not e.g. a PDF)
-            imageUrl: (isImageFile ? storageUrl : undefined) || item.imageUrl,
+            imageUrl,
+            // No image but a PDF? Surface it so the compose UI can iframe a thumbnail.
+            pdfPreviewUrl: !imageUrl && isPdfFile
+              ? (storageUrl || item.downloadUrl || undefined)
+              : undefined,
           };
         })
     );
@@ -350,8 +366,9 @@ export const getContent = query({
         id: `sheet-${pdfUrl}`,
         title: sheetNameMap.get(pdfUrl) || deriveSheetName(pdfUrl),
         url: pdfUrl,
-        // PDF documents have no image preview
+        // PDF documents have no image preview, but the compose UI can iframe them.
         imageUrl: undefined,
+        pdfPreviewUrl: pdfUrl,
       }))
       .sort((a, b) => a.title.localeCompare(b.title, "cs"));
 
@@ -376,6 +393,7 @@ const sectionValidator = v.object({
     title: v.string(),
     url: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
+    rating: v.optional(v.number()),
     blocks: v.optional(v.array(v.object({
       label: v.string(),
       content: v.string(),
@@ -389,9 +407,35 @@ type ComposedSection = {
     title: string;
     url?: string;
     imageUrl?: string;
+    rating?: number;
     blocks?: Array<{ label: string; content: string }>;
   }>;
 };
+
+// 5-star rendering as plain text — used in the plain-text body and as the
+// in-app preview / HTML email content. Unicode stars are universal across
+// fonts and mail clients.
+function ratingStars(rating: number | undefined): string | undefined {
+  if (typeof rating !== "number" || rating <= 0) return undefined;
+  const clamped = Math.max(0, Math.min(5, rating));
+  const full = Math.round(clamped);
+  return "★".repeat(full) + "☆".repeat(5 - full);
+}
+
+// Display the link as just its host (and a trimmed path) so long product URLs
+// don't dominate each row. The actual <a href> still points at the full URL,
+// so the click-through is unchanged.
+function shortenUrl(url: string, maxLen = 38): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname === "/" ? "" : u.pathname;
+    const display = `${u.host}${path}${u.search ? "?…" : ""}`;
+    if (display.length <= maxLen) return display;
+    return display.slice(0, maxLen - 1) + "…";
+  } catch {
+    return url.length > maxLen ? url.slice(0, maxLen - 1) + "…" : url;
+  }
+}
 
 // Build a clean, readable plain-text newsletter body from the composed sections.
 function buildBody(intro: string | undefined, sections: ComposedSection[]): string {
@@ -406,7 +450,10 @@ function buildBody(intro: string | undefined, sections: ComposedSection[]): stri
     parts.push(`━━━ ${section.title.toUpperCase()} ━━━`);
     parts.push("");
     for (const item of section.items) {
-      parts.push(`• ${item.title}`);
+      const stars = ratingStars(item.rating);
+      parts.push(`• ${item.title}${stars ? `  ${stars}` : ""}`);
+      // Keep the full URL on its own line — plain-text mail clients turn it
+      // into a clickable link by detecting the raw http(s) string.
       if (item.url) parts.push(`  ${item.url}`);
       for (const block of item.blocks ?? []) {
         parts.push("");
@@ -455,23 +502,29 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
   for (const section of sections) {
     if (section.items.length === 0) continue;
     blocks.push(
-      `<h2 style="margin:28px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#ffffff;background:#166534;padding:10px 14px;border-radius:6px;">${escapeHtml(section.title)}</h2>`
+      `<h2 style="margin:28px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#ffffff;background:#111827;padding:10px 14px;border-radius:6px;">${escapeHtml(section.title)}</h2>`
     );
     for (const item of section.items) {
       const title = escapeHtml(item.title);
+      const stars = ratingStars(item.rating);
+      const starsHtml = stars
+        ? ` <span style="color:#f59e0b;letter-spacing:1px;font-weight:normal;">${stars}</span>`
+        : "";
       const titleHtml = item.url
-        ? `<a href="${escapeHtml(item.url)}" style="color:#2563eb;text-decoration:none;font-weight:600;">${title}</a>`
-        : `<span style="font-weight:600;color:#111827;">${title}</span>`;
+        ? `<a href="${escapeHtml(item.url)}" style="color:#2563eb;text-decoration:none;font-weight:600;">${title}</a>${starsHtml}`
+        : `<span style="font-weight:600;color:#111827;">${title}</span>${starsHtml}`;
       const imageHtml = item.imageUrl
         ? `<td style="width:76px;padding-right:14px;vertical-align:top;"><img src="${escapeHtml(item.imageUrl)}" alt="" width="64" height="64" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;display:block;" /></td>`
         : "";
+      // Render a shortened link (host + trimmed path) instead of the raw URL —
+      // it stays clickable through the <a> tag and doesn't visually swamp the row.
       const urlNote = item.url
-        ? `<div style="font-size:12px;color:#9ca3af;word-break:break-all;margin-top:3px;">${escapeHtml(item.url)}</div>`
+        ? `<div style="font-size:12px;margin-top:3px;"><a href="${escapeHtml(item.url)}" style="color:#9ca3af;text-decoration:none;">${escapeHtml(shortenUrl(item.url))}</a></div>`
         : "";
       const blocksHtml = (item.blocks ?? [])
         .map(
           (b) =>
-            `<div style="margin-top:12px;"><div style="font-size:11px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:#166534;margin-bottom:6px;">${escapeHtml(b.label)}</div><div style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.6;color:#374151;">${formatBlockContent(b.content)}</div></div>`
+            `<div style="margin-top:12px;"><div style="font-size:11px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:#111827;margin-bottom:6px;">${escapeHtml(b.label)}</div><div style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.6;color:#374151;">${formatBlockContent(b.content)}</div></div>`
         )
         .join("");
       blocks.push(
