@@ -151,6 +151,7 @@ const SECTION_HINTS: Record<string, string> = {
   company: "Co se děje ve firmě.",
   materials: "Novinky z aktualit o materiálech.",
   posm: "Materiály z POSM katalogu — články, letáky, stojany…",
+  sheets: "Produktové listy (PDF) z katalogu produktů.",
   top: "Aktuální TOP produkty z katalogu.",
 };
 

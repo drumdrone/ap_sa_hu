@@ -321,11 +321,46 @@ export const getContent = query({
         })
     );
 
+    // Produktové listy - virtual POSM items synthesized from product sheets
+    // (products.pdfUrl), mirroring the POSM catalog. One PDF is usually shared
+    // by many products, so we deduplicate by pdfUrl and show the sheet itself.
+    const deriveSheetName = (pdfUrl: string): string => {
+      try {
+        const raw = pdfUrl.split("?")[0].split("#")[0].split("/").pop() || "produktovy-list.pdf";
+        const decoded = decodeURIComponent(raw).replace(/\.pdf$/i, "");
+        const cleaned = decoded.replace(/[-_]+/g, " ").trim();
+        return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Produktový list";
+      } catch {
+        return "Produktový list";
+      }
+    };
+
+    const allProducts = await ctx.db.query("products").collect();
+    const sheetByUrl = new Map<string, true>();
+    for (const p of allProducts) {
+      const url = p.pdfUrl?.trim();
+      if (url) sheetByUrl.set(url, true);
+    }
+
+    const sheetNameOverrides = await ctx.db.query("productSheetNames").collect();
+    const sheetNameMap = new Map(sheetNameOverrides.map((n) => [n.pdfUrl, n.displayName]));
+
+    const sheetItems: ContentItem[] = Array.from(sheetByUrl.keys())
+      .map((pdfUrl) => ({
+        id: `sheet-${pdfUrl}`,
+        title: sheetNameMap.get(pdfUrl) || deriveSheetName(pdfUrl),
+        url: pdfUrl,
+        // PDF documents have no image preview
+        imageUrl: undefined,
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title, "cs"));
+
     return [
       { key: "product", label: "Nové produkty", items: byType("product") },
       { key: "company", label: "Novinky z firmy", items: byType("company") },
       { key: "materials", label: "Nové materiály", items: byType("materials") },
       { key: "posm", label: "POSM materiály", items: posmContent },
+      { key: "sheets", label: "Produktové listy", items: sheetItems },
       { key: "top", label: "TOP produkty", items: topItems },
     ];
   },
