@@ -166,18 +166,32 @@ export function NewsletterContent() {
   const [activeTab, setActiveTab] = useState<string>("mediate");
 
   // --- Composer state ---
-  // Subject and intro are kept per group so each audience can have its own
-  // heading. Content selection (below) is shared between both groups.
+  // Subject, intro and the whole content selection are kept per group, so each
+  // audience can get a completely different newsletter.
   const [subjects, setSubjects] = useState<Record<GroupKey, string>>({ mediate: "", sales: "" });
   const [intros, setIntros] = useState<Record<GroupKey, string>>({
     mediate: DEFAULT_INTROS.mediate,
     sales: DEFAULT_INTROS.sales,
   });
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
-  const [editedUrls, setEditedUrls] = useState<Record<string, string>>({});
+  const [selectedIds, setSelectedIds] = useState<Record<GroupKey, Set<string>>>({
+    mediate: new Set(),
+    sales: new Set(),
+  });
+  const [editedTitles, setEditedTitles] = useState<Record<GroupKey, Record<string, string>>>({
+    mediate: {},
+    sales: {},
+  });
+  const [editedUrls, setEditedUrls] = useState<Record<GroupKey, Record<string, string>>>({
+    mediate: {},
+    sales: {},
+  });
   // Per item: which product content blocks (salesClaim, mainBenefits...) to attach
-  const [selectedBlocks, setSelectedBlocks] = useState<Record<string, string[]>>({});
+  const [selectedBlocks, setSelectedBlocks] = useState<Record<GroupKey, Record<string, string[]>>>({
+    mediate: {},
+    sales: {},
+  });
+  // Which group's content is currently being edited on the "Obsah" tab.
+  const [contentGroup, setContentGroup] = useState<GroupKey>("mediate");
   const [showPreview, setShowPreview] = useState(false);
   const [previewGroup, setPreviewGroup] = useState<GroupKey>("mediate");
 
@@ -198,11 +212,12 @@ export function NewsletterContent() {
     didAutoSelectRef.current = true;
     const ids = topAutoselectIds(content);
     if (ids.length > 0) {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
+      const merge = (s: Set<string>) => {
+        const next = new Set(s);
         ids.forEach((id) => next.add(id));
         return next;
-      });
+      };
+      setSelectedIds((prev) => ({ mediate: merge(prev.mediate), sales: merge(prev.sales) }));
     }
   }, [content]);
 
@@ -250,63 +265,88 @@ export function NewsletterContent() {
   }, [subscribers]);
   const totalActive = recipientCounts.mediate + recipientCounts.sales;
 
-  const selectedCount = selectedIds.size;
+  // Selection counts per group + the count for the group being edited.
+  const selectedCounts: Record<GroupKey, number> = {
+    mediate: selectedIds.mediate.size,
+    sales: selectedIds.sales.size,
+  };
+  const editingCount = selectedCounts[contentGroup];
 
+  // All edits below target the group currently selected on the "Obsah" tab.
   const toggleItem = (id: string) => {
     setSelectedIds((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev[contentGroup]);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
+      return { ...prev, [contentGroup]: next };
     });
   };
 
-  const titleFor = (item: ContentItem) =>
-    editedTitles[item.id] !== undefined ? editedTitles[item.id] : item.title;
+  const titleFor = (item: ContentItem) => {
+    const edited = editedTitles[contentGroup][item.id];
+    return edited !== undefined ? edited : item.title;
+  };
 
-  const urlFor = (item: ContentItem) =>
-    editedUrls[item.id] !== undefined ? editedUrls[item.id] : (item.url ?? "");
+  const urlFor = (item: ContentItem) => {
+    const edited = editedUrls[contentGroup][item.id];
+    return edited !== undefined ? edited : (item.url ?? "");
+  };
+
+  const setTitle = (id: string, value: string) =>
+    setEditedTitles((prev) => ({ ...prev, [contentGroup]: { ...prev[contentGroup], [id]: value } }));
+
+  const setUrl = (id: string, value: string) =>
+    setEditedUrls((prev) => ({ ...prev, [contentGroup]: { ...prev[contentGroup], [id]: value } }));
 
   const toggleBlock = (itemId: string, blockKey: string) => {
     setSelectedBlocks((prev) => {
-      const current = prev[itemId] ?? [];
+      const groupBlocks = prev[contentGroup];
+      const current = groupBlocks[itemId] ?? [];
       return {
         ...prev,
-        [itemId]: current.includes(blockKey)
-          ? current.filter((k) => k !== blockKey)
-          : [...current, blockKey],
+        [contentGroup]: {
+          ...groupBlocks,
+          [itemId]: current.includes(blockKey)
+            ? current.filter((k) => k !== blockKey)
+            : [...current, blockKey],
+        },
       };
     });
   };
 
   const blocksFor = (item: ContentItem) =>
-    (item.blocks ?? []).filter((b) => (selectedBlocks[item.id] ?? []).includes(b.key));
+    (item.blocks ?? []).filter((b) => (selectedBlocks[contentGroup][item.id] ?? []).includes(b.key));
 
-  // Composed sections from the current selection - used for recap, preview and send
-  const composedSections: ComposedSection[] = useMemo(
-    () =>
+  // Compose the sections for a given group's selection - used for the recap,
+  // preview and send. Computed for both groups so each compose tab is independent.
+  const composedByGroup: Record<GroupKey, ComposedSection[]> = useMemo(() => {
+    const build = (group: GroupKey): ComposedSection[] =>
       (content ?? [])
         .map((section) => ({
           title: section.label,
           items: section.items
-            .filter((item) => selectedIds.has(item.id))
+            .filter((item) => selectedIds[group].has(item.id))
             .map((item, idx) => {
-              const blocks = blocksFor(item).map(({ label, content }) => ({ label, content }));
-              const baseTitle = titleFor(item).trim() || item.title;
+              const blocks = (item.blocks ?? [])
+                .filter((b) => (selectedBlocks[group][item.id] ?? []).includes(b.key))
+                .map(({ label, content }) => ({ label, content }));
+              const editedTitle = editedTitles[group][item.id];
+              const baseTitle = (editedTitle !== undefined ? editedTitle : item.title).trim() || item.title;
               // TOP products are presented as a numbered list (1., 2., …).
               const title = section.key === "top" ? `${idx + 1}. ${baseTitle}` : baseTitle;
+              const editedUrl = editedUrls[group][item.id];
+              const url = (editedUrl !== undefined ? editedUrl : (item.url ?? "")).trim() || undefined;
               return {
                 title,
-                url: urlFor(item).trim() || undefined,
+                url,
                 imageUrl: item.imageUrl,
                 ...(blocks.length > 0 ? { blocks } : {}),
               };
             }),
         }))
-        .filter((section) => section.items.length > 0),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [content, selectedIds, editedTitles, editedUrls, selectedBlocks]
-  );
+        .filter((section) => section.items.length > 0);
+    return { mediate: build("mediate"), sales: build("sales") };
+  }, [content, selectedIds, editedTitles, editedUrls, selectedBlocks]);
 
   const openPreview = (group: GroupKey) => {
     setPreviewGroup(group);
@@ -364,9 +404,9 @@ export function NewsletterContent() {
           >
             <ListChecks className="w-4 h-4 mr-1.5" />
             Obsah
-            {selectedCount > 0 && (
+            {editingCount > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/90 text-emerald-700 text-[10px] leading-none font-semibold">
-                {selectedCount}
+                {editingCount}
               </span>
             )}
           </TabsTrigger>
@@ -391,11 +431,14 @@ export function NewsletterContent() {
               onSubjectChange={(value) => setSubjects((s) => ({ ...s, [g.key]: value }))}
               intro={intros[g.key]}
               onIntroChange={(value) => setIntros((s) => ({ ...s, [g.key]: value }))}
-              composedSections={composedSections}
-              selectedCount={selectedCount}
+              composedSections={composedByGroup[g.key]}
+              selectedCount={selectedCounts[g.key]}
               activeCount={recipientCounts[g.key]}
               logs={logs ?? []}
-              onGoToContent={() => setActiveTab("obsah")}
+              onGoToContent={() => {
+                setContentGroup(g.key);
+                setActiveTab("obsah");
+              }}
               onGoToRecipients={() => setActiveTab("prijemci")}
               onPreview={() => openPreview(g.key)}
               onSent={() => handleSent(g.key)}
@@ -411,11 +454,32 @@ export function NewsletterContent() {
             <CardHeader>
               <CardTitle>Obsah newsletteru</CardTitle>
               <CardDescription>
-                Klikni na položky, které chceš zahrnout. Stejný obsah se použije pro obě
-                skupiny — liší se jen předmět a úvod v jednotlivých záložkách sestavení.
+                Každá skupina má vlastní obsah. Nahoře přepni, pro kterou skupinu obsah
+                sestavuješ, a označ položky.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Which group's content is being edited */}
+              <div className="flex flex-wrap items-center gap-2 mb-5">
+                <span className="text-sm font-medium text-muted-foreground">Obsah pro skupinu:</span>
+                {GROUPS.map((g) => {
+                  const active = contentGroup === g.key;
+                  return (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => setContentGroup(g.key)}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold flex items-center gap-1.5 transition-colors ${
+                        active ? g.banner : "bg-background text-muted-foreground border-border hover:bg-muted"
+                      }`}
+                    >
+                      <span className={`inline-block w-2 h-2 rounded-full ${g.dot}`} />
+                      {g.label}
+                      <span className="ml-0.5 text-xs opacity-80">({selectedCounts[g.key]})</span>
+                    </button>
+                  );
+                })}
+              </div>
               <div className="flex gap-6 items-start">
                 {/* Left section menu (sticky) — smooth-scrolls to each section */}
                 <nav className="hidden md:block w-52 shrink-0 sticky top-20">
@@ -424,7 +488,7 @@ export function NewsletterContent() {
                   </p>
                   <div className="space-y-0.5">
                     {(content ?? []).map((section) => {
-                      const selInSection = section.items.filter((i) => selectedIds.has(i.id)).length;
+                      const selInSection = section.items.filter((i) => selectedIds[contentGroup].has(i.id)).length;
                       const active = activeSection === section.key;
                       return (
                         <button
@@ -455,7 +519,7 @@ export function NewsletterContent() {
                 {/* Right content column */}
                 <div className="flex-1 min-w-0 space-y-7">
               {(content ?? []).map((section) => {
-                const selectedItems = section.items.filter((i) => selectedIds.has(i.id));
+                const selectedItems = section.items.filter((i) => selectedIds[contentGroup].has(i.id));
                 return (
                   <div
                     key={section.key}
@@ -475,7 +539,7 @@ export function NewsletterContent() {
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {section.items.map((item) => {
-                          const checked = selectedIds.has(item.id);
+                          const checked = selectedIds[contentGroup].has(item.id);
                           return (
                             <button
                               key={item.id}
@@ -519,9 +583,7 @@ export function NewsletterContent() {
                                   </label>
                                   <Input
                                     value={titleFor(item)}
-                                    onChange={(e) =>
-                                      setEditedTitles((prev) => ({ ...prev, [item.id]: e.target.value }))
-                                    }
+                                    onChange={(e) => setTitle(item.id, e.target.value)}
                                     className="mt-1 bg-background"
                                   />
                                 </div>
@@ -530,9 +592,7 @@ export function NewsletterContent() {
                                   <div className="flex items-center gap-1.5 mt-1">
                                     <Input
                                       value={urlFor(item)}
-                                      onChange={(e) =>
-                                        setEditedUrls((prev) => ({ ...prev, [item.id]: e.target.value }))
-                                      }
+                                      onChange={(e) => setUrl(item.id, e.target.value)}
                                       placeholder="https://… (volitelné)"
                                       className="text-sm text-blue-700 bg-background"
                                     />
@@ -555,15 +615,15 @@ export function NewsletterContent() {
                                   <div>
                                     <label className="text-xs font-medium text-muted-foreground">
                                       Přibalit sekce z produktu
-                                      {(selectedBlocks[item.id]?.length ?? 0) > 0 && (
+                                      {(selectedBlocks[contentGroup][item.id]?.length ?? 0) > 0 && (
                                         <span className="ml-1 text-primary font-semibold">
-                                          ({selectedBlocks[item.id]!.length})
+                                          ({selectedBlocks[contentGroup][item.id]!.length})
                                         </span>
                                       )}
                                     </label>
                                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                                       {item.blocks!.map((block) => {
-                                        const blockChecked = (selectedBlocks[item.id] ?? []).includes(block.key);
+                                        const blockChecked = (selectedBlocks[contentGroup][item.id] ?? []).includes(block.key);
                                         return (
                                           <button
                                             key={block.key}
@@ -595,10 +655,10 @@ export function NewsletterContent() {
 
               <div className="pt-3 border-t border-border flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">
-                  Vybráno {selectedCount} položek
+                  {groupMeta(contentGroup).label}: vybráno {editingCount} položek
                 </span>
-                <Button onClick={() => setActiveTab("mediate")} disabled={selectedCount === 0}>
-                  Pokračovat na sestavení
+                <Button onClick={() => setActiveTab(contentGroup)} disabled={editingCount === 0}>
+                  Pokračovat na sestavení {groupMeta(contentGroup).label}
                 </Button>
               </div>
                 </div>
@@ -660,7 +720,7 @@ export function NewsletterContent() {
                     {personalizeIntro(intros[previewGroup].trim(), "Jan")}
                   </p>
                 )}
-                {composedSections.map((section) => (
+                {composedByGroup[previewGroup].map((section) => (
                   <div key={section.title} className="mb-5">
                     <h2 className="text-sm uppercase tracking-wide text-white bg-green-800 px-3.5 py-2.5 rounded-md mb-3 font-semibold">
                       {section.title}
