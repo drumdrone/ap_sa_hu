@@ -996,10 +996,16 @@ function ComposeTab({
 
     setSending(true);
     try {
+      // pdfPreviewUrl is a compose-UI-only field. Strip it before sending —
+      // the server's sectionValidator rejects unknown keys.
+      const sectionsForSend = composedSections.map((s) => ({
+        title: s.title,
+        items: s.items.map(({ pdfPreviewUrl: _omit, ...rest }) => rest),
+      }));
       const res = await sendNewsletter({
         subject: subject.trim(),
         intro: intro.trim() || undefined,
-        sections: composedSections,
+        sections: sectionsForSend,
         group,
       });
       setSendMessage(`Newsletter odeslán ${res.sent} příjemcům skupiny ${meta.label}.`);
