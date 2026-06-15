@@ -16,6 +16,16 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+// Recipient groups. A subscriber row belongs to exactly one group; the same
+// e-mail may appear in several groups (one row each). Rows created before
+// groups existed have no `group` and are treated as "mediate".
+type SubscriberGroup = "mediate" | "sales";
+const DEFAULT_GROUP: SubscriberGroup = "mediate";
+
+function normalizeGroup(group?: string | null): SubscriberGroup {
+  return group === "sales" ? "sales" : DEFAULT_GROUP;
+}
+
 // Derive a recipient's first name: prefer their stored name, otherwise take the
 // first segment of the email's local part (e.g. "honza.hrodek@…" -> "Honza").
 function firstNameFor(email: string, name?: string): string {
@@ -44,29 +54,33 @@ export const listSubscribers = query({
   },
 });
 
-// Add a single subscriber
+// Add a single subscriber to a group. The same e-mail may exist in several
+// groups; duplicates are only rejected within the same group.
 export const addSubscriber = mutation({
   args: {
     email: v.string(),
     name: v.optional(v.string()),
+    group: v.optional(v.union(v.literal("mediate"), v.literal("sales"))),
   },
   handler: async (ctx, args) => {
     const email = normalizeEmail(args.email);
     if (!isValidEmail(email)) {
       throw new Error("Neplatná e-mailová adresa: " + args.email);
     }
+    const group = normalizeGroup(args.group);
 
     const existing = await ctx.db
       .query("newsletterSubscribers")
       .withIndex("by_email", (q) => q.eq("email", email))
-      .first();
-    if (existing) {
-      throw new Error("Tato adresa už je v seznamu: " + email);
+      .collect();
+    if (existing.some((e) => normalizeGroup(e.group) === group)) {
+      throw new Error("Tato adresa už je v této skupině: " + email);
     }
 
     return await ctx.db.insert("newsletterSubscribers", {
       email,
       name: args.name?.trim() || undefined,
+      group,
       isActive: true,
       createdAt: Date.now(),
     });
@@ -78,15 +92,20 @@ export const addSubscriber = mutation({
 export const addSubscribersBulk = mutation({
   args: {
     raw: v.string(),
+    group: v.optional(v.union(v.literal("mediate"), v.literal("sales"))),
   },
   handler: async (ctx, args) => {
+    const group = normalizeGroup(args.group);
     const candidates = args.raw
       .split(/[\s,;]+/)
       .map((e) => normalizeEmail(e))
       .filter((e) => e.length > 0);
 
+    // Duplicates are scoped to the target group only.
     const existing = await ctx.db.query("newsletterSubscribers").collect();
-    const existingEmails = new Set(existing.map((s) => s.email));
+    const existingEmails = new Set(
+      existing.filter((s) => normalizeGroup(s.group) === group).map((s) => s.email)
+    );
 
     let added = 0;
     let skipped = 0;
@@ -105,6 +124,7 @@ export const addSubscribersBulk = mutation({
       seen.add(email);
       await ctx.db.insert("newsletterSubscribers", {
         email,
+        group,
         isActive: true,
         createdAt: Date.now(),
       });
@@ -127,14 +147,37 @@ export const toggleSubscriber = mutation({
   },
 });
 
-// Update a subscriber's name
+// Update a subscriber's name and/or move them to another group.
 export const updateSubscriber = mutation({
   args: {
     id: v.id("newsletterSubscribers"),
     name: v.optional(v.string()),
+    group: v.optional(v.union(v.literal("mediate"), v.literal("sales"))),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, { name: args.name?.trim() || undefined });
+    const sub = await ctx.db.get(args.id);
+    if (!sub) throw new Error("Odběratel nenalezen");
+
+    const patch: { name?: string; group?: SubscriberGroup } = {
+      name: args.name?.trim() || undefined,
+    };
+
+    if (args.group !== undefined) {
+      const targetGroup = normalizeGroup(args.group);
+      if (targetGroup !== normalizeGroup(sub.group)) {
+        // Don't allow moving into a group where this e-mail already exists.
+        const existing = await ctx.db
+          .query("newsletterSubscribers")
+          .withIndex("by_email", (q) => q.eq("email", sub.email))
+          .collect();
+        if (existing.some((e) => e._id !== sub._id && normalizeGroup(e.group) === targetGroup)) {
+          throw new Error("Tato adresa už je v cílové skupině: " + sub.email);
+        }
+      }
+      patch.group = targetGroup;
+    }
+
+    await ctx.db.patch(args.id, patch);
   },
 });
 
@@ -434,18 +477,22 @@ export const sendNewsletter = mutation({
     subject: v.string(),
     intro: v.optional(v.string()),
     sections: v.array(sectionValidator),
+    group: v.optional(v.union(v.literal("mediate"), v.literal("sales"))),
     recipients: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const subject = args.subject.trim();
     if (!subject) throw new Error("Vyplňte předmět e-mailu.");
 
+    const group = normalizeGroup(args.group);
+
     const nonEmptySections = args.sections.filter((s) => s.items.length > 0);
     if (nonEmptySections.length === 0) {
       throw new Error("Vyberte alespoň jednu položku k odeslání.");
     }
 
-    // Resolve recipients
+    // Resolve recipients: explicit list wins, otherwise all active subscribers
+    // in the selected group.
     let emails: string[];
     if (args.recipients && args.recipients.length > 0) {
       emails = args.recipients.map((e) => normalizeEmail(e));
@@ -454,11 +501,13 @@ export const sendNewsletter = mutation({
         .query("newsletterSubscribers")
         .withIndex("by_active", (q) => q.eq("isActive", true))
         .collect();
-      emails = subs.map((s) => s.email);
+      emails = subs
+        .filter((s) => normalizeGroup(s.group) === group)
+        .map((s) => s.email);
     }
 
     if (emails.length === 0) {
-      throw new Error("Žádní aktivní odběratelé k odeslání.");
+      throw new Error("Žádní aktivní odběratelé v této skupině k odeslání.");
     }
 
     // Look up subscriber names so the {jmeno} token can be personalized.
@@ -489,6 +538,7 @@ export const sendNewsletter = mutation({
       sections: nonEmptySections,
       recipientCount: emails.length,
       recipients: emails,
+      group,
       createdAt: Date.now(),
     });
 

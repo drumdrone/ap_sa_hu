@@ -386,15 +386,23 @@ export default defineSchema({
     .index("by_shortcut", ["shortcut"])
     .index("by_active", ["isActive"]),
 
-  // Newsletter subscribers - people who agreed to receive newsletters
+  // Newsletter subscribers - people who agreed to receive newsletters.
+  // The same e-mail can exist in more than one group (one row per group).
   newsletterSubscribers: defineTable({
     email: v.string(),
     name: v.optional(v.string()), // optional display name
+    // Recipient group. Optional for backward compatibility - rows created
+    // before groups existed are treated as "mediate" everywhere.
+    group: v.optional(v.union(
+      v.literal("mediate"), // Mediate
+      v.literal("sales")    // Obchodní zástupci
+    )),
     isActive: v.boolean(), // can be paused without deleting
     createdAt: v.number(),
   })
     .index("by_email", ["email"])
-    .index("by_active", ["isActive"]),
+    .index("by_active", ["isActive"])
+    .index("by_group", ["group"]),
 
   // Log of sent newsletter campaigns (for history / audit)
   newsletterLogs: defineTable({
@@ -415,6 +423,11 @@ export default defineSchema({
     })),
     recipientCount: v.number(),
     recipients: v.array(v.string()), // emails it was sent to
+    // Which recipient group this campaign was sent to (optional for old logs)
+    group: v.optional(v.union(
+      v.literal("mediate"),
+      v.literal("sales")
+    )),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
 })
