@@ -33,6 +33,8 @@ type ContentItem = {
   title: string;
   url?: string;
   imageUrl?: string;
+  // PDF rendered as an <iframe> thumbnail in the compose UI when there's no image.
+  pdfPreviewUrl?: string;
   blocks?: ContentBlock[];
 };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
@@ -43,9 +45,48 @@ type ComposedSection = {
     title: string;
     url?: string;
     imageUrl?: string;
+    pdfPreviewUrl?: string;
     blocks?: Array<{ label: string; content: string }>;
   }>;
 };
+
+// Thumbnail for a content row: image for image files, an iframe for PDFs (same
+// trick the POSM catalog uses), or a neutral placeholder. `size` is the tailwind
+// size class (e.g. "w-7 h-7") and `rounded` lets callers pick the corner radius.
+function ItemThumb({
+  imageUrl,
+  pdfPreviewUrl,
+  size,
+  rounded = "rounded",
+}: {
+  imageUrl?: string;
+  pdfPreviewUrl?: string;
+  size: string;
+  rounded?: string;
+}) {
+  if (imageUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        className={`${size} ${rounded} object-cover border border-border bg-white shrink-0`}
+      />
+    );
+  }
+  if (pdfPreviewUrl) {
+    return (
+      <div className={`${size} ${rounded} border border-border bg-white shrink-0 overflow-hidden`}>
+        <iframe
+          src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
+          title=""
+          className="w-full h-full pointer-events-none"
+        />
+      </div>
+    );
+  }
+  return <span className={`${size} ${rounded} bg-muted shrink-0`} />;
+}
 
 // --- Recipient groups -----------------------------------------------------
 // A subscriber belongs to exactly one group; the same e-mail can live in
@@ -345,6 +386,7 @@ export function NewsletterContent() {
                 title,
                 url,
                 imageUrl: item.imageUrl,
+                pdfPreviewUrl: item.pdfPreviewUrl,
                 ...(blocks.length > 0 ? { blocks } : {}),
               };
             }),
@@ -572,16 +614,11 @@ export function NewsletterContent() {
                                 className="flex items-center gap-2 flex-1 min-w-0 text-left px-2 py-1"
                                 title={item.title}
                               >
-                                {item.imageUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={item.imageUrl}
-                                    alt=""
-                                    className="w-7 h-7 rounded object-cover border border-border bg-white shrink-0"
-                                  />
-                                ) : (
-                                  <span className="w-7 h-7 rounded bg-muted shrink-0" />
-                                )}
+                                <ItemThumb
+                                  imageUrl={item.imageUrl}
+                                  pdfPreviewUrl={item.pdfPreviewUrl}
+                                  size="w-7 h-7"
+                                />
                                 <span className={`truncate flex-1 ${checked ? "font-medium" : ""}`}>
                                   {item.title}
                                 </span>
@@ -645,16 +682,12 @@ export function NewsletterContent() {
           />
           <div className="relative h-full w-full max-w-md bg-background shadow-2xl border-l border-border flex flex-col animate-in slide-in-from-right duration-300">
             <div className="flex items-start gap-3 p-4 border-b border-border">
-              {editItem.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={editItem.imageUrl}
-                  alt=""
-                  className="w-12 h-12 rounded-lg object-cover border border-border bg-white shrink-0"
-                />
-              ) : (
-                <span className="w-12 h-12 rounded-lg bg-muted shrink-0" />
-              )}
+              <ItemThumb
+                imageUrl={editItem.imageUrl}
+                pdfPreviewUrl={editItem.pdfPreviewUrl}
+                size="w-12 h-12"
+                rounded="rounded-lg"
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <span className={`inline-block w-2 h-2 rounded-full ${groupMeta(contentGroup).dot}`} />
@@ -1006,14 +1039,11 @@ function ComposeTab({
                     <ul className="space-y-1.5">
                       {section.items.map((item, idx) => (
                         <li key={idx} className="flex items-center gap-2 text-sm">
-                          {item.imageUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={item.imageUrl}
-                              alt=""
-                              className="w-7 h-7 rounded object-cover border border-border shrink-0"
-                            />
-                          )}
+                          <ItemThumb
+                            imageUrl={item.imageUrl}
+                            pdfPreviewUrl={item.pdfPreviewUrl}
+                            size="w-7 h-7"
+                          />
                           <span className="truncate">{item.title}</span>
                           {(item.blocks?.length ?? 0) > 0 && (
                             <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">

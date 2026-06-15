@@ -203,6 +203,10 @@ type ContentItem = {
   title: string;
   url?: string;
   imageUrl?: string;
+  // PDF preview URL — rendered as an <iframe> thumbnail in the compose UI so
+  // PDF-only POSM materials and product sheets get a visible preview too.
+  // Not used in the email HTML (mail clients can't embed PDFs).
+  pdfPreviewUrl?: string;
   blocks?: ContentBlock[];
 };
 type ContentSection = { key: string; label: string; items: ContentItem[] };
@@ -311,12 +315,21 @@ export const getContent = query({
             if (metadata?.contentType) fileType = metadata.contentType;
           }
           const isImageFile = fileType?.startsWith("image/") ?? false;
+          const isPdfFile =
+            fileType === "application/pdf" ||
+            (storageUrl?.toLowerCase().includes(".pdf") ?? false) ||
+            (item.downloadUrl?.toLowerCase().includes(".pdf") ?? false);
+          const imageUrl = (isImageFile ? storageUrl : undefined) || item.imageUrl;
           return {
             id: item._id,
             title: item.name,
             url: item.downloadUrl || storageUrl || item.imageUrl || `${siteUrl}/posm`,
             // Preview only when we actually have an image (not e.g. a PDF)
-            imageUrl: (isImageFile ? storageUrl : undefined) || item.imageUrl,
+            imageUrl,
+            // No image but a PDF? Surface it so the compose UI can iframe a thumbnail.
+            pdfPreviewUrl: !imageUrl && isPdfFile
+              ? (storageUrl || item.downloadUrl || undefined)
+              : undefined,
           };
         })
     );
@@ -350,8 +363,9 @@ export const getContent = query({
         id: `sheet-${pdfUrl}`,
         title: sheetNameMap.get(pdfUrl) || deriveSheetName(pdfUrl),
         url: pdfUrl,
-        // PDF documents have no image preview
+        // PDF documents have no image preview, but the compose UI can iframe them.
         imageUrl: undefined,
+        pdfPreviewUrl: pdfUrl,
       }))
       .sort((a, b) => a.title.localeCompare(b.title, "cs"));
 
