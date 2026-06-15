@@ -300,17 +300,23 @@ export const getContent = query({
       posmItems
         .sort((a, b) => b.createdAt - a.createdAt)
         .map(async (item) => {
+          // Resolve the uploaded file the same way the POSM catalog does: the
+          // file type is read from storage metadata (the stored `fileType` field
+          // is often empty), so image thumbnails actually show up.
           let storageUrl: string | undefined;
+          let fileType = item.fileType;
           if (item.storageId) {
             storageUrl = (await ctx.storage.getUrl(item.storageId)) ?? undefined;
+            const metadata = await ctx.storage.getMetadata(item.storageId);
+            if (metadata?.contentType) fileType = metadata.contentType;
           }
-          const isImageFile = item.fileType?.startsWith("image/") ?? false;
+          const isImageFile = fileType?.startsWith("image/") ?? false;
           return {
             id: item._id,
             title: item.name,
             url: item.downloadUrl || storageUrl || item.imageUrl || `${siteUrl}/posm`,
             // Preview only when we actually have an image (not e.g. a PDF)
-            imageUrl: item.imageUrl || (isImageFile ? storageUrl : undefined),
+            imageUrl: (isImageFile ? storageUrl : undefined) || item.imageUrl,
           };
         })
     );
