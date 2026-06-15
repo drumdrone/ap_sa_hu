@@ -414,7 +414,7 @@ function buildHtml(intro: string | undefined, sections: ComposedSection[]): stri
   for (const section of sections) {
     if (section.items.length === 0) continue;
     blocks.push(
-      `<h2 style="margin:28px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#166534;border-bottom:2px solid #166534;padding-bottom:6px;">${escapeHtml(section.title)}</h2>`
+      `<h2 style="margin:28px 0 14px;font-size:14px;letter-spacing:1px;text-transform:uppercase;color:#ffffff;background:#166534;padding:10px 14px;border-radius:6px;">${escapeHtml(section.title)}</h2>`
     );
     for (const item of section.items) {
       const title = escapeHtml(item.title);
