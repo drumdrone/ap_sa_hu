@@ -206,6 +206,40 @@ export function NewsletterContent() {
     }
   }, [content]);
 
+  // --- Content tab side menu (scroll-spy) ---
+  const [activeSection, setActiveSection] = useState<string>("");
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Default the highlighted menu entry to the first section once content loads.
+  useEffect(() => {
+    if (content && content.length > 0 && !activeSection) {
+      setActiveSection(content[0].key);
+    }
+  }, [content, activeSection]);
+
+  // Highlight the section currently in view while scrolling the content tab.
+  useEffect(() => {
+    if (activeTab !== "obsah" || !content) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        const key = visible[0]?.target.getAttribute("data-section");
+        if (key) setActiveSection(key);
+      },
+      { rootMargin: "-72px 0px -65% 0px", threshold: 0 }
+    );
+    Object.values(sectionRefs.current).forEach((el) => el && observer.observe(el));
+    return () => observer.disconnect();
+  }, [activeTab, content]);
+
+  // Smoothly scroll to a section from the side menu (offset clears the sticky header).
+  const scrollToSection = (key: string) => {
+    setActiveSection(key);
+    sectionRefs.current[key]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // Active recipients per group + total
   const recipientCounts = useMemo(() => {
     const counts: Record<GroupKey, number> = { mediate: 0, sales: 0 };
@@ -381,11 +415,56 @@ export function NewsletterContent() {
                 skupiny — liší se jen předmět a úvod v jednotlivých záložkách sestavení.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-7">
+            <CardContent>
+              <div className="flex gap-6 items-start">
+                {/* Left section menu (sticky) — smooth-scrolls to each section */}
+                <nav className="hidden md:block w-52 shrink-0 sticky top-20">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground px-3 mb-1">
+                    Sekce
+                  </p>
+                  <div className="space-y-0.5">
+                    {(content ?? []).map((section) => {
+                      const selInSection = section.items.filter((i) => selectedIds.has(i.id)).length;
+                      const active = activeSection === section.key;
+                      return (
+                        <button
+                          key={section.key}
+                          type="button"
+                          onClick={() => scrollToSection(section.key)}
+                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
+                            active
+                              ? "bg-emerald-50 text-emerald-700 font-semibold"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          }`}
+                        >
+                          <span
+                            className={`w-1 h-4 rounded-full shrink-0 ${active ? "bg-emerald-500" : "bg-transparent"}`}
+                          />
+                          <span className="truncate flex-1">{section.label}</span>
+                          {selInSection > 0 && (
+                            <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
+                              {selInSection}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </nav>
+
+                {/* Right content column */}
+                <div className="flex-1 min-w-0 space-y-7">
               {(content ?? []).map((section) => {
                 const selectedItems = section.items.filter((i) => selectedIds.has(i.id));
                 return (
-                  <div key={section.key}>
+                  <div
+                    key={section.key}
+                    data-section={section.key}
+                    ref={(el) => {
+                      sectionRefs.current[section.key] = el;
+                    }}
+                    className="scroll-mt-20"
+                  >
                     <h3 className="text-sm font-semibold text-foreground">{section.label}</h3>
                     <p className="text-xs text-muted-foreground mb-3">
                       {SECTION_HINTS[section.key] ?? "Označ, co chceš zahrnout."}
@@ -521,6 +600,8 @@ export function NewsletterContent() {
                 <Button onClick={() => setActiveTab("mediate")} disabled={selectedCount === 0}>
                   Pokračovat na sestavení
                 </Button>
+              </div>
+                </div>
               </div>
             </CardContent>
           </Card>
