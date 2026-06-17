@@ -91,6 +91,19 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   
   const product = useQuery(api.products.getById, { id: productId });
   const adjacentProducts = useQuery(api.products.getAdjacentProducts, { currentId: productId });
+
+  // Safety net: if the product query hasn't resolved after a while (e.g. a
+  // dropped connection when the page is opened from a newsletter link), show a
+  // recoverable message instead of spinning forever.
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  useEffect(() => {
+    if (product !== undefined) {
+      setLoadTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadTimedOut(true), 15000);
+    return () => clearTimeout(timer);
+  }, [product]);
   const updateMarketingData = useMutation(api.products.updateMarketingData);
   const clearPdfUrl = useMutation(api.products.clearPdfUrl);
   const clearVideoUrl = useMutation(api.products.clearVideoUrl);
@@ -612,11 +625,34 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   if (product === undefined) {
     return (
       <div className="min-h-screen bg-background flex">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-muted-foreground">Načítám produkt...</p>
-          </div>
+        <div className="flex-1 flex items-center justify-center px-6">
+          {loadTimedOut ? (
+            <div className="flex flex-col items-center gap-3 text-center max-w-sm">
+              <h2 className="text-lg font-semibold text-foreground">
+                Produkt se nepodařilo načíst
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Načítání trvá déle než obvykle. Zkontrolujte připojení a zkuste stránku obnovit.
+              </p>
+              <div className="flex items-center gap-3 mt-1">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="rounded-lg bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 hover:bg-primary/90 transition-colors"
+                >
+                  Obnovit stránku
+                </button>
+                <Link href="/" className="text-sm text-primary hover:underline">
+                  Zpět na katalog
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-muted-foreground">Načítám produkt...</p>
+            </div>
+          )}
         </div>
       </div>
     );
