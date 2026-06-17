@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import JSZip from "jszip";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -14,15 +15,45 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const POSM_TYPES = {
-  letak: { label: "Letak", color: "bg-blue-100 text-blue-700" },
-  stojan: { label: "Stojan", color: "bg-green-100 text-green-700" },
-  plakat: { label: "Plakat", color: "bg-purple-100 text-purple-700" },
-  wobler: { label: "Wobler", color: "bg-yellow-100 text-yellow-700" },
-  display: { label: "Display", color: "bg-orange-100 text-orange-700" },
-  cenovka: { label: "Cenovka", color: "bg-pink-100 text-pink-700" },
-  other: { label: "Jine", color: "bg-gray-100 text-gray-700" },
-} as const;
+// Hardcoded built-in defaults; overridable per-row via the posmTypes table.
+// product_list is reserved for the virtual "Produktové listy" cards and is
+// not creatable manually via the Add Item dialog.
+type PosmTypeDef = {
+  label: string;
+  color: string;
+  order: number;
+  isBuiltIn: boolean;
+  isHidden?: boolean;
+  reserved?: boolean; // not user-creatable / not deletable in management UI
+};
+const POSM_TYPE_DEFAULTS: Record<string, PosmTypeDef> = {
+  letak: { label: "Letak", color: "bg-blue-100 text-blue-700", order: 10, isBuiltIn: true },
+  stojan: { label: "Stojan", color: "bg-green-100 text-green-700", order: 20, isBuiltIn: true },
+  plakat: { label: "Plakat", color: "bg-purple-100 text-purple-700", order: 30, isBuiltIn: true },
+  wobler: { label: "Wobler", color: "bg-yellow-100 text-yellow-700", order: 40, isBuiltIn: true },
+  display: { label: "Display", color: "bg-orange-100 text-orange-700", order: 50, isBuiltIn: true },
+  cenovka: { label: "Cenovka", color: "bg-pink-100 text-pink-700", order: 60, isBuiltIn: true },
+  product_list: { label: "Produktové listy", color: "bg-rose-100 text-rose-700", order: 70, isBuiltIn: true, reserved: true },
+  other: { label: "Jine", color: "bg-gray-100 text-gray-700", order: 80, isBuiltIn: true },
+};
+
+// Color palette for new custom types and recoloring built-ins.
+const POSM_COLOR_PALETTE: { name: string; value: string }[] = [
+  { name: "Modra", value: "bg-blue-100 text-blue-700" },
+  { name: "Zelena", value: "bg-green-100 text-green-700" },
+  { name: "Fialova", value: "bg-purple-100 text-purple-700" },
+  { name: "Zluta", value: "bg-yellow-100 text-yellow-700" },
+  { name: "Oranzova", value: "bg-orange-100 text-orange-700" },
+  { name: "Ruzova", value: "bg-pink-100 text-pink-700" },
+  { name: "Ruzova tmava", value: "bg-rose-100 text-rose-700" },
+  { name: "Tyrkysova", value: "bg-teal-100 text-teal-700" },
+  { name: "Modrozelena", value: "bg-emerald-100 text-emerald-700" },
+  { name: "Indigo", value: "bg-indigo-100 text-indigo-700" },
+  { name: "Hneda", value: "bg-amber-100 text-amber-700" },
+  { name: "Seda", value: "bg-gray-100 text-gray-700" },
+];
+
+const FALLBACK_TYPE_COLOR = "bg-gray-100 text-gray-700";
 
 const ORDER_STATUSES = {
   new: { label: "Nova", color: "bg-blue-100 text-blue-700" },
@@ -37,7 +68,7 @@ const DISTRIBUTION_TYPES = {
   order: { label: "K objednani", icon: "OB", color: "bg-amber-100 text-amber-700" },
 } as const;
 
-type PosmType = keyof typeof POSM_TYPES;
+type PosmType = string;
 type OrderStatus = keyof typeof ORDER_STATUSES;
 type DistributionType = keyof typeof DISTRIBUTION_TYPES;
 
@@ -53,17 +84,100 @@ type PosmKitItem = {
   selectedSize?: string;
 };
 
+function sanitizeFilename(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, "_")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "soubor";
+}
+
+function getFilenameForKitItem(item: PosmKitItem, url: string): string {
+  let extFromUrl = "";
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split("/").filter(Boolean).pop() || "";
+    const m = last.match(/\.([a-zA-Z0-9]{1,8})$/);
+    if (m) extFromUrl = `.${m[1].toLowerCase()}`;
+  } catch {}
+  const base = sanitizeFilename(item.name);
+  if (extFromUrl && !base.toLowerCase().endsWith(extFromUrl)) return `${base}${extFromUrl}`;
+  return base;
+}
+
+function uniqueFilename(name: string, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name);
+    return name;
+  }
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  let i = 2;
+  while (used.has(`${stem}_${i}${ext}`)) i++;
+  const final = `${stem}_${i}${ext}`;
+  used.add(final);
+  return final;
+}
+
 export function PosmPageContent() {
   const items = useQuery(api.posm.listItems, {});
   const orders = useQuery(api.posm.listOrders, {});
   const stats = useQuery(api.posm.getStats);
+  const productsWithPdf = useQuery(api.products.list, { withPdf: true });
+  const productSheetNames = useQuery(api.posm.listProductSheetNames, {});
+  const setProductSheetName = useMutation(api.posm.setProductSheetName);
+  const dbPosmTypes = useQuery(api.posm.listTypes, {});
+  const upsertPosmType = useMutation(api.posm.upsertType);
+  const deletePosmType = useMutation(api.posm.deleteType);
+
+  // Resolve effective types: built-in defaults overridden by DB rows;
+  // plus any fully custom types from the DB.
+  const typesByKey: Record<string, PosmTypeDef> = (() => {
+    const map: Record<string, PosmTypeDef> = {};
+    for (const [key, def] of Object.entries(POSM_TYPE_DEFAULTS)) {
+      map[key] = { ...def };
+    }
+    for (const row of dbPosmTypes ?? []) {
+      const baseline = map[row.key];
+      map[row.key] = {
+        label: row.label,
+        color: row.color,
+        order: row.order ?? baseline?.order ?? 1000,
+        isBuiltIn: baseline?.isBuiltIn ?? row.isBuiltIn ?? false,
+        isHidden: row.isHidden,
+        reserved: baseline?.reserved,
+      };
+    }
+    return map;
+  })();
+
+  const getTypeDef = (key: string): PosmTypeDef => {
+    return typesByKey[key] ?? {
+      label: key,
+      color: FALLBACK_TYPE_COLOR,
+      order: 9999,
+      isBuiltIn: false,
+    };
+  };
+
+  // Visible (non-hidden) types, sorted by order for chip rendering.
+  const visibleTypeEntries: [string, PosmTypeDef][] = Object.entries(typesByKey)
+    .filter(([, def]) => !def.isHidden)
+    .sort((a, b) => a[1].order - b[1].order);
+
+  // Types selectable in the Add Item dialog: visible, non-reserved.
+  const manualTypeEntries: [string, PosmTypeDef][] = visibleTypeEntries.filter(
+    ([, def]) => !def.reserved,
+  );
 
   const createItem = useMutation(api.posm.createItem);
   const updateItem = useMutation(api.posm.updateItem);
   const deleteItem = useMutation(api.posm.deleteItem);
   const createOrder = useMutation(api.posm.createOrder);
   const updateOrderStatus = useMutation(api.posm.updateOrderStatus);
-  const sendSalesKitEmail = useMutation(api.emails.sendSalesKitEmail);
 
   const [showAddItem, setShowAddItem] = useState(false);
   const [showOrder, setShowOrder] = useState(false);
@@ -72,6 +186,8 @@ export function PosmPageContent() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterSize, setFilterSize] = useState<string>("all");
   const [filterDistribution, setFilterDistribution] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [showManageTypes, setShowManageTypes] = useState(false);
 
   // Add item form
   const [newItem, setNewItem] = useState({
@@ -97,9 +213,19 @@ export function PosmPageContent() {
   // POSM KIT state
   const [posmKit, setPosmKit] = useState<PosmKitItem[]>([]);
   const [showPosmKit, setShowPosmKit] = useState(false);
-  const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [emailTo, setEmailTo] = useState("");
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+
+  // Inline name editing in the detail dialog
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
+
+  // Inline type editing in the detail dialog
+  const [editingType, setEditingType] = useState(false);
+  const [savingType, setSavingType] = useState(false);
 
   // Handle file upload
   const handleFileUpload = useCallback(async (file: File) => {
@@ -279,18 +405,118 @@ export function PosmPageContent() {
     setPosmKit(prev => prev.map(k => k.id === itemId ? { ...k, selectedSize: size } : k));
   };
 
-  const downloadKitItems = () => {
+  const downloadKitItems = async () => {
+    if (isDownloadingZip) return;
     const downloadItems = posmKit.filter(k => k.distributionType === "download");
-    downloadItems.forEach(item => {
-      const url = item.downloadUrl || item.imageUrl;
-      if (url) {
-        const a = document.createElement("a");
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.click();
+    const targets = downloadItems
+      .map(item => ({ item, url: item.downloadUrl || item.imageUrl }))
+      .filter((t): t is { item: PosmKitItem; url: string } => Boolean(t.url));
+
+    if (targets.length === 0) return;
+
+    // Single file: keep the original direct-download behavior so the user
+    // gets the file as-is instead of a one-file zip.
+    if (targets.length === 1) {
+      const { item, url } = targets[0];
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getFilenameForKitItem(item, url);
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    setIsDownloadingZip(true);
+    try {
+      const zip = new JSZip();
+      const usedNames = new Set<string>();
+      const failed: string[] = [];
+
+      for (const { item, url } of targets) {
+        try {
+          const res = await fetch(url, { mode: "cors" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const name = uniqueFilename(getFilenameForKitItem(item, url), usedNames);
+          zip.file(name, blob);
+        } catch (e) {
+          console.error("Failed to fetch", url, e);
+          failed.push(item.name);
+        }
       }
-    });
+
+      if (Object.keys(zip.files).length === 0) {
+        alert("Materiály se nepodařilo stáhnout (CORS/síť). Zkuste je stáhnout jednotlivě z detailu.");
+        return;
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipUrl = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = zipUrl;
+      a.download = `posm_kit_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(zipUrl);
+
+      if (failed.length > 0) {
+        alert(`ZIP připraven, ale tyto materiály se nepodařilo přibalit:\n- ${failed.join("\n- ")}`);
+      }
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
+  const generatePosmKitShareUrl = (): string => {
+    if (posmKit.length === 0 || typeof window === "undefined") return "";
+    try {
+      const payload = {
+        generatedAt: new Date().toISOString(),
+        items: posmKit.map((k) => {
+          const def = getTypeDef(k.type);
+          return {
+            name: k.name,
+            typeLabel: def.label,
+            typeColor: def.color,
+            distributionType: k.distributionType,
+            imageUrl: k.imageUrl,
+            downloadUrl: k.downloadUrl,
+            quantity: k.quantity,
+            selectedSize: k.selectedSize,
+          };
+        }),
+      };
+      const json = JSON.stringify(payload);
+      const utf8 = unescape(encodeURIComponent(json));
+      const base64 = btoa(utf8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      return `${window.location.origin}/posm-kit?data=${base64}`;
+    } catch (error) {
+      console.error("Failed to generate POSM kit share URL:", error);
+      return "";
+    }
+  };
+
+  const openShareDialog = () => {
+    const url = generatePosmKitShareUrl();
+    if (!url) return;
+    setShareUrl(url);
+    setShareCopied(false);
+    setShowShareDialog(true);
+  };
+
+  const copyShareUrl = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      // ignore
+    }
   };
 
   const exportPosmKitToTxt = () => {
@@ -314,7 +540,7 @@ export function PosmPageContent() {
       lines.push("");
       orderItems.forEach(item => {
         lines.push(`  - ${item.name}`);
-        lines.push(`    Typ: ${POSM_TYPES[item.type].label}`);
+        lines.push(`    Typ: ${getTypeDef(item.type).label}`);
         lines.push(`    Mnozstvi: ${item.quantity} ks`);
         if (item.selectedSize) lines.push(`    Velikost: ${item.selectedSize}`);
         lines.push("");
@@ -328,7 +554,7 @@ export function PosmPageContent() {
       lines.push("");
       downloadItemsList.forEach(item => {
         lines.push(`  - ${item.name}`);
-        lines.push(`    Typ: ${POSM_TYPES[item.type].label}`);
+        lines.push(`    Typ: ${getTypeDef(item.type).label}`);
         const url = item.downloadUrl || item.imageUrl;
         if (url) lines.push(`    Odkaz: ${url}`);
         lines.push("");
@@ -348,80 +574,93 @@ export function PosmPageContent() {
     URL.revokeObjectURL(url);
   };
 
-  const sendPosmKitEmail = async () => {
-    if (!emailTo || posmKit.length === 0) return;
-    setIsSendingEmail(true);
+  // Virtual POSM items synthesized from product sheets (pdfUrl).
+  // One product sheet (PDF) is typically shared by many products, so we
+  // deduplicate by pdfUrl and show the sheet itself, not the products.
+  type DisplayItem = NonNullable<typeof items>[number] & {
+    isVirtual?: boolean;
+    productCount?: number;
+    sheetPdfUrl?: string;
+  };
+
+  const deriveSheetName = (pdfUrl: string): string => {
     try {
-      const lines = [
-        "POSM KIT - Objednavka materialu",
-        "",
-        `Datum: ${new Date().toLocaleDateString("cs-CZ")}`,
-        "",
-        "---",
-        "",
-      ];
-
-      const orderItems = posmKit.filter(k => k.distributionType === "order");
-      const downloadItemsList = posmKit.filter(k => k.distributionType === "download");
-
-      if (orderItems.length > 0) {
-        lines.push("K OBJEDNANI:");
-        lines.push("");
-        orderItems.forEach(item => {
-          lines.push(`  - ${item.name}`);
-          lines.push(`    Typ: ${POSM_TYPES[item.type].label}`);
-          lines.push(`    Mnozstvi: ${item.quantity} ks`);
-          if (item.selectedSize) lines.push(`    Velikost: ${item.selectedSize}`);
-          lines.push("");
-        });
-        lines.push("---");
-        lines.push("");
-      }
-
-      if (downloadItemsList.length > 0) {
-        lines.push("KE STAZENI:");
-        lines.push("");
-        downloadItemsList.forEach(item => {
-          lines.push(`  - ${item.name}`);
-          const url = item.downloadUrl || item.imageUrl;
-          if (url) lines.push(`    Odkaz: ${url}`);
-          lines.push("");
-        });
-        lines.push("---");
-        lines.push("");
-      }
-
-      lines.push(`Vygenerovano: ${new Date().toLocaleString("cs-CZ")}`);
-
-      await sendSalesKitEmail({
-        email: emailTo,
-        subject: "POSM KIT - Objednavka materialu",
-        content: lines.join("\n"),
-      });
-      setShowEmailDialog(false);
-      setEmailTo("");
-      alert("Email odeslan!");
-    } catch (error) {
-      console.error("Error sending email:", error);
-      alert("Chyba pri odesilani emailu");
-    } finally {
-      setIsSendingEmail(false);
+      const raw = pdfUrl.split("?")[0].split("#")[0].split("/").pop() || "produktovy-list.pdf";
+      const decoded = decodeURIComponent(raw).replace(/\.pdf$/i, "");
+      const cleaned = decoded.replace(/[-_]+/g, " ").trim();
+      return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Produktový list";
+    } catch {
+      return "Produktový list";
     }
   };
 
+  const productSheetGroups = new Map<
+    string,
+    { pdfUrl: string; products: NonNullable<typeof productsWithPdf>[number][] }
+  >();
+  (productsWithPdf ?? []).forEach((p) => {
+    if (!p.pdfUrl) return;
+    const existing = productSheetGroups.get(p.pdfUrl);
+    if (existing) {
+      existing.products.push(p);
+    } else {
+      productSheetGroups.set(p.pdfUrl, { pdfUrl: p.pdfUrl, products: [p] });
+    }
+  });
+
+  const productSheetNameMap = new Map<string, string>(
+    (productSheetNames ?? []).map((n) => [n.pdfUrl, n.displayName]),
+  );
+
+  const virtualProductSheetItems: DisplayItem[] = Array.from(productSheetGroups.values()).map(
+    ({ pdfUrl, products }) => {
+      const first = products[0];
+      const description = products.length > 1
+        ? `Použito u ${products.length} produktů`
+        : first.brand
+          ? `${first.brand}${first.feedCategory ? " – " + first.feedCategory : ""}`
+          : first.feedCategory;
+      const overrideName = productSheetNameMap.get(pdfUrl);
+      return {
+        _id: (`virtual-sheet-${pdfUrl}`) as unknown as Id<"posmItems">,
+        _creationTime: first._creationTime,
+        name: overrideName || deriveSheetName(pdfUrl),
+        description,
+        type: "product_list" as PosmType,
+        imageUrl: pdfUrl,
+        fileType: "application/pdf",
+        downloadUrl: pdfUrl,
+        distributionType: "download" as DistributionType,
+        sizes: undefined,
+        storageId: undefined,
+        isActive: true,
+        createdAt: first._creationTime,
+        isVirtual: true,
+        productCount: products.length,
+        sheetPdfUrl: pdfUrl,
+      };
+    },
+  );
+
+  const allItems: DisplayItem[] | undefined = items
+    ? [...virtualProductSheetItems, ...items]
+    : undefined;
+
   // Get all unique sizes from items
-  const allSizes: string[] = items
-    ? Array.from(new Set(items.flatMap(item => item.sizes || [])) as Set<string>).sort()
+  const allSizes: string[] = allItems
+    ? Array.from(new Set(allItems.flatMap(item => item.sizes || [])) as Set<string>).sort()
     : [];
 
-  const filteredItems = items?.filter(item => {
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("cs");
+  const filteredItems = allItems?.filter(item => {
     const matchesType = filterType === "all" || item.type === filterType;
     const matchesSize = filterSize === "all" || (item.sizes && item.sizes.includes(filterSize));
     const matchesDistribution = filterDistribution === "all" || item.distributionType === filterDistribution;
-    return matchesType && matchesSize && matchesDistribution;
+    const matchesSearch = normalizedQuery === "" || item.name.toLocaleLowerCase("cs").includes(normalizedQuery);
+    return matchesType && matchesSize && matchesDistribution && matchesSearch;
   });
 
-  const selectedItemData = items?.find(i => i._id === selectedItem);
+  const selectedItemData = allItems?.find(i => i._id === selectedItem);
 
   if (items === undefined || orders === undefined) {
     return (
@@ -509,7 +748,7 @@ export function PosmPageContent() {
           <TabsContent value="catalog" className="space-y-6">
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-sm font-medium text-muted-foreground mr-1">Typ:</span>
                 <button
                   onClick={() => setFilterType("all")}
@@ -521,7 +760,19 @@ export function PosmPageContent() {
                 >
                   Vse
                 </button>
-                {Object.entries(POSM_TYPES).map(([key, { label, color }]) => (
+                <button
+                  type="button"
+                  onClick={() => setShowManageTypes(true)}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors inline-flex items-center gap-1"
+                  title="Spravovat typy"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Spravovat
+                </button>
+                {visibleTypeEntries.map(([key, { label, color }]) => (
                   <button
                     key={key}
                     onClick={() => setFilterType(filterType === key ? "all" : key)}
@@ -591,6 +842,35 @@ export function PosmPageContent() {
                   ))}
                 </div>
               )}
+
+              <div className="relative ml-auto w-full sm:w-64">
+                <svg
+                  className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 18a7 7 0 110-14 7 7 0 010 14z" />
+                </svg>
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Hledat podle nazvu..."
+                  className="h-8 pl-8 pr-8 text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title="Vymazat"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Items Grid */}
@@ -649,8 +929,8 @@ export function PosmPageContent() {
                       <CardContent className="p-4">
                         <h3 className="font-semibold text-foreground line-clamp-2 mb-2">{item.name}</h3>
                         <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                          <Badge className={POSM_TYPES[item.type as PosmType]?.color || "bg-gray-100"}>
-                            {POSM_TYPES[item.type as PosmType]?.label || item.type}
+                          <Badge className={getTypeDef(item.type).color}>
+                            {getTypeDef(item.type).label}
                           </Badge>
                           {item.distributionType && (
                             <Badge className={DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.color || "bg-gray-100 text-gray-700"}>
@@ -727,21 +1007,23 @@ export function PosmPageContent() {
                         </Button>
                       )}
 
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm("Opravdu chcete tento material smazat?")) {
-                            deleteItem({ id: item._id });
-                          }
-                        }}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </Button>
+                      {!item.isVirtual && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Opravdu chcete tento material smazat?")) {
+                              deleteItem({ id: item._id });
+                            }
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 ))}
@@ -773,8 +1055,8 @@ export function PosmPageContent() {
                             {ORDER_STATUSES[order.status].label}
                           </Badge>
                           {order.item && (
-                            <Badge variant="outline" className={POSM_TYPES[order.item.type as PosmType]?.color || ""}>
-                              {POSM_TYPES[order.item.type as PosmType]?.label || order.item.type}
+                            <Badge variant="outline" className={getTypeDef(order.item.type).color}>
+                              {getTypeDef(order.item.type).label}
                             </Badge>
                           )}
                         </div>
@@ -877,7 +1159,7 @@ export function PosmPageContent() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(POSM_TYPES).map(([key, { label }]) => (
+                      {manualTypeEntries.map(([key, { label }]) => (
                         <SelectItem key={key} value={key}>{label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1036,20 +1318,147 @@ export function PosmPageContent() {
         </Dialog>
 
         {/* Item Detail Dialog */}
-        <Dialog open={showDetail} onOpenChange={setShowDetail}>
+        <Dialog open={showDetail} onOpenChange={(open) => {
+          setShowDetail(open);
+          if (!open) setEditingName(false);
+        }}>
           <DialogContent className="max-w-2xl">
             {selectedItemData && (
               <>
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-3">
-                    {selectedItemData.name}
-                    <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || ""}>
-                      {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
-                    </Badge>
-                    {selectedItemData.distributionType && (
-                      <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
-                        {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
-                      </Badge>
+                  <DialogTitle className="flex items-center gap-3 flex-wrap">
+                    {editingName ? (
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Input
+                          autoFocus
+                          value={nameDraft}
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                              const trimmed = nameDraft.trim();
+                              if (!trimmed) return;
+                              setSavingName(true);
+                              try {
+                                if (selectedItemData.isVirtual && selectedItemData.sheetPdfUrl) {
+                                  await setProductSheetName({
+                                    pdfUrl: selectedItemData.sheetPdfUrl,
+                                    displayName: trimmed,
+                                  });
+                                } else {
+                                  await updateItem({ id: selectedItemData._id, name: trimmed });
+                                }
+                                setEditingName(false);
+                              } finally {
+                                setSavingName(false);
+                              }
+                            } else if (e.key === "Escape") {
+                              setEditingName(false);
+                              setNameDraft(selectedItemData.name);
+                            }
+                          }}
+                          className="text-base h-9"
+                          disabled={savingName}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            const trimmed = nameDraft.trim();
+                            if (!trimmed) return;
+                            setSavingName(true);
+                            try {
+                              if (selectedItemData.isVirtual && selectedItemData.sheetPdfUrl) {
+                                await setProductSheetName({
+                                  pdfUrl: selectedItemData.sheetPdfUrl,
+                                  displayName: trimmed,
+                                });
+                              } else {
+                                await updateItem({ id: selectedItemData._id, name: trimmed });
+                              }
+                              setEditingName(false);
+                            } finally {
+                              setSavingName(false);
+                            }
+                          }}
+                          disabled={savingName || !nameDraft.trim() || nameDraft.trim() === selectedItemData.name}
+                        >
+                          {savingName ? "Ukladam..." : "Ulozit"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingName(false);
+                            setNameDraft(selectedItemData.name);
+                          }}
+                          disabled={savingName}
+                        >
+                          Zrusit
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span>{selectedItemData.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNameDraft(selectedItemData.name);
+                            setEditingName(true);
+                          }}
+                          className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Upravit nazev"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        {editingType && !selectedItemData.isVirtual ? (
+                          <Select
+                            value={selectedItemData.type}
+                            onValueChange={async (value) => {
+                              setSavingType(true);
+                              try {
+                                await updateItem({ id: selectedItemData._id, type: value });
+                              } finally {
+                                setSavingType(false);
+                                setEditingType(false);
+                              }
+                            }}
+                            disabled={savingType}
+                          >
+                            <SelectTrigger className="h-7 w-auto text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {manualTypeEntries.map(([key, def]) => (
+                                <SelectItem key={key} value={key}>{def.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Badge className={getTypeDef(selectedItemData.type).color}>
+                              {getTypeDef(selectedItemData.type).label}
+                            </Badge>
+                            {!selectedItemData.isVirtual && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingType(true)}
+                                className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                title="Upravit kategorii"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {selectedItemData.distributionType && (
+                          <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
+                            {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
+                          </Badge>
+                        )}
+                      </>
                     )}
                   </DialogTitle>
                   <DialogDescription>
@@ -1087,31 +1496,37 @@ export function PosmPageContent() {
                     <div>
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typ</span>
                       <div className="mt-1">
-                        <Badge className={POSM_TYPES[selectedItemData.type as PosmType]?.color || "bg-gray-100"}>
-                          {POSM_TYPES[selectedItemData.type as PosmType]?.label || selectedItemData.type}
+                        <Badge className={getTypeDef(selectedItemData.type).color}>
+                          {getTypeDef(selectedItemData.type).label}
                         </Badge>
                       </div>
                     </div>
                     <div>
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Distribuce</span>
                       <div className="mt-1">
-                        <Select
-                          value={selectedItemData.distributionType || "order"}
-                          onValueChange={async (value) => {
-                            await updateItem({
-                              id: selectedItemData._id,
-                              distributionType: value as DistributionType
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-auto text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="download">Ke stazeni</SelectItem>
-                            <SelectItem value="order">K objednani</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {selectedItemData.isVirtual ? (
+                          <Badge className={DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.color || ""}>
+                            {DISTRIBUTION_TYPES[selectedItemData.distributionType as DistributionType]?.label || selectedItemData.distributionType}
+                          </Badge>
+                        ) : (
+                          <Select
+                            value={selectedItemData.distributionType || "order"}
+                            onValueChange={async (value) => {
+                              await updateItem({
+                                id: selectedItemData._id,
+                                distributionType: value as DistributionType
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-7 w-auto text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="download">Ke stazeni</SelectItem>
+                              <SelectItem value="order">K objednani</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
                     </div>
                     {selectedItemData.sizes && selectedItemData.sizes.length > 0 && (
@@ -1362,17 +1777,30 @@ export function PosmPageContent() {
             {posmKit.length > 0 && (
               <div className="p-3 border-t border-border space-y-2">
                 {/* Download items if any are downloadable */}
-                {posmKit.some(k => k.distributionType === "download") && (
-                  <button
-                    onClick={downloadKitItems}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Stahnout materialy ({posmKit.filter(k => k.distributionType === "download").length})
-                  </button>
-                )}
+                {posmKit.some(k => k.distributionType === "download") && (() => {
+                  const dlCount = posmKit.filter(k => k.distributionType === "download").length;
+                  const asZip = dlCount > 1;
+                  return (
+                    <button
+                      onClick={downloadKitItems}
+                      disabled={isDownloadingZip}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isDownloadingZip ? (
+                        <div className="w-4 h-4 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                      )}
+                      {isDownloadingZip
+                        ? "Připravuji ZIP…"
+                        : asZip
+                          ? `Stahnout materialy v ZIPu (${dlCount})`
+                          : `Stahnout materialy (${dlCount})`}
+                    </button>
+                  );
+                })()}
 
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -1385,13 +1813,13 @@ export function PosmPageContent() {
                     Export TXT
                   </button>
                   <button
-                    onClick={() => setShowEmailDialog(true)}
+                    onClick={openShareDialog}
                     className="flex items-center justify-center gap-1 px-2 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
-                    Email
+                    Sdílet odkaz
                   </button>
                 </div>
               </div>
@@ -1410,31 +1838,43 @@ export function PosmPageContent() {
           </button>
         )}
 
-        {/* Email Dialog for POSM Kit */}
-        <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
-          <DialogContent className="sm:max-w-md">
+        {/* Manage Types Dialog */}
+        <ManageTypesDialog
+          open={showManageTypes}
+          onOpenChange={setShowManageTypes}
+          typeEntries={Object.entries(typesByKey).sort((a, b) => a[1].order - b[1].order)}
+          colorPalette={POSM_COLOR_PALETTE}
+          fallbackColor={FALLBACK_TYPE_COLOR}
+          onUpsert={async (input) => { await upsertPosmType(input); }}
+          onDelete={async (key) => { await deletePosmType({ key }); }}
+        />
+
+        {/* Share-link Dialog for POSM Kit */}
+        <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
-                Odeslat POSM KIT emailem
+                Sdílet POSM KIT
               </DialogTitle>
+              <DialogDescription>
+                Veřejný odkaz – příjemce nemusí být přihlášený. Materiály ke stažení jsou k dispozici přímo z odkazu.
+              </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-4">
+            <div className="space-y-4 pt-2">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Email prijemce
-                </label>
-                <Input
-                  type="email"
-                  placeholder="kolega@apotheke.cz"
-                  value={emailTo}
-                  onChange={(e) => setEmailTo(e.target.value)}
-                />
+                <Label className="block text-sm font-medium text-foreground mb-2">Odkaz</Label>
+                <div className="flex gap-2">
+                  <Input value={shareUrl} readOnly onFocus={(e) => e.currentTarget.select()} className="font-mono text-xs" />
+                  <Button onClick={copyShareUrl} className="bg-green-600 hover:bg-green-700 whitespace-nowrap">
+                    {shareCopied ? "Zkopírováno" : "Kopírovat"}
+                  </Button>
+                </div>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm text-muted-foreground mb-2">Bude odeslano:</p>
+                <p className="text-sm text-muted-foreground mb-2">Obsah:</p>
                 <ul className="text-sm space-y-1">
                   {posmKit.map((item) => (
                     <li key={item.id} className="flex items-center gap-2">
@@ -1448,27 +1888,19 @@ export function PosmPageContent() {
                 </ul>
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setShowEmailDialog(false)}
-                >
-                  Zrusit
+                <Button variant="outline" className="flex-1" onClick={() => setShowShareDialog(false)}>
+                  Zavřít
                 </Button>
-                <Button
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                  onClick={sendPosmKitEmail}
-                  disabled={!emailTo || isSendingEmail}
-                >
-                  {isSendingEmail ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      Odesilam...
-                    </>
-                  ) : (
-                    "Odeslat"
-                  )}
-                </Button>
+                {shareUrl && (
+                  <a
+                    href={shareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium"
+                  >
+                    Otevřít
+                  </a>
+                )}
               </div>
             </div>
           </DialogContent>
@@ -1476,4 +1908,253 @@ export function PosmPageContent() {
       </div>
     </div>
   );
+}
+
+type ManageTypesDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  typeEntries: [string, PosmTypeDef][];
+  colorPalette: { name: string; value: string }[];
+  fallbackColor: string;
+  onUpsert: (input: { key: string; label: string; color: string; order?: number; isHidden?: boolean; isBuiltIn?: boolean }) => Promise<void>;
+  onDelete: (key: string) => Promise<void>;
+};
+
+function ManageTypesDialog({ open, onOpenChange, typeEntries, colorPalette, fallbackColor, onUpsert, onDelete }: ManageTypesDialogProps) {
+  const [newLabel, setNewLabel] = useState("");
+  const [newColor, setNewColor] = useState(colorPalette[0]?.value || fallbackColor);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const slugify = (s: string): string => {
+    const base = s
+      .normalize("NFD")
+      // strip combining diacritical marks (U+0300–U+036F)
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
+    return base || `custom-${Math.random().toString(36).slice(2, 8)}`;
+  };
+
+  const handleCreate = async () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const existingKeys = new Set(typeEntries.map(([k]) => k));
+      let key = slugify(label);
+      let i = 2;
+      while (existingKeys.has(key)) {
+        key = `${slugify(label)}-${i++}`;
+      }
+      await onUpsert({ key, label, color: newColor, isBuiltIn: false, order: 100 + typeEntries.length });
+      setNewLabel("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba pri ukladani");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Spravovat typy POSM</DialogTitle>
+          <DialogDescription>
+            Prejmenovani / prebarveni vychozich typu, pridani vlastnich. Vestavene typy nelze smazat, jen skryt.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Existing types list */}
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            {typeEntries.map(([key, def]) => (
+              <ManageTypeRow
+                key={key}
+                typeKey={key}
+                def={def}
+                colorPalette={colorPalette}
+                onUpsert={onUpsert}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+
+          {/* Add new type */}
+          <div className="border-t pt-4 space-y-2">
+            <Label className="text-sm font-medium">Pridat novy typ</Label>
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="Nazev typu..."
+                className="flex-1 min-w-[180px] h-9"
+                disabled={saving}
+              />
+              <Select value={newColor} onValueChange={setNewColor} disabled={saving}>
+                <SelectTrigger className="w-44 h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {colorPalette.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${c.value.split(" ")[0]}`} />
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleCreate} disabled={saving || !newLabel.trim()}>
+                {saving ? "Ukladam..." : "Pridat"}
+              </Button>
+            </div>
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <div>
+              <Badge className={newColor}>
+                {newLabel.trim() || "Nahled"}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Zavrit</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type ManageTypeRowProps = {
+  typeKey: string;
+  def: PosmTypeDef;
+  colorPalette: { name: string; value: string }[];
+  onUpsert: (input: { key: string; label: string; color: string; order?: number; isHidden?: boolean; isBuiltIn?: boolean }) => Promise<void>;
+  onDelete: (key: string) => Promise<void>;
+};
+
+function ManageTypeRow({ typeKey, def, colorPalette, onUpsert, onDelete }: ManageTypeRowProps) {
+  const [label, setLabel] = useState(def.label);
+  const [color, setColor] = useState(def.color);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset local state when underlying def changes (e.g. after upsert refresh)
+  useRefSync(def.label, setLabel);
+  useRefSync(def.color, setColor);
+
+  const dirty = label.trim() !== def.label || color !== def.color;
+
+  const handleSave = async () => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onUpsert({
+        key: typeKey,
+        label: trimmed,
+        color,
+        order: def.order,
+        isHidden: def.isHidden,
+        isBuiltIn: def.isBuiltIn,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleHidden = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onUpsert({
+        key: typeKey,
+        label: def.label,
+        color: def.color,
+        order: def.order,
+        isHidden: !def.isHidden,
+        isBuiltIn: def.isBuiltIn,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (def.isBuiltIn) return;
+    if (!confirm(`Opravdu smazat typ "${def.label}"? Pokud je nekde pouzity, smazani selze.`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await onDelete(typeKey);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nelze smazat");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg border bg-card">
+      <Badge className={`${color} flex-shrink-0`}>{label || typeKey}</Badge>
+      <Input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        className="flex-1 min-w-[140px] h-8 text-sm"
+        disabled={saving || deleting}
+      />
+      <Select value={color} onValueChange={setColor} disabled={saving || deleting}>
+        <SelectTrigger className="w-40 h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {colorPalette.map((c) => (
+            <SelectItem key={c.value} value={c.value}>
+              <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${c.value.split(" ")[0]}`} />
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button size="sm" onClick={handleSave} disabled={!dirty || saving || deleting || !label.trim()}>
+        {saving ? "..." : "Ulozit"}
+      </Button>
+      <Button size="sm" variant="outline" onClick={handleToggleHidden} disabled={saving || deleting} title={def.isHidden ? "Zobrazit" : "Skryt"}>
+        {def.isHidden ? "Zobrazit" : "Skryt"}
+      </Button>
+      {!def.isBuiltIn && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-red-600 hover:text-red-700"
+          onClick={handleDelete}
+          disabled={saving || deleting}
+        >
+          {deleting ? "..." : "Smazat"}
+        </Button>
+      )}
+      {def.isBuiltIn && (
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">vestaveny</span>
+      )}
+      {error && <span className="text-xs text-red-600 w-full">{error}</span>}
+    </div>
+  );
+}
+
+// Sync local state with prop changes (used to refresh row state when DB updates).
+function useRefSync<T>(value: T, setter: (v: T) => void) {
+  const prev = useRef(value);
+  if (prev.current !== value) {
+    prev.current = value;
+    setter(value);
+  }
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAccess } from "@/components/access-context";
@@ -11,8 +12,13 @@ export function Header() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
   const { role, logout } = useAccess();
+  const pathname = usePathname();
   const isEditor = role === "editor";
   const syncStatus = useQuery(api.feedImport.getSyncStatus, isEditor ? {} : "skip");
+
+  if (pathname?.startsWith("/sales-kit")) {
+    return null;
+  }
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -154,6 +160,12 @@ export function Header() {
                     className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Hromadná
+                  </Link>
+                  <Link
+                    href="/newsletter"
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Newsletter
                   </Link>
                   <Link
                     href="/admin/feed"

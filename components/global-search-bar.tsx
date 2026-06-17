@@ -14,8 +14,8 @@ export function GlobalSearchBar() {
   const { role } = useAccess();
   const canEditTicker = role === "editor";
 
-  // Avoid duplicating catalog's own search UI
-  const shouldHide = pathname === "/katalog";
+  // Avoid duplicating catalog's own search UI; also hide on public sales-kit page
+  const shouldHide = pathname === "/katalog" || (pathname?.startsWith("/sales-kit") ?? false);
 
   const [value, setValue] = useState("");
   const [debouncedValue, setDebouncedValue] = useState("");

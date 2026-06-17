@@ -156,19 +156,36 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_category", ["category"]),
   
+  // Custom display names for product sheets (PDFs from products.pdfUrl),
+  // keyed by pdfUrl. Used by the POSM "Produktové listy" virtual catalog so
+  // a single PDF shared by many products can be renamed once.
+  productSheetNames: defineTable({
+    pdfUrl: v.string(),
+    displayName: v.string(),
+    updatedAt: v.number(),
+  }).index("by_pdfUrl", ["pdfUrl"]),
+
+  // POSM type catalog. Holds overrides for built-in types and full
+  // definitions for user-created custom types. Rows are merged with
+  // the hardcoded built-in defaults in the frontend (DB row wins).
+  posmTypes: defineTable({
+    key: v.string(),                    // stable identifier, e.g. "letak" or "custom-abc"
+    label: v.string(),
+    color: v.string(),                  // Tailwind class string, e.g. "bg-blue-100 text-blue-700"
+    order: v.optional(v.number()),
+    isHidden: v.optional(v.boolean()),  // soft-hide from filters and add dropdown
+    isBuiltIn: v.optional(v.boolean()), // true means delete is blocked
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   // POSM Items - catalog of available materials
   posmItems: defineTable({
     name: v.string(),
     description: v.optional(v.string()),
-    type: v.union(
-      v.literal("letak"),
-      v.literal("stojan"),
-      v.literal("plakat"),
-      v.literal("wobler"),
-      v.literal("display"),
-      v.literal("cenovka"),
-      v.literal("other")
-    ),
+    // Type key; resolved against the posmTypes table merged with built-in
+    // defaults. Existing values like "letak", "stojan" etc. remain valid.
+    type: v.string(),
     imageUrl: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")), // Convex storage ID for uploaded files
     fileType: v.optional(v.string()), // MIME type of uploaded file (e.g. application/pdf)
@@ -368,4 +385,50 @@ export default defineSchema({
   })
     .index("by_shortcut", ["shortcut"])
     .index("by_active", ["isActive"]),
+
+  // Newsletter subscribers - people who agreed to receive newsletters.
+  // The same e-mail can exist in more than one group (one row per group).
+  newsletterSubscribers: defineTable({
+    email: v.string(),
+    name: v.optional(v.string()), // optional display name
+    // Recipient group. Optional for backward compatibility - rows created
+    // before groups existed are treated as "mediate" everywhere.
+    group: v.optional(v.union(
+      v.literal("mediate"), // Mediate
+      v.literal("sales")    // Obchodní zástupci
+    )),
+    isActive: v.boolean(), // can be paused without deleting
+    createdAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_active", ["isActive"])
+    .index("by_group", ["group"]),
+
+  // Log of sent newsletter campaigns (for history / audit)
+  newsletterLogs: defineTable({
+    subject: v.string(),
+    intro: v.optional(v.string()),
+    // Snapshot of the composed sections that were sent
+    sections: v.array(v.object({
+      title: v.string(),
+      items: v.array(v.object({
+        title: v.string(),
+        url: v.optional(v.string()),
+        imageUrl: v.optional(v.string()),
+        rating: v.optional(v.number()),
+        blocks: v.optional(v.array(v.object({
+          label: v.string(),
+          content: v.string(),
+        }))),
+      })),
+    })),
+    recipientCount: v.number(),
+    recipients: v.array(v.string()), // emails it was sent to
+    // Which recipient group this campaign was sent to (optional for old logs)
+    group: v.optional(v.union(
+      v.literal("mediate"),
+      v.literal("sales")
+    )),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
 })
