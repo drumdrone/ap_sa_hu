@@ -1,7 +1,6 @@
 "use client"
 
-import { ConvexAuthProvider } from "@convex-dev/auth/react"
-import { ConvexReactClient } from "convex/react"
+import { ConvexProvider, ConvexReactClient } from "convex/react"
 import { ReactNode, useMemo } from "react"
 
 function normalizeConvexUrl(url?: string) {
@@ -49,5 +48,13 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
 
   if (!convex) return <MissingConvexConfig url={convexUrl} />
 
-  return <ConvexAuthProvider client={convex}>{children}</ConvexAuthProvider>
+  // The app's only access control is the client-side password gate
+  // (view5678 / edit5678 in AccessGate); no screen ever calls Convex Auth
+  // signIn and no Convex function requires authentication. ConvexAuthProvider
+  // would still run an auth handshake on load and hold every query until it
+  // settles — which can hang in restricted contexts like the in-app browser of
+  // an email client (where newsletter links open), leaving product pages stuck
+  // on the loading spinner forever. Use the plain provider so queries run
+  // immediately and unauthenticated.
+  return <ConvexProvider client={convex}>{children}</ConvexProvider>
 }

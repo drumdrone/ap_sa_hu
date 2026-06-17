@@ -110,3 +110,62 @@ body > nextjs-portal {
 .apsa-marquee--paused {
   animation-play-state: paused;
 }
+
+@keyframes neuron-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+}
+
+@keyframes neuron-edge-flicker {
+  0%, 100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes neuron-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.neuron-loader-svg {
+  animation: neuron-rotate 14s linear infinite;
+}
+
+.neuron-loader-svg .neuron-node {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: neuron-pulse 1.6s ease-in-out infinite;
+}
+
+.neuron-loader-svg .neuron-node-core { animation-delay: 0s; }
+.neuron-loader-svg .neuron-node-1 { animation-delay: 0.15s; }
+.neuron-loader-svg .neuron-node-2 { animation-delay: 0.3s; }
+.neuron-loader-svg .neuron-node-3 { animation-delay: 0.45s; }
+.neuron-loader-svg .neuron-node-4 { animation-delay: 0.6s; }
+.neuron-loader-svg .neuron-node-5 { animation-delay: 0.75s; }
+.neuron-loader-svg .neuron-node-6 { animation-delay: 0.9s; }
+
+.neuron-loader-svg .neuron-edges {
+  animation: neuron-edge-flicker 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neuron-loader-svg,
+  .neuron-loader-svg .neuron-node,
+  .neuron-loader-svg .neuron-edges {
+    animation: none;
+  }
+}
