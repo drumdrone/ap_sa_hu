@@ -253,9 +253,12 @@ function productBlocks(p: Doc<"products">): ContentBlock[] {
 export const getContent = query({
   args: {},
   handler: async (ctx): Promise<ContentSection[]> => {
-    // Base URL of the app, used as a link fallback for items without an
-    // external URL. Override with the SITE_URL env var if the domain changes.
-    const siteUrl = (process.env.SITE_URL || "https://apsahu.netlify.app").replace(/\/+$/, "");
+    // Base URL of the app used for product links and as a fallback for items
+    // without an external URL. This must point at the live site that serves the
+    // current products (apsahuapo); the older apsahu.netlify.app deployment is
+    // stale and its product pages no longer load. Override with the SITE_URL
+    // env var if the domain changes (e.g. a custom domain).
+    const siteUrl = (process.env.SITE_URL || "https://apsahuapo.netlify.app").replace(/\/+$/, "");
 
     const news = await ctx.db.query("news").withIndex("by_createdAt").order("desc").take(100);
 
