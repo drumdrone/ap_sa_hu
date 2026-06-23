@@ -235,8 +235,8 @@ export function PosmPageContent() {
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Maximalni velikost souboru je 10MB');
+    if (file.size > 25 * 1024 * 1024) {
+      alert('Maximalni velikost souboru je 25MB');
       return;
     }
 
@@ -1255,7 +1255,7 @@ export function PosmPageContent() {
                           Pretahnete soubor sem
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          nebo kliknete pro vyber (PDF, PNG, JPEG, max 10MB)
+                          nebo kliknete pro vyber (PDF, PNG, JPEG, max 25MB)
                         </p>
                       </div>
                     </div>
