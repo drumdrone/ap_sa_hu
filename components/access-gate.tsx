@@ -3,6 +3,7 @@
 import { ReactNode, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAccess } from "./access-context";
+import { PORTAL_EDITOR_PASSWORD, PORTAL_VIEWER_PASSWORD } from "@/lib/portal-password";
 
 type Props = {
   children: ReactNode;
@@ -28,13 +29,13 @@ export function AccessGate({ children }: Props) {
     e.preventDefault();
     const trimmed = password.trim();
 
-    if (trimmed === "view5678") {
+    if (trimmed === PORTAL_VIEWER_PASSWORD) {
       setRole("viewer");
       setError(null);
       return;
     }
 
-    if (trimmed === "edit5678") {
+    if (trimmed === PORTAL_EDITOR_PASSWORD) {
       setRole("editor");
       setError(null);
       return;
