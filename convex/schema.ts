@@ -195,6 +195,9 @@ export default defineSchema({
       v.literal("order")      // k objednání
     )),
     sizes: v.optional(v.array(v.string())), // e.g. ["A4", "A5", "A3"]
+    // True if the uploaded PDF was encrypted with the portal password at
+    // upload time. Purely informational for the UI (lock badge / hint).
+    requiresPassword: v.optional(v.boolean()),
     isActive: v.boolean(),
     createdAt: v.number(),
   })

@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { encryptPdfWithPortalPassword } from "@/lib/posm-pdf-protect";
+import { POSM_PDF_PASSWORD } from "@/lib/portal-password";
 
 // Hardcoded built-in defaults; overridable per-row via the posmTypes table.
 // product_list is reserved for the virtual "Produktové listy" cards and is
@@ -198,6 +200,7 @@ export function PosmPageContent() {
     downloadUrl: "",
     imageUrl: "",
     sizes: "",
+    requiresPassword: false,
   });
 
   // Upload state
@@ -206,6 +209,10 @@ export function PosmPageContent() {
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedStorageId, setUploadedStorageId] = useState<string | null>(null);
   const [uploadedFileType, setUploadedFileType] = useState<string | null>(null);
+  // Original File object kept around so we can re-encrypt + re-upload it
+  // when the admin marks the item as password-protected on submit.
+  const [uploadedFileObject, setUploadedFileObject] = useState<File | null>(null);
+  const [submittingItem, setSubmittingItem] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl);
@@ -257,6 +264,7 @@ export function PosmPageContent() {
       setUploadedStorageId(storageId);
       setUploadedFileName(file.name);
       setUploadedFileType(file.type);
+      setUploadedFileObject(file);
       // Clear the manual URL since we have a storage file
       setNewItem(prev => ({ ...prev, imageUrl: '' }));
     } catch (error) {
@@ -313,27 +321,61 @@ export function PosmPageContent() {
       .map(s => s.trim())
       .filter(s => s.length > 0);
 
-    await createItem({
-      name: newItem.name,
-      description: newItem.description || undefined,
-      type: newItem.type,
-      imageUrl: newItem.imageUrl || undefined,
-      storageId: uploadedStorageId ? (uploadedStorageId as Id<"_storage">) : undefined,
-      fileType:
-        uploadedFileType ||
-        (newItem.downloadUrl.toLowerCase().includes(".pdf") || newItem.imageUrl.toLowerCase().includes(".pdf")
-          ? "application/pdf"
-          : undefined),
-      downloadUrl: newItem.downloadUrl || undefined,
-      distributionType: newItem.distributionType,
-      sizes: sizesArray.length > 0 ? sizesArray : undefined,
-    });
+    setSubmittingItem(true);
+    try {
+      let finalStorageId = uploadedStorageId;
+      let finalFileType = uploadedFileType;
+      const wantsPasswordProtection =
+        newItem.requiresPassword &&
+        uploadedFileObject &&
+        (uploadedFileType === "application/pdf" || uploadedFileObject.name.toLowerCase().endsWith(".pdf"));
 
-    setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "" });
-    setUploadedFileName(null);
-    setUploadedStorageId(null);
-    setUploadedFileType(null);
-    setShowAddItem(false);
+      if (wantsPasswordProtection) {
+        try {
+          const encrypted = await encryptPdfWithPortalPassword(uploadedFileObject);
+          const uploadUrl = await generateUploadUrl();
+          const response = await fetch(uploadUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/pdf" },
+            body: encrypted.blob,
+          });
+          if (!response.ok) throw new Error("Upload encrypted PDF failed");
+          const { storageId } = await response.json();
+          finalStorageId = storageId;
+          finalFileType = "application/pdf";
+        } catch (err) {
+          console.error("PDF encryption failed:", err);
+          alert("Nepodarilo se zaheslovat PDF. Material nebyl ulozen.");
+          return;
+        }
+      }
+
+      await createItem({
+        name: newItem.name,
+        description: newItem.description || undefined,
+        type: newItem.type,
+        imageUrl: newItem.imageUrl || undefined,
+        storageId: finalStorageId ? (finalStorageId as Id<"_storage">) : undefined,
+        fileType:
+          finalFileType ||
+          (newItem.downloadUrl.toLowerCase().includes(".pdf") || newItem.imageUrl.toLowerCase().includes(".pdf")
+            ? "application/pdf"
+            : undefined),
+        downloadUrl: newItem.downloadUrl || undefined,
+        distributionType: newItem.distributionType,
+        sizes: sizesArray.length > 0 ? sizesArray : undefined,
+        requiresPassword: wantsPasswordProtection ? true : undefined,
+      });
+
+      setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "", requiresPassword: false });
+      setUploadedFileName(null);
+      setUploadedStorageId(null);
+      setUploadedFileType(null);
+      setUploadedFileObject(null);
+      setShowAddItem(false);
+    } finally {
+      setSubmittingItem(false);
+    }
   };
 
   const handleOrder = async () => {
@@ -691,10 +733,11 @@ export function PosmPageContent() {
             </p>
           </div>
           <Button onClick={() => {
-              setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "" });
+              setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "", requiresPassword: false });
               setUploadedFileName(null);
               setUploadedStorageId(null);
               setUploadedFileType(null);
+              setUploadedFileObject(null);
               setShowAddItem(true);
             }} className="gap-2">
             <span>+</span>
@@ -888,7 +931,16 @@ export function PosmPageContent() {
                     >
                       {item.imageUrl ? (
                         <div className="aspect-video bg-muted relative">
-                          {(item.fileType === "application/pdf" ||
+                          {item.requiresPassword && (item.fileType === "application/pdf" ||
+                            item.imageUrl.toLowerCase().includes(".pdf") ||
+                            (item.downloadUrl || "").toLowerCase().includes(".pdf")) ? (
+                            <div className="w-full h-full bg-white flex flex-col items-center justify-center gap-2 text-amber-700">
+                              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 11c.83 0 1.5.67 1.5 1.5S12.83 14 12 14s-1.5-.67-1.5-1.5S11.17 11 12 11zm6-3V6a6 6 0 10-12 0v2H4v14h16V8h-2zm-10-2a4 4 0 118 0v2H8V6z" />
+                              </svg>
+                              <span className="text-xs font-medium">Zaheslovane PDF</span>
+                            </div>
+                          ) : (item.fileType === "application/pdf" ||
                             item.imageUrl.toLowerCase().includes(".pdf") ||
                             (item.downloadUrl || "").toLowerCase().includes(".pdf")) ? (
                             <iframe
@@ -903,14 +955,19 @@ export function PosmPageContent() {
                               className="w-full h-full object-cover"
                             />
                           )}
-                          {/* Distribution type badge overlay */}
-                          {item.distributionType && (
-                            <div className="absolute top-2 right-2">
+                          {/* Badges overlay */}
+                          <div className="absolute top-2 right-2 flex gap-1.5">
+                            {item.requiresPassword && (
+                              <Badge className="bg-amber-100 text-amber-800 border border-amber-200" title={`Zaheslovano (${POSM_PDF_PASSWORD})`}>
+                                Heslo
+                              </Badge>
+                            )}
+                            {item.distributionType && (
                               <Badge className={DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.color || "bg-gray-100 text-gray-700"}>
                                 {DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.label || item.distributionType}
                               </Badge>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <div className="aspect-video bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center relative">
@@ -1236,7 +1293,8 @@ export function PosmPageContent() {
                           setUploadedFileName(null);
                           setUploadedStorageId(null);
                           setUploadedFileType(null);
-                          setNewItem(prev => ({ ...prev, imageUrl: '' }));
+                          setUploadedFileObject(null);
+                          setNewItem(prev => ({ ...prev, imageUrl: '', requiresPassword: false }));
                         }}
                         className="text-xs text-red-500 hover:text-red-700"
                       >
@@ -1262,16 +1320,36 @@ export function PosmPageContent() {
                   )}
                 </div>
 
+                {/* Password protection (PDF only) */}
+                {uploadedFileObject && (uploadedFileType === "application/pdf" || uploadedFileObject.name.toLowerCase().endsWith(".pdf")) && (
+                  <label className="mt-2 flex items-start gap-2 p-3 rounded-lg border border-amber-200 bg-amber-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newItem.requiresPassword}
+                      onChange={(e) => setNewItem({ ...newItem, requiresPassword: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <div className="text-xs leading-snug">
+                      <div className="font-medium text-amber-900">Vyžadovat heslo pro otevření PDF</div>
+                      <div className="text-amber-800/80">
+                        PDF bude pri ulozeni zasifrovano heslem portalu (<code className="font-mono bg-white/60 px-1 py-0.5 rounded">{POSM_PDF_PASSWORD}</code>).
+                        Kdokoli s odkazem na soubor bude muset toto heslo zadat pri otevreni PDF.
+                      </div>
+                    </div>
+                  </label>
+                )}
+
                 {/* Manual URL input as fallback */}
                 <div className="flex items-center gap-2 mt-2">
                   <span className="text-xs text-muted-foreground">nebo zadejte URL:</span>
                   <Input
                     value={newItem.imageUrl}
                     onChange={(e) => {
-                      setNewItem({ ...newItem, imageUrl: e.target.value });
+                      setNewItem({ ...newItem, imageUrl: e.target.value, requiresPassword: false });
                       setUploadedFileName(null);
                       setUploadedStorageId(null);
                       setUploadedFileType(null);
+                      setUploadedFileObject(null);
                     }}
                     placeholder="https://..."
                     className="text-sm h-8"
@@ -1307,11 +1385,13 @@ export function PosmPageContent() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddItem(false)}>
+              <Button variant="outline" onClick={() => setShowAddItem(false)} disabled={submittingItem}>
                 Zrusit
               </Button>
-              <Button onClick={handleCreateItem}>
-                Pridat
+              <Button onClick={handleCreateItem} disabled={submittingItem}>
+                {submittingItem
+                  ? (newItem.requiresPassword ? "Sifruji a ukladam..." : "Ukladam...")
+                  : "Pridat"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1466,10 +1546,34 @@ export function PosmPageContent() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
+                  {/* Password notice */}
+                  {selectedItemData.requiresPassword && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
+                      <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c.83 0 1.5.67 1.5 1.5S12.83 14 12 14s-1.5-.67-1.5-1.5S11.17 11 12 11zm6-3V6a6 6 0 10-12 0v2H4v14h16V8h-2z" />
+                      </svg>
+                      <span>
+                        PDF je zaheslovane. Pri otevreni zadejte heslo portalu: <code className="font-mono bg-white/70 px-1 py-0.5 rounded">{POSM_PDF_PASSWORD}</code>
+                      </span>
+                    </div>
+                  )}
+
                   {/* Preview image */}
                   {selectedItemData.imageUrl && (
                     <div className="rounded-lg overflow-hidden bg-muted">
-                      {(selectedItemData.fileType === "application/pdf" ||
+                      {selectedItemData.requiresPassword && (selectedItemData.fileType === "application/pdf" ||
+                        selectedItemData.imageUrl.toLowerCase().includes(".pdf") ||
+                        (selectedItemData.downloadUrl || "").toLowerCase().includes(".pdf")) ? (
+                        <div className="w-full h-80 bg-white flex flex-col items-center justify-center gap-3 text-amber-700">
+                          <svg className="w-14 h-14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 11c.83 0 1.5.67 1.5 1.5S12.83 14 12 14s-1.5-.67-1.5-1.5S11.17 11 12 11zm6-3V6a6 6 0 10-12 0v2H4v14h16V8h-2zm-10-2a4 4 0 118 0v2H8V6z" />
+                          </svg>
+                          <div className="text-center">
+                            <div className="font-medium">Zaheslovane PDF</div>
+                            <div className="text-xs text-amber-700/80 mt-1">Nahled neni dostupny. Pro otevreni pouzijte heslo portalu.</div>
+                          </div>
+                        </div>
+                      ) : (selectedItemData.fileType === "application/pdf" ||
                         selectedItemData.imageUrl.toLowerCase().includes(".pdf") ||
                         (selectedItemData.downloadUrl || "").toLowerCase().includes(".pdf")) ? (
                         <iframe

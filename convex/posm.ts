@@ -90,6 +90,7 @@ export const createItem = mutation({
       v.literal("order")
     )),
     sizes: v.optional(v.array(v.string())),
+    requiresPassword: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     console.log("Creating POSM item:", args.name);
@@ -116,6 +117,7 @@ export const updateItem = mutation({
       v.literal("order")
     )),
     sizes: v.optional(v.array(v.string())),
+    requiresPassword: v.optional(v.boolean()),
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
