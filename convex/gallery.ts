@@ -9,6 +9,14 @@ export const generateUploadUrl = mutation({
   },
 });
 
+// Resolve a Convex storage id to a public URL (used by rich editors after upload)
+export const getStorageUrl = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
+
 // Save image metadata after upload - linked to a product
 export const saveImage = mutation({
   args: {

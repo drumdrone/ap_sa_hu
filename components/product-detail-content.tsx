@@ -10,6 +10,13 @@ import { CategoryBadge } from "@/components/ui/category-badge";
 import { TierBadge } from "@/components/ui/tier-badge";
 import { BrandPillarBadge } from "@/components/ui/brand-pillar-badge";
 import { CopyButton } from "@/components/copy-button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { FaqEditor, type FaqRichItem } from "@/components/faq-editor";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -116,6 +123,34 @@ function renderInlineMarkdown(text: string): ReactNode[] {
   return nodes;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function inlineMarkdownToHtml(text: string): string {
+  return escapeHtml(text)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt, url) => `<img src="${url}" alt="${alt}" />`)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+}
+
+function markdownAnswerToHtml(answer: string): string {
+  const paragraphs = answer.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  return paragraphs
+    .map((p) => {
+      const imgOnly = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(p);
+      if (imgOnly) return `<p><img src="${imgOnly[2]}" alt="${imgOnly[1]}" /></p>`;
+      return `<p>${p.split(/\n/).map(inlineMarkdownToHtml).join("<br />")}</p>`;
+    })
+    .join("");
+}
+
 function renderFaqAnswer(answer: string): ReactNode {
   const paragraphs = answer.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   return paragraphs.map((p, i) => {
@@ -152,7 +187,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<QuickActionPanel>(null);
   const [dashboardTab, setDashboardTab] = useState<"materials" | "data" | "faq">("materials");
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   const { role } = useAccess();
   const canEdit = role === "editor";
@@ -3404,48 +3438,47 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       {canEdit && inlineEdit !== "faqTab" && (
                         <button
                           type="button"
-                          onClick={() => { setInlineEdit("faqTab"); setInlineValue(product.faqText || ""); }}
+                          onClick={() => setInlineEdit("faqTab")}
                           className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors"
                         >
-                          {product.faqText ? "Upravit" : "Přidat FAQ"}
+                          {product.faqRich && product.faqRich.length > 0 || product.faqText
+                            ? "Upravit"
+                            : "Přidat FAQ"}
                         </button>
                       )}
                     </div>
 
                     {inlineEdit === "faqTab" ? (
-                      <div className="p-4 space-y-3">
-                        <p className="text-xs text-muted-foreground">
-                          Formát markdownu: řádek začínající <code>## </code> = otázka, následující řádky = odpověď.
-                          Podporováno: <code>**tučně**</code>, <code>*kurzíva*</code>, <code>[odkaz](url)</code>,
-                          <code>{" ![popis](url)"}</code> pro obrázek. Prázdný řádek = nový odstavec.
-                        </p>
-                        <textarea
-                          value={inlineValue}
-                          onChange={(e) => setInlineValue(e.target.value)}
-                          placeholder={"## Od jakého věku je vhodný?\nOd ukončeného 9. měsíce.\n\n## Obsahuje cukr?\nNe, je **bez** přidaného cukru."}
-                          className="w-full p-3 border rounded-lg text-sm font-mono min-h-[280px] resize-y bg-white"
+                      <div className="p-4">
+                        <FaqEditor
+                          productId={productId}
+                          initialItems={
+                            product.faqRich && product.faqRich.length > 0
+                              ? product.faqRich
+                              : parseFaqMarkdown(product.faqText || "").map((it) => ({
+                                  question: it.question,
+                                  answerHtml: markdownAnswerToHtml(it.answer),
+                                }))
+                          }
+                          isSaving={isSaving}
+                          onSave={async (items) => {
+                            await saveMarketing({ id: productId, faqRich: items });
+                            setInlineEdit(null);
+                          }}
+                          onCancel={() => setInlineEdit(null)}
                         />
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleInlineSave("faqText", inlineValue)}
-                            disabled={isSaving}
-                            className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
-                          >
-                            {isSaving ? "Ukládám..." : "Uložit"}
-                          </button>
-                          <button
-                            onClick={() => setInlineEdit(null)}
-                            className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted"
-                          >
-                            Zrušit
-                          </button>
-                        </div>
                       </div>
                     ) : (
-                      <div className="p-4 space-y-3">
+                      <div className="px-4 sm:px-6">
                         {(() => {
-                          const items = parseFaqMarkdown(product.faqText || "");
-                          if (items.length === 0) {
+                          const richItems: FaqRichItem[] =
+                            product.faqRich && product.faqRich.length > 0
+                              ? product.faqRich
+                              : parseFaqMarkdown(product.faqText || "").map((it) => ({
+                                  question: it.question,
+                                  answerHtml: markdownAnswerToHtml(it.answer),
+                                }));
+                          if (richItems.length === 0) {
                             return (
                               <div className="py-10 text-center text-sm text-muted-foreground">
                                 {canEdit
@@ -3454,38 +3487,23 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </div>
                             );
                           }
-                          return items.map((item, idx) => {
-                            const isOpen = openFaqIndex === idx;
-                            return (
-                              <div
-                                key={idx}
-                                className={`rounded-lg border transition-colors ${
-                                  isOpen
-                                    ? "bg-muted/30 border-amber-200"
-                                    : "bg-muted/20 border-border hover:bg-muted/30"
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                                  className="w-full flex items-center justify-between text-left px-4 py-3"
-                                  aria-expanded={isOpen}
-                                >
-                                  <span className={`font-semibold ${isOpen ? "text-amber-900" : "text-foreground"}`}>
+                          return (
+                            <Accordion type="single" collapsible defaultValue="faq-0" className="w-full">
+                              {richItems.map((item, idx) => (
+                                <AccordionItem key={idx} value={`faq-${idx}`} className="border-b border-border last:border-b-0">
+                                  <AccordionTrigger className="text-left text-base font-semibold text-foreground hover:no-underline py-5">
                                     {item.question}
-                                  </span>
-                                  <span className={`ml-3 text-lg leading-none ${isOpen ? "text-amber-700" : "text-muted-foreground"}`}>
-                                    {isOpen ? "–" : "+"}
-                                  </span>
-                                </button>
-                                {isOpen && (
-                                  <div className="px-4 pb-4 ml-4 border-l-2 border-amber-300 text-sm text-foreground/80 space-y-2 pt-2">
-                                    {renderFaqAnswer(item.answer)}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          });
+                                  </AccordionTrigger>
+                                  <AccordionContent className="text-sm text-foreground/80 pt-1 pb-5">
+                                    <div
+                                      className="faq-rich text-sm text-foreground/85"
+                                      dangerouslySetInnerHTML={{ __html: item.answerHtml }}
+                                    />
+                                  </AccordionContent>
+                                </AccordionItem>
+                              ))}
+                            </Accordion>
+                          );
                         })()}
                       </div>
                     )}
