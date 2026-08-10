@@ -10,6 +10,12 @@ import { CategoryBadge } from "@/components/ui/category-badge";
 import { TierBadge } from "@/components/ui/tier-badge";
 import { BrandPillarBadge } from "@/components/ui/brand-pillar-badge";
 import { CopyButton } from "@/components/copy-button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -152,7 +158,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<QuickActionPanel>(null);
   const [dashboardTab, setDashboardTab] = useState<"materials" | "data" | "faq">("materials");
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   const { role } = useAccess();
   const canEdit = role === "editor";
@@ -3442,7 +3447,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 space-y-3">
+                      <div className="px-4 sm:px-6">
                         {(() => {
                           const items = parseFaqMarkdown(product.faqText || "");
                           if (items.length === 0) {
@@ -3454,38 +3459,20 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </div>
                             );
                           }
-                          return items.map((item, idx) => {
-                            const isOpen = openFaqIndex === idx;
-                            return (
-                              <div
-                                key={idx}
-                                className={`rounded-lg border transition-colors ${
-                                  isOpen
-                                    ? "bg-muted/30 border-amber-200"
-                                    : "bg-muted/20 border-border hover:bg-muted/30"
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                                  className="w-full flex items-center justify-between text-left px-4 py-3"
-                                  aria-expanded={isOpen}
-                                >
-                                  <span className={`font-semibold ${isOpen ? "text-amber-900" : "text-foreground"}`}>
+                          return (
+                            <Accordion type="single" collapsible defaultValue="faq-0" className="w-full">
+                              {items.map((item, idx) => (
+                                <AccordionItem key={idx} value={`faq-${idx}`} className="border-b border-border last:border-b-0">
+                                  <AccordionTrigger className="text-left text-base font-semibold text-foreground hover:no-underline py-5">
                                     {item.question}
-                                  </span>
-                                  <span className={`ml-3 text-lg leading-none ${isOpen ? "text-amber-700" : "text-muted-foreground"}`}>
-                                    {isOpen ? "–" : "+"}
-                                  </span>
-                                </button>
-                                {isOpen && (
-                                  <div className="px-4 pb-4 ml-4 border-l-2 border-amber-300 text-sm text-foreground/80 space-y-2 pt-2">
+                                  </AccordionTrigger>
+                                  <AccordionContent className="text-sm text-foreground/80 space-y-3 pt-1 pb-5">
                                     {renderFaqAnswer(item.answer)}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          });
+                                  </AccordionContent>
+                                </AccordionItem>
+                              ))}
+                            </Accordion>
+                          );
                         })()}
                       </div>
                     )}
