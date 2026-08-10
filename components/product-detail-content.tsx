@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useQuery, useMutation } from "convex/react";
@@ -54,7 +54,95 @@ type InlineEdit =
   | "seasonalOpportunities"
   | "targetAudience"
   | "sensoryProfile"
+  | "faqTab"
   | null;
+
+function parseFaqMarkdown(md: string): { question: string; answer: string }[] {
+  if (!md) return [];
+  const lines = md.split(/\r?\n/);
+  const items: { question: string; answer: string }[] = [];
+  let current: { question: string; answer: string } | null = null;
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    const heading = /^#{2,3}\s+(.+)$/.exec(line);
+    if (heading) {
+      if (current) items.push(current);
+      current = { question: heading[1].trim(), answer: "" };
+    } else if (current) {
+      current.answer += (current.answer ? "\n" : "") + line;
+    }
+  }
+  if (current) items.push(current);
+  return items.filter((it) => it.question);
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const regex = /!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let last = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) nodes.push(text.slice(last, match.index));
+    if (match[1] !== undefined) {
+      nodes.push(
+        <img
+          key={key++}
+          src={match[2]}
+          alt={match[1]}
+          className="my-2 max-w-full rounded-lg border border-border"
+        />
+      );
+    } else if (match[3] !== undefined) {
+      nodes.push(
+        <a
+          key={key++}
+          href={match[4]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-amber-700 underline hover:text-amber-900"
+        >
+          {match[3]}
+        </a>
+      );
+    } else if (match[5] !== undefined) {
+      nodes.push(<strong key={key++}>{match[5]}</strong>);
+    } else if (match[6] !== undefined) {
+      nodes.push(<em key={key++}>{match[6]}</em>);
+    }
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+function renderFaqAnswer(answer: string): ReactNode {
+  const paragraphs = answer.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  return paragraphs.map((p, i) => {
+    const imgOnly = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(p);
+    if (imgOnly) {
+      return (
+        <img
+          key={i}
+          src={imgOnly[2]}
+          alt={imgOnly[1]}
+          className="my-2 max-w-full rounded-lg border border-border"
+        />
+      );
+    }
+    const parts = p.split(/\n/);
+    return (
+      <p key={i} className="leading-relaxed">
+        {parts.map((line, li) => (
+          <Fragment key={li}>
+            {li > 0 && <br />}
+            {renderInlineMarkdown(line)}
+          </Fragment>
+        ))}
+      </p>
+    );
+  });
+}
 
 export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [activeSection, setActiveSection] = useState<MenuSection>("dashboard");
@@ -63,7 +151,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<QuickActionPanel>(null);
-  const [dashboardTab, setDashboardTab] = useState<"materials" | "data">("materials");
+  const [dashboardTab, setDashboardTab] = useState<"materials" | "data" | "faq">("materials");
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   const { role } = useAccess();
   const canEdit = role === "editor";
@@ -1099,6 +1188,17 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     }`}
                   >
                     Data
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardTab("faq")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      dashboardTab === "faq"
+                        ? "bg-amber-100 text-amber-900"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    FAQ
                   </button>
                 </div>
               </div>
@@ -3291,6 +3391,105 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     )}
                   </div>
                 </div>
+                </div>
+
+                {/* Third Pane - FAQ */}
+                <div className={`${dashboardTab === "faq" ? "" : "hidden"}`}>
+                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+                      <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                        <span className="text-xl">💬</span>
+                        Časté dotazy
+                      </h2>
+                      {canEdit && inlineEdit !== "faqTab" && (
+                        <button
+                          type="button"
+                          onClick={() => { setInlineEdit("faqTab"); setInlineValue(product.faqText || ""); }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors"
+                        >
+                          {product.faqText ? "Upravit" : "Přidat FAQ"}
+                        </button>
+                      )}
+                    </div>
+
+                    {inlineEdit === "faqTab" ? (
+                      <div className="p-4 space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          Formát markdownu: řádek začínající <code>## </code> = otázka, následující řádky = odpověď.
+                          Podporováno: <code>**tučně**</code>, <code>*kurzíva*</code>, <code>[odkaz](url)</code>,
+                          <code>{" ![popis](url)"}</code> pro obrázek. Prázdný řádek = nový odstavec.
+                        </p>
+                        <textarea
+                          value={inlineValue}
+                          onChange={(e) => setInlineValue(e.target.value)}
+                          placeholder={"## Od jakého věku je vhodný?\nOd ukončeného 9. měsíce.\n\n## Obsahuje cukr?\nNe, je **bez** přidaného cukru."}
+                          className="w-full p-3 border rounded-lg text-sm font-mono min-h-[280px] resize-y bg-white"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleInlineSave("faqText", inlineValue)}
+                            disabled={isSaving}
+                            className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
+                          >
+                            {isSaving ? "Ukládám..." : "Uložit"}
+                          </button>
+                          <button
+                            onClick={() => setInlineEdit(null)}
+                            className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted"
+                          >
+                            Zrušit
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 space-y-3">
+                        {(() => {
+                          const items = parseFaqMarkdown(product.faqText || "");
+                          if (items.length === 0) {
+                            return (
+                              <div className="py-10 text-center text-sm text-muted-foreground">
+                                {canEdit
+                                  ? `Zatím zde nejsou žádné otázky. Klikni na „Přidat FAQ".`
+                                  : "Zatím zde nejsou žádné otázky."}
+                              </div>
+                            );
+                          }
+                          return items.map((item, idx) => {
+                            const isOpen = openFaqIndex === idx;
+                            return (
+                              <div
+                                key={idx}
+                                className={`rounded-lg border transition-colors ${
+                                  isOpen
+                                    ? "bg-muted/30 border-amber-200"
+                                    : "bg-muted/20 border-border hover:bg-muted/30"
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                                  className="w-full flex items-center justify-between text-left px-4 py-3"
+                                  aria-expanded={isOpen}
+                                >
+                                  <span className={`font-semibold ${isOpen ? "text-amber-900" : "text-foreground"}`}>
+                                    {item.question}
+                                  </span>
+                                  <span className={`ml-3 text-lg leading-none ${isOpen ? "text-amber-700" : "text-muted-foreground"}`}>
+                                    {isOpen ? "–" : "+"}
+                                  </span>
+                                </button>
+                                {isOpen && (
+                                  <div className="px-4 pb-4 ml-4 border-l-2 border-amber-300 text-sm text-foreground/80 space-y-2 pt-2">
+                                    {renderFaqAnswer(item.answer)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
