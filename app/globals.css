@@ -169,3 +169,62 @@ body > nextjs-portal {
     animation: none;
   }
 }
+
+/* FAQ rich-text (WYSIWYG output + editor) */
+.faq-rich p,
+.tiptap-answer p {
+  margin: 0.5em 0;
+  line-height: 1.55;
+}
+.faq-rich p:first-child,
+.tiptap-answer p:first-child { margin-top: 0; }
+.faq-rich p:last-child,
+.tiptap-answer p:last-child { margin-bottom: 0; }
+.faq-rich strong,
+.tiptap-answer strong { font-weight: 600; }
+.faq-rich em,
+.tiptap-answer em { font-style: italic; }
+.faq-rich a,
+.tiptap-answer a {
+  color: rgb(180 83 9); /* amber-700 */
+  text-decoration: underline;
+}
+.faq-rich a:hover,
+.tiptap-answer a:hover { color: rgb(146 64 14); /* amber-800 */ }
+.faq-rich ul,
+.tiptap-answer ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.5em 0;
+}
+.faq-rich ol,
+.tiptap-answer ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin: 0.5em 0;
+}
+.faq-rich li,
+.tiptap-answer li { margin: 0.15em 0; }
+.faq-rich img,
+.tiptap-answer img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  margin: 0.5em 0;
+  display: block;
+}
+.faq-rich blockquote,
+.tiptap-answer blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  margin: 0.5em 0;
+}
+.faq-rich code,
+.tiptap-answer code {
+  background: hsl(var(--muted));
+  padding: 0.1em 0.3em;
+  border-radius: 0.25rem;
+  font-size: 0.9em;
+}

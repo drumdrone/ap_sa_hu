@@ -142,6 +142,10 @@ export const updateMarketingData = mutation({
       answer: v.string(),
     }))),
     faqText: v.optional(v.string()),
+    faqRich: v.optional(v.array(v.object({
+      question: v.string(),
+      answerHtml: v.string(),
+    }))),
     salesForecast: v.optional(v.string()),
     sensoryProfile: v.optional(v.string()),
     seasonalOpportunities: v.optional(v.string()),

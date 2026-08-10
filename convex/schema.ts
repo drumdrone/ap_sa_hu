@@ -120,6 +120,10 @@ export default defineSchema({
       answer: v.string(),
     }))),
     faqText: v.optional(v.string()), // Formatted FAQ text (like quick reference card)
+    faqRich: v.optional(v.array(v.object({
+      question: v.string(),
+      answerHtml: v.string(),
+    }))), // Rich-text FAQ entries edited via WYSIWYG (HTML)
     salesForecast: v.optional(v.string()), // ASCII formatted sales forecast chart
     sensoryProfile: v.optional(v.string()), // ASCII formatted sensory profile
     seasonalOpportunities: v.optional(v.string()), // ASCII formatted seasonal opportunities table
@@ -326,6 +330,10 @@ export default defineSchema({
       answer: v.string(),
     }))),
     faqText: v.optional(v.string()),
+    faqRich: v.optional(v.array(v.object({
+      question: v.string(),
+      answerHtml: v.string(),
+    }))),
     salesForecast: v.optional(v.string()),
     sensoryProfile: v.optional(v.string()),
     seasonalOpportunities: v.optional(v.string()),
