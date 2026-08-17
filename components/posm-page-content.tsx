@@ -131,6 +131,7 @@ export function PosmPageContent() {
   const productsWithPdf = useQuery(api.products.list, { withPdf: true });
   const productSheetNames = useQuery(api.posm.listProductSheetNames, {});
   const setProductSheetName = useMutation(api.posm.setProductSheetName);
+  const deleteProductSheet = useMutation(api.posm.deleteProductSheet);
   const dbPosmTypes = useQuery(api.posm.listTypes, {});
   const upsertPosmType = useMutation(api.posm.upsertType);
   const deletePosmType = useMutation(api.posm.deleteType);
@@ -233,6 +234,13 @@ export function PosmPageContent() {
   // Inline type editing in the detail dialog
   const [editingType, setEditingType] = useState(false);
   const [savingType, setSavingType] = useState(false);
+
+  // Deleting a product sheet unlinks the PDF from every product that uses it,
+  // so it gets its own confirmation dialog instead of a plain confirm().
+  const [sheetToDelete, setSheetToDelete] = useState<
+    { pdfUrl: string; name: string; productCount: number; virtualId: string } | null
+  >(null);
+  const [deletingSheet, setDeletingSheet] = useState(false);
 
   // Handle file upload
   const handleFileUpload = useCallback(async (file: File) => {
@@ -688,6 +696,50 @@ export function PosmPageContent() {
     ? [...virtualProductSheetItems, ...items]
     : undefined;
 
+  // Opens the right confirmation flow: product sheets are shared by many
+  // products, regular materials are a single catalog row.
+  const requestDeleteItem = (item: DisplayItem) => {
+    if (item.isVirtual) {
+      if (!item.sheetPdfUrl) return;
+      // Close the detail dialog first so the confirmation is not nested.
+      setShowDetail(false);
+      setSheetToDelete({
+        pdfUrl: item.sheetPdfUrl,
+        name: item.name,
+        productCount: item.productCount ?? 0,
+        virtualId: item._id as unknown as string,
+      });
+      return;
+    }
+    if (confirm("Opravdu chcete tento material smazat?")) {
+      deleteItem({ id: item._id });
+      removeFromPosmKit(item._id);
+      if (selectedItem === item._id) {
+        setShowDetail(false);
+        setSelectedItem(null);
+      }
+    }
+  };
+
+  const confirmDeleteSheet = async () => {
+    if (!sheetToDelete) return;
+    setDeletingSheet(true);
+    try {
+      await deleteProductSheet({ pdfUrl: sheetToDelete.pdfUrl });
+      removeFromPosmKit(sheetToDelete.virtualId);
+      if (selectedItem === (sheetToDelete.virtualId as unknown as Id<"posmItems">)) {
+        setShowDetail(false);
+        setSelectedItem(null);
+      }
+      setSheetToDelete(null);
+    } catch (error) {
+      console.error("Failed to delete product sheet:", error);
+      alert("Produktovy list se nepodarilo smazat.");
+    } finally {
+      setDeletingSheet(false);
+    }
+  };
+
   // Get all unique sizes from items
   const allSizes: string[] = allItems
     ? Array.from(new Set(allItems.flatMap(item => item.sizes || [])) as Set<string>).sort()
@@ -1064,23 +1116,20 @@ export function PosmPageContent() {
                         </Button>
                       )}
 
-                      {!item.isVirtual && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm("Opravdu chcete tento material smazat?")) {
-                              deleteItem({ id: item._id });
-                            }
-                          }}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        title={item.isVirtual ? "Smazat produktovy list ze vsech produktu" : "Smazat material"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestDeleteItem(item);
+                        }}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </Button>
                     </div>
                   </Card>
                 ))}
@@ -1652,6 +1701,13 @@ export function PosmPageContent() {
                 <DialogFooter className="gap-2">
                   <Button
                     variant="outline"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 sm:mr-auto"
+                    onClick={() => requestDeleteItem(selectedItemData)}
+                  >
+                    Smazat
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => {
                       if (posmKit.find(k => k.itemId === selectedItemData._id)) {
                         removeFromPosmKit(selectedItemData._id);
@@ -1688,6 +1744,71 @@ export function PosmPageContent() {
                       Objednat
                     </Button>
                   )}
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Product Sheet Confirmation */}
+        <Dialog
+          open={!!sheetToDelete}
+          onOpenChange={(open) => {
+            if (!open && !deletingSheet) setSheetToDelete(null);
+          }}
+        >
+          <DialogContent>
+            {sheetToDelete && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Smazat produktovy list</DialogTitle>
+                  <DialogDescription>
+                    Tato akce odebere PDF ze vsech produktu, ktere ho pouzivaji.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+                    <div className="font-medium">{sheetToDelete.name}</div>
+                    <div className="mt-1">
+                      {sheetToDelete.productCount === 1
+                        ? "Pouzito u 1 produktu - list se u nej odstrani."
+                        : `Pouzito u ${sheetToDelete.productCount} produktu - list se odstrani u vsech.`}
+                    </div>
+                  </div>
+                  {(() => {
+                    const affected = productSheetGroups.get(sheetToDelete.pdfUrl)?.products ?? [];
+                    if (affected.length === 0) return null;
+                    const preview = affected.slice(0, 8);
+                    return (
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <div className="font-medium uppercase tracking-wider">Dotcene produkty</div>
+                        <ul className="list-disc pl-4 space-y-0.5">
+                          {preview.map((p) => (
+                            <li key={p._id}>{p.name}</li>
+                          ))}
+                        </ul>
+                        {affected.length > preview.length && (
+                          <div>a dalsich {affected.length - preview.length}...</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSheetToDelete(null)}
+                    disabled={deletingSheet}
+                  >
+                    Zrusit
+                  </Button>
+                  <Button
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={confirmDeleteSheet}
+                    disabled={deletingSheet}
+                  >
+                    {deletingSheet ? "Mazu..." : "Smazat u vsech produktu"}
+                  </Button>
                 </DialogFooter>
               </>
             )}

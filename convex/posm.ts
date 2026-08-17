@@ -297,6 +297,60 @@ export const setProductSheetName = mutation({
   },
 });
 
+// Delete a product sheet from the POSM catalog. The sheet is a virtual item
+// derived from products.pdfUrl, so "deleting" it means unlinking the PDF from
+// every product that shares it. The custom display name is dropped and the URL
+// is cleared from marketing backups too, otherwise a feed re-import could
+// restore the sheet on a recreated product.
+export const deleteProductSheet = mutation({
+  args: { pdfUrl: v.string() },
+  handler: async (ctx, { pdfUrl }) => {
+    const url = pdfUrl.trim();
+    if (!url) {
+      throw new Error("pdfUrl is required");
+    }
+
+    const now = Date.now();
+
+    const products = await ctx.db.query("products").collect();
+    const affected = products.filter((p) => p.pdfUrl === url);
+    for (const product of affected) {
+      await ctx.db.patch(product._id, {
+        pdfUrl: undefined,
+        marketingLastUpdated: now,
+        lastUpdatedField: "pdfUrl",
+      });
+    }
+
+    const backups = await ctx.db.query("marketingBackup").collect();
+    let clearedBackups = 0;
+    for (const backup of backups) {
+      if (backup.pdfUrl === url) {
+        await ctx.db.patch(backup._id, { pdfUrl: undefined });
+        clearedBackups++;
+      }
+    }
+
+    const nameRow = await ctx.db
+      .query("productSheetNames")
+      .withIndex("by_pdfUrl", (q) => q.eq("pdfUrl", url))
+      .first();
+    if (nameRow) {
+      await ctx.db.delete(nameRow._id);
+    }
+
+    console.log(
+      `Deleting product sheet ${url}: unlinked from ${affected.length} products, cleared ${clearedBackups} backups`
+    );
+
+    return {
+      removedFromProducts: affected.length,
+      clearedBackups,
+      removedName: !!nameRow,
+    };
+  },
+});
+
 // ============ POSM TYPES ============
 // Stored type catalog. Frontend merges this with hardcoded built-in defaults
 // (DB row wins per key) so users can rename / recolor built-ins and add
