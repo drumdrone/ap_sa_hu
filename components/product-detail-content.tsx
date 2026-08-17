@@ -24,6 +24,17 @@ import { NeuronLoader } from "@/components/ui/neuron-loader";
 type MenuSection = "dashboard" | "eshop" | "marketing" | "social" | "gallery" | "materials" | "edit";
 type MobileView = "product" | "data";
 
+// Categories for the "Dostupné materiály" swipe-file layout (product detail).
+// Order and labels are intentionally simple: just icon + name in the left nav.
+type MaterialCategory =
+  | "fotky"
+  | "listy"
+  | "galerie"
+  | "bannery"
+  | "facebook"
+  | "clanky"
+  | "video";
+
 interface ProductDetailContentProps {
   productId: Id<"products">;
 }
@@ -182,6 +193,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<QuickActionPanel>(null);
   const [dashboardTab, setDashboardTab] = useState<"materials" | "data" | "faq">("materials");
+  // Selected category in the "Dostupné materiály" swipe-file left navigation.
+  const [materialsCategory, setMaterialsCategory] = useState<MaterialCategory>("fotky");
 
   const { role } = useAccess();
   const canEdit = role === "editor";
@@ -1233,338 +1246,408 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               </div>
 
               <div className="grid grid-cols-1 gap-6">
-                {/* Left Column - Alerts */}
-                <div className={`space-y-4 ${dashboardTab === "materials" ? "" : "hidden"}`}>
+                {/* Dostupné materiály – swipe-file layout: jednoduchá navigace vlevo, kartičky vpravo */}
+                <div className={`${dashboardTab === "materials" ? "" : "hidden"}`}>
                   {(() => {
-                    const dismissedAlerts = product.dismissedAlerts || [];
-                    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-                    const isRecentUpdate = product.marketingLastUpdated && product.marketingLastUpdated > sevenDaysAgo;
-                    
-                    const alerts: { id: string; icon: "bell" | "lightbulb" | "check"; type: "urgent" | "tip" | "new"; message: string; action: string; date?: number }[] = [];
-                    
-                    // AVAILABLE CONTENT - Show what's ready to use for customers/salespeople
-                    
-                    // Sales claim available
-                    if (product.salesClaim) {
-                      alerts.push({
-                        id: "has-claim",
-                        icon: "check",
-                        type: "new",
-                        message: `Prodejní claim: "${product.salesClaim.substring(0, 60)}${product.salesClaim.length > 60 ? "..." : ""}"`,
-                        action: "Kopírovat",
-                        date: product.marketingLastUpdated
-                      });
-                    }
-                    
-                    // Quick Reference Card available
-                    if (product.quickReferenceCard) {
-                      alerts.push({
-                        id: "has-reference-card",
-                        icon: "check",
-                        type: "new",
-                        message: "Quick Reference Card je připravena k použití!",
-                        action: "Zobrazit",
-                        date: product.marketingLastUpdated
-                      });
-                    }
-                    
-                    // Facebook post available
-                    if (product.socialFacebook) {
-                      alerts.push({
-                        id: "has-fb",
-                        icon: "check",
-                        type: "new",
-                        message: "Facebook post je připraven k publikování.",
-                        action: "Zkopírovat",
-                        date: product.marketingLastUpdated
-                      });
-                    }
-                    
-                    // Instagram post available
-                    if (product.socialInstagram) {
-                      alerts.push({
-                        id: "has-ig",
-                        icon: "check",
-                        type: "new",
-                        message: "Instagram post je připraven k publikování.",
-                        action: "Zkopírovat",
-                        date: product.marketingLastUpdated
-                      });
-                    }
-                    
-                    // Gallery images available
-                    if (galleryImages && galleryImages.length > 0) {
-                      alerts.push({
-                        id: "has-gallery",
-                        icon: "check",
-                        type: "new",
-                        message: `${galleryImages.length} ${galleryImages.length === 1 ? "obrázek" : galleryImages.length < 5 ? "obrázky" : "obrázků"} v galerii k použití.`,
-                        action: "Prohlédnout",
-                        date: galleryImages[0]?.uploadedAt
-                      });
-                    }
-                    
-                    // PDF available
-                    if (product.pdfUrl) {
-                      alerts.push({
-                        id: "has-pdf",
-                        icon: "check",
-                        type: "new",
-                        message: "PDF produktový list je k dispozici.",
-                        action: "Stáhnout"
-                      });
-                    }
+                    const fbCount = (product.socialFacebook ? 1 : 0) + (product.socialFacebookImage ? 1 : 0);
+                    const categories: { id: MaterialCategory; label: string; icon: string; count: number }[] = [
+                      { id: "fotky", label: "Fotky", icon: "📷", count: product.image ? 1 : 0 },
+                      { id: "listy", label: "Produktové listy", icon: "📄", count: product.pdfUrl ? 1 : 0 },
+                      { id: "galerie", label: "Galerie", icon: "🖼️", count: galleryImages?.length ?? 0 },
+                      { id: "bannery", label: "Bannery", icon: "🎯", count: productBanners?.length ?? 0 },
+                      { id: "facebook", label: "Facebook", icon: "📘", count: fbCount },
+                      { id: "clanky", label: "Články", icon: "📰", count: product.articleUrls?.length ?? 0 },
+                      { id: "video", label: "Produktové video", icon: "🎬", count: product.videoUrl ? 1 : 0 },
+                    ];
 
-                    // Product banners available
-                    if (productBanners && productBanners.length > 0) {
-                      alerts.push({
-                        id: "has-banners",
-                        icon: "check",
-                        type: "new",
-                        message: `${productBanners.length} ${productBanners.length === 1 ? "banner" : "bannerů"} je k dispozici.`,
-                        action: "Zobrazit",
-                        date: productBanners[0]?.uploadedAt,
-                      });
-                    }
-                    
-                    // Why Buy points available
-                    if (product.whyBuy && product.whyBuy.length > 0) {
-                      alerts.push({
-                        id: "has-whybuy",
-                        icon: "lightbulb",
-                        type: "tip",
-                        message: `${product.whyBuy.length} prodejních argumentů připraveno.`,
-                        action: "Zobrazit"
-                      });
-                    }
-                    
-                    // Filter out dismissed alerts
-                    const visibleAlerts = alerts.filter(a => !dismissedAlerts.includes(a.id));
-                    const alertCount = visibleAlerts.length;
-                    
-                    return (
-                      <div className="bg-card border border-border rounded-xl overflow-hidden h-full">
-                        <div className="p-4 border-b border-border bg-muted/30">
-                          <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                            <span className="text-xl">📦</span>
-                            Dostupné materiály 
-                            {alertCount > 0 && <span className="text-green-600">({alertCount})</span>}
-                          </h2>
+                    const inKit = (id: string) => !!salesKitItems.find((i) => i.id === id);
+                    const addButton = (id: string, item: SalesKitItem) => (
+                      <button
+                        type="button"
+                        onClick={() => addToSalesKit(item)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                          inKit(id)
+                            ? "bg-green-600 text-white hover:bg-green-700"
+                            : "bg-primary text-primary-foreground hover:opacity-90"
+                        }`}
+                        title="Přidat do Sales Kit"
+                      >
+                        {inKit(id) ? (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            V Sales Kitu
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                            Přidat do Sales Kit
+                          </>
+                        )}
+                      </button>
+                    );
+
+                    const linkButton = (href: string, label: string) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-muted text-foreground hover:bg-muted/70 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        {label}
+                      </a>
+                    );
+
+                    const emptyState = (text: string) => (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mb-3">
+                          <svg className="w-7 h-7 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
                         </div>
-                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
-                          {visibleAlerts.length > 0 ? visibleAlerts.map((alert) => (
-                            <div 
-                              key={alert.id}
-                              className={`rounded-lg p-3 border ${
-                                alert.type === "new" 
-                                  ? "bg-green-50 border-green-200" 
-                                  : alert.type === "urgent"
-                                  ? "bg-red-50 border-red-200"
-                                  : "bg-amber-50 border-amber-200"
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                  alert.type === "new" 
-                                    ? "bg-green-100" 
-                                    : alert.type === "urgent" 
-                                    ? "bg-red-100" 
-                                    : "bg-amber-100"
-                                }`}>
-                                  {alert.icon === "check" ? (
-                                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  ) : alert.icon === "bell" ? (
-                                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                                      <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-                                      <path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6A4.997 4.997 0 017 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/>
-                                    </svg>
-                                  )}
+                        <p className="text-sm text-muted-foreground">{text}</p>
+                      </div>
+                    );
+
+                    const active = categories.find((c) => c.id === materialsCategory);
+
+                    return (
+                      <div className="flex flex-col md:flex-row items-stretch bg-card border border-border rounded-xl overflow-hidden">
+                        {/* Levá navigace – swipe file (jen ikona + název) */}
+                        <nav className="md:w-64 flex-shrink-0 border-b md:border-b-0 md:border-r border-border bg-muted/20 p-2">
+                          <ul className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+                            {categories.map((cat) => {
+                              const isActive = materialsCategory === cat.id;
+                              return (
+                                <li key={cat.id} className="flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setMaterialsCategory(cat.id)}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                      isActive
+                                        ? "bg-primary/10 text-primary"
+                                        : "text-foreground hover:bg-muted"
+                                    }`}
+                                  >
+                                    <span className="text-lg leading-none">{cat.icon}</span>
+                                    <span className="flex-1 text-left whitespace-nowrap">{cat.label}</span>
+                                    <span
+                                      className={`text-xs font-semibold px-1.5 py-0.5 rounded-md ${
+                                        isActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+                                      }`}
+                                    >
+                                      {cat.count}
+                                    </span>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </nav>
+
+                        {/* Pravá strana – kartičky k přidání (včetně tlačítek) */}
+                        <div className="flex-1 min-w-0 p-4">
+                          <div className="flex items-center gap-2 mb-4">
+                            <span className="text-xl leading-none">{active?.icon}</span>
+                            <h2 className="text-lg font-bold text-foreground">{active?.label}</h2>
+                            {active && active.count > 0 && (
+                              <span className="text-sm text-muted-foreground">({active.count})</span>
+                            )}
+                          </div>
+
+                          {/* Fotky */}
+                          {materialsCategory === "fotky" &&
+                            (product.image ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div className="rounded-xl border border-border overflow-hidden bg-background">
+                                  <button
+                                    type="button"
+                                    onClick={() => openLightboxFromSlider(0)}
+                                    className="block w-full aspect-square bg-muted"
+                                    title="Zobrazit fotku"
+                                  >
+                                    <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                                  </button>
+                                  <div className="p-3 space-y-3">
+                                    <p className="text-sm font-medium text-foreground truncate">Hlavní produktová fotka</p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {linkButton(product.image, "Otevřít")}
+                                      {addButton("main-photo", {
+                                        id: "main-photo",
+                                        type: "materials",
+                                        label: "Produktová fotka",
+                                        content: product.image || "",
+                                      })}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs text-muted-foreground mb-1">
-                                    {alert.date 
-                                      ? new Date(alert.date).toLocaleDateString("cs-CZ", { day: "numeric", month: "short", year: "numeric" })
-                                      : new Date().toLocaleDateString("cs-CZ", { day: "numeric", month: "short", year: "numeric" })
-                                    }
-                                  </p>
-                                  <p className={`text-sm font-medium leading-snug ${
-                                    alert.type === "new" ? "text-green-800" : alert.type === "urgent" ? "text-red-800" : "text-amber-800"
-                                  }`}>
-                                    {alert.message}
-                                  </p>
+                              </div>
+                            ) : (
+                              emptyState("Pro tento produkt není k dispozici žádná fotka.")
+                            ))}
+
+                          {/* Produktové listy (PDF) */}
+                          {materialsCategory === "listy" &&
+                            (product.pdfUrl ? (
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="rounded-xl border border-border bg-background p-4">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-2xl">📄</span>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-foreground truncate">Produktový list (PDF)</p>
+                                      <p className="text-xs text-muted-foreground truncate">{product.pdfUrl}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {linkButton(product.pdfUrl, "Otevřít PDF")}
+                                    {addButton("pdf-link", {
+                                      id: "pdf-link",
+                                      type: "materials",
+                                      label: "Produktový list",
+                                      content: product.pdfUrl || "",
+                                    })}
+                                  </div>
                                 </div>
                               </div>
-                              <div className="flex gap-2 mt-2 ml-11">
-                                <button
-                                  onClick={() => {
-                                    if (alert.id === "has-claim" && product.salesClaim) {
-                                      navigator.clipboard.writeText(product.salesClaim);
-                                      setSaveMessage("Claim zkopírován!");
-                                      setTimeout(() => setSaveMessage(null), 2000);
-                                    } else if (alert.id === "has-reference-card") {
-                                      setOpenPanel("referenceCard");
-                                    } else if (alert.id === "has-fb" && product.salesClaim) {
-                                      navigator.clipboard.writeText(product.socialFacebook || "");
-                                      setSaveMessage("Facebook post zkopírován!");
-                                      setTimeout(() => setSaveMessage(null), 2000);
-                                    } else if (alert.id === "has-ig" && product.socialInstagram) {
-                                      navigator.clipboard.writeText(product.socialInstagram);
-                                      setSaveMessage("Instagram post zkopírován!");
-                                      setTimeout(() => setSaveMessage(null), 2000);
-                                    } else if (alert.id === "has-gallery") {
-                                      setOpenPanel("gallery");
-                                    } else if (alert.id === "has-pdf" && product.pdfUrl) {
-                                      window.open(product.pdfUrl, "_blank");
-                                    } else if (alert.id === "has-banners") {
-                                      setDashboardTab("data");
-                                    } else if (alert.id === "has-whybuy") {
-                                      setActiveSection("marketing");
-                                    }
-                                  }}
-                                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                                    alert.type === "new"
-                                      ? "bg-green-600 text-white hover:bg-green-700"
-                                      : alert.type === "urgent"
-                                      ? "bg-red-500 text-white hover:bg-red-600"
-                                      : "bg-amber-500 text-white hover:bg-amber-600"
-                                  }`}
-                                >
-                                  {alert.action}
-                                </button>
-                                {/* Add to Sales Kit button */}
-                                <button
-                                  onClick={() => {
-                                    const getKitItem = (): {
-                                      id: string;
-                                      type: "claim" | "reference" | "gallery" | "social" | "materials" | "whybuy";
-                                      label: string;
-                                      content: string;
-                                    } | null => {
-                                      if (alert.id === "has-claim" && product.salesClaim) {
-                                        return {
-                                          id: "sales-claim",
-                                          type: "claim",
-                                          label: "Prodejní claim",
-                                          content:
-                                            product.salesClaim +
-                                            (product.salesClaimSubtitle ? `\n${product.salesClaimSubtitle}` : ""),
-                                        };
-                                      }
-                                      if (alert.id === "has-reference-card" && product.quickReferenceCard) {
-                                        return {
-                                          id: "reference-card",
-                                          type: "reference",
-                                          label: "Quick Reference Card",
-                                          content: product.quickReferenceCard,
-                                        };
-                                      }
-                                      if (alert.id === "has-fb" && product.socialFacebook) {
-                                        return {
-                                          id: "fb-post",
-                                          type: "social",
-                                          label: "Facebook post",
-                                          content: product.socialFacebook,
-                                        };
-                                      }
-                                      if (alert.id === "has-ig" && product.socialInstagram) {
-                                        return {
-                                          id: "ig-post",
-                                          type: "social",
-                                          label: "Instagram post",
-                                          content: product.socialInstagram,
-                                        };
-                                      }
-                                      if (alert.id === "has-gallery" && galleryImages && galleryImages.length > 0) {
-                                        const urls =
-                                          galleryImages
-                                            .map((img) => img.url)
-                                            .filter((url): url is string => !!url) ?? [];
-                                        const content =
-                                          urls.length > 0
-                                            ? `Obrázky v galerii: ${galleryImages.length}\n\nOdkazy:\n${urls
-                                                .slice(0, 5)
-                                                .join("\n")}${urls.length > 5 ? "\n..." : ""}`
-                                            : `Obrázky v galerii: ${galleryImages.length}`;
-                                        return {
-                                          id: "gallery-images",
-                                          type: "gallery",
-                                          label: `Galerie (${galleryImages.length} obr.)`,
-                                          content,
-                                        };
-                                      }
-                                      if (alert.id === "has-pdf" && product.pdfUrl) {
-                                        return {
-                                          id: "pdf-link",
-                                          type: "materials",
-                                          label: "Produktový list",
-                                          content: product.pdfUrl,
-                                        };
-                                      }
-                                      if (alert.id === "has-banners" && productBanners && productBanners.length > 0) {
-                                        const content = productBanners
-                                          .map((b) => {
-                                            const tags = b.tags?.length ? ` [${b.tags.join(", ")}]` : "";
-                                            const link = b.url ? ` - ${b.url}` : "";
-                                            return `${b.filename} (${b.width}x${b.height})${tags}${link}`;
-                                          })
-                                          .join("\n");
-                                        return {
-                                          id: "product-banners",
-                                          type: "materials",
-                                          label: `Bannery (${productBanners.length})`,
-                                          content,
-                                        };
-                                      }
-                                      if (alert.id === "has-whybuy" && product.whyBuy) {
-                                        return {
-                                          id: "why-buy",
-                                          type: "whybuy",
-                                          label: "Proč koupit",
-                                          content: product.whyBuy.join("\n• "),
-                                        };
-                                      }
-                                      return null;
-                                    };
-                                    const item = getKitItem();
-                                    if (item) addToSalesKit(item);
-                                  }}
-                                  className={`px-2 py-1.5 rounded text-xs font-bold transition-colors ${
-                                    salesKitItems.find(
-                                      (i) =>
-                                        (alert.id === "has-claim" && i.id === "sales-claim") ||
-                                        (alert.id === "has-reference-card" && i.id === "reference-card") ||
-                                        (alert.id === "has-fb" && i.id === "fb-post") ||
-                                        (alert.id === "has-ig" && i.id === "ig-post") ||
-                                        (alert.id === "has-gallery" && i.id === "gallery-images") ||
-                                        (alert.id === "has-pdf" && i.id === "pdf-link") ||
-                                        (alert.id === "has-banners" && i.id === "product-banners") ||
-                                        (alert.id === "has-whybuy" && i.id === "why-buy"),
-                                    )
-                                      ? "bg-primary text-primary-foreground"
-                                      : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"
-                                  }`}
-                                  title="Přidat do Sales Kit"
-                                >
-                                  +
-                                </button>
+                            ) : (
+                              emptyState("Zatím není nahraný žádný produktový list.")
+                            ))}
+
+                          {/* Galerie */}
+                          {materialsCategory === "galerie" &&
+                            (galleryImages && galleryImages.length > 0 ? (
+                              <div className="space-y-4">
+                                <div className="flex justify-end">
+                                  {addButton("gallery-images", {
+                                    id: "gallery-images",
+                                    type: "gallery",
+                                    label: `Galerie (${galleryImages.length} obr.)`,
+                                    content: `Galerie: ${galleryImages.length} obrázků\n${galleryImages
+                                      .map((i) => i.url)
+                                      .filter((u): u is string => !!u)
+                                      .join("\n")}`,
+                                  })}
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                  {galleryImages.map((img, idx) => (
+                                    <div key={img._id} className="rounded-xl border border-border overflow-hidden bg-background">
+                                      <button
+                                        type="button"
+                                        onClick={() => openLightboxFromGallery(idx)}
+                                        className="block w-full aspect-square bg-muted"
+                                        title="Zobrazit obrázek"
+                                      >
+                                        {img.url ? (
+                                          <img src={img.url} alt={img.filename} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <span className="flex items-center justify-center w-full h-full text-2xl">🖼️</span>
+                                        )}
+                                      </button>
+                                      <div className="p-2 flex items-center justify-between gap-2">
+                                        <span className="text-xs text-muted-foreground truncate">{img.filename}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            addToSalesKit({
+                                              id: `gallery-${img._id}`,
+                                              type: "gallery",
+                                              label: img.filename,
+                                              content: img.url || img.filename,
+                                            })
+                                          }
+                                          className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                                            inKit(`gallery-${img._id}`)
+                                              ? "bg-green-600 text-white"
+                                              : "bg-primary/10 text-primary hover:bg-primary/20"
+                                          }`}
+                                          title="Přidat do Sales Kit"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          )) : (
-                            <div className="md:col-span-2 flex flex-col items-center justify-center py-8 text-center">
-                              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                                </svg>
+                            ) : (
+                              emptyState("V galerii zatím nejsou žádné obrázky.")
+                            ))}
+
+                          {/* Bannery */}
+                          {materialsCategory === "bannery" &&
+                            (productBanners && productBanners.length > 0 ? (
+                              <div className="space-y-4">
+                                <div className="flex justify-end">
+                                  {addButton("product-banners", {
+                                    id: "product-banners",
+                                    type: "materials",
+                                    label: `Bannery (${productBanners.length})`,
+                                    content: productBanners
+                                      .map((b) => {
+                                        const tags = b.tags?.length ? ` [${b.tags.join(", ")}]` : "";
+                                        const link = b.url ? ` - ${b.url}` : "";
+                                        return `${b.filename} (${b.width}x${b.height})${tags}${link}`;
+                                      })
+                                      .join("\n"),
+                                  })}
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {productBanners.map((banner) => (
+                                    <div key={banner._id} className="rounded-xl border border-border overflow-hidden bg-background">
+                                      <div className="aspect-video bg-muted">
+                                        {banner.url ? (
+                                          <img src={banner.url} alt={banner.filename} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <span className="flex items-center justify-center w-full h-full text-2xl">🎯</span>
+                                        )}
+                                      </div>
+                                      <div className="p-3 space-y-2">
+                                        <p className="text-sm font-medium text-foreground truncate">{banner.filename}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {banner.width} x {banner.height}px • {(banner.size / 1024).toFixed(0)} KB
+                                        </p>
+                                        {banner.tags?.length > 0 && (
+                                          <div className="flex flex-wrap gap-1">
+                                            {banner.tags.map((tag, idx) => (
+                                              <span key={`${banner._id}-${tag}-${idx}`} className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800">
+                                                {tag}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                                          {banner.url && linkButton(banner.url, "Otevřít")}
+                                          {addButton(`banner-${banner._id}`, {
+                                            id: `banner-${banner._id}`,
+                                            type: "materials",
+                                            label: banner.filename,
+                                            content: banner.url || banner.filename,
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <h3 className="font-semibold text-gray-600">Zatím žádné materiály</h3>
-                              <p className="text-sm text-muted-foreground">Pro tento produkt nejsou k dispozici žádné marketingové materiály.</p>
-                            </div>
-                          )}
+                            ) : (
+                              emptyState("Zatím nejsou nahrané žádné bannery.")
+                            ))}
+
+                          {/* Facebook */}
+                          {materialsCategory === "facebook" &&
+                            (fbCount > 0 ? (
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                {product.socialFacebook && (
+                                  <div className="rounded-xl border border-border bg-background p-4 space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-lg">📘</span>
+                                      <p className="text-sm font-medium text-foreground">Facebook příspěvek</p>
+                                    </div>
+                                    <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/40 rounded-lg p-3 max-h-48 overflow-y-auto">
+                                      {product.socialFacebook}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(product.socialFacebook || "");
+                                          setSaveMessage("Facebook post zkopírován!");
+                                          setTimeout(() => setSaveMessage(null), 2000);
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-muted text-foreground hover:bg-muted/70 transition-colors"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                        Zkopírovat text
+                                      </button>
+                                      {addButton("fb-post", {
+                                        id: "fb-post",
+                                        type: "social",
+                                        label: "Facebook post",
+                                        content: product.socialFacebook || "",
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                                {product.socialFacebookImage && (
+                                  <div className="rounded-xl border border-border overflow-hidden bg-background">
+                                    <a href={product.socialFacebookImage} target="_blank" rel="noopener noreferrer" className="block aspect-video bg-muted">
+                                      <img src={product.socialFacebookImage} alt="Facebook obrázek" className="w-full h-full object-cover" />
+                                    </a>
+                                    <div className="p-3 space-y-2">
+                                      <p className="text-sm font-medium text-foreground">Facebook obrázek</p>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        {linkButton(product.socialFacebookImage, "Otevřít")}
+                                        {addButton("fb-image", {
+                                          id: "fb-image",
+                                          type: "social",
+                                          label: "Facebook obrázek",
+                                          content: product.socialFacebookImage || "",
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              emptyState("Pro tento produkt není připraven žádný Facebook obsah.")
+                            ))}
+
+                          {/* Články */}
+                          {materialsCategory === "clanky" &&
+                            (product.articleUrls && product.articleUrls.length > 0 ? (
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                {product.articleUrls.map((item, index) => (
+                                  <div key={index} className="rounded-xl border border-border bg-background p-4">
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-xl">📰</span>
+                                      </div>
+                                      <p className="text-sm font-medium text-foreground min-w-0 truncate">{item.title}</p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {linkButton(item.url, "Otevřít článek")}
+                                      {addButton(`article-${index}`, {
+                                        id: `article-${index}`,
+                                        type: "materials",
+                                        label: `Článek: ${item.title}`,
+                                        content: `${item.title}\n${item.url}`,
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              emptyState("Zatím nejsou přidané žádné články.")
+                            ))}
+
+                          {/* Produktové video */}
+                          {materialsCategory === "video" &&
+                            (product.videoUrl ? (
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="rounded-xl border border-border bg-background p-4">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-2xl">🎬</span>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-foreground">Produktové video</p>
+                                      <p className="text-xs text-muted-foreground truncate">{product.videoUrl}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {linkButton(product.videoUrl, "Přehrát video")}
+                                    {addButton("product-video", {
+                                      id: "product-video",
+                                      type: "materials",
+                                      label: "Produktové video",
+                                      content: `Video: ${product.videoUrl}`,
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              emptyState("Pro tento produkt není přidané žádné video.")
+                            ))}
                         </div>
                       </div>
                     );
