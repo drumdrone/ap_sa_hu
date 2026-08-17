@@ -10,13 +10,8 @@ import { CategoryBadge } from "@/components/ui/category-badge";
 import { TierBadge } from "@/components/ui/tier-badge";
 import { BrandPillarBadge } from "@/components/ui/brand-pillar-badge";
 import { CopyButton } from "@/components/copy-button";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { FaqEditor, type FaqRichItem } from "@/components/faq-editor";
+import { FaqHorizontalAccordion } from "@/components/faq-horizontal-accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -3488,21 +3483,9 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             );
                           }
                           return (
-                            <Accordion type="single" collapsible defaultValue="faq-0" className="w-full">
-                              {richItems.map((item, idx) => (
-                                <AccordionItem key={idx} value={`faq-${idx}`} className="border-b border-border last:border-b-0">
-                                  <AccordionTrigger className="text-left text-base font-semibold text-foreground hover:no-underline py-5">
-                                    {item.question}
-                                  </AccordionTrigger>
-                                  <AccordionContent className="text-sm text-foreground/80 pt-1 pb-5">
-                                    <div
-                                      className="faq-rich text-sm text-foreground/85"
-                                      dangerouslySetInnerHTML={{ __html: item.answerHtml }}
-                                    />
-                                  </AccordionContent>
-                                </AccordionItem>
-                              ))}
-                            </Accordion>
+                            <div className="py-4">
+                              <FaqHorizontalAccordion items={richItems} />
+                            </div>
                           );
                         })()}
                       </div>
