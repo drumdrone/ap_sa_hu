@@ -185,6 +185,167 @@ function renderFaqAnswer(answer: string): ReactNode {
   });
 }
 
+// Split an image URL into its base (path without extension) and extension,
+// preserving any ?query. Returns null when the filename has no extension.
+function splitImageUrl(url: string): { base: string; ext: string } | null {
+  const hash = url.indexOf("#");
+  const noHash = hash >= 0 ? url.slice(0, hash) : url;
+  const q = noHash.indexOf("?");
+  const path = q >= 0 ? noHash.slice(0, q) : noHash;
+  const query = q >= 0 ? noHash.slice(q) : "";
+  const slash = path.lastIndexOf("/");
+  const dot = path.lastIndexOf(".");
+  if (dot <= slash) return null;
+  return { base: path.slice(0, dot), ext: path.slice(dot) + query };
+}
+
+type PhotoKitItem = { id: string; type: "materials"; label: string; content: string };
+
+// Renders all product photos in the "Fotky" swipe-file category.
+// The main photo is the product image (e.g. .../000060.jpg); additional
+// photos follow the "code_N" convention (000060_1.jpg, 000060_2.jpg, ...).
+// We probe the derived URLs client-side and show only the ones that load.
+function ProductPhotos({
+  mainImage,
+  productName,
+  isInKit,
+  onAdd,
+  onCount,
+}: {
+  mainImage?: string;
+  productName: string;
+  isInKit: (id: string) => boolean;
+  onAdd: (item: PhotoKitItem) => void;
+  onCount?: (n: number) => void;
+}) {
+  const MAX_EXTRA = 20;
+  const parts = mainImage ? splitImageUrl(mainImage) : null;
+  const [loaded, setLoaded] = useState<Set<number>>(new Set());
+
+  // Reset discovered photos whenever the product (main image) changes.
+  useEffect(() => {
+    setLoaded(new Set());
+  }, [mainImage]);
+
+  const urlFor = (i: number) =>
+    i === 0 ? mainImage || "" : parts ? `${parts.base}_${i}${parts.ext}` : "";
+
+  const extras = parts
+    ? Array.from({ length: MAX_EXTRA }, (_, k) => k + 1)
+        .filter((i) => loaded.has(i))
+        .sort((a, b) => a - b)
+    : [];
+  const photos = mainImage ? [0, ...extras] : [];
+
+  useEffect(() => {
+    onCount?.(photos.length);
+  }, [photos.length, onCount]);
+
+  if (!mainImage) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mb-3">
+          <span className="text-2xl">📷</span>
+        </div>
+        <p className="text-sm text-muted-foreground">Pro tento produkt není k dispozici žádná fotka.</p>
+      </div>
+    );
+  }
+
+  const allUrls = photos.map(urlFor);
+
+  return (
+    <div className="space-y-4">
+      {/* Skryté sondy pro další fotky (kod_1.jpg, kod_2.jpg, ...) */}
+      {parts &&
+        Array.from({ length: MAX_EXTRA }, (_, k) => k + 1).map((i) => (
+          <img
+            key={`probe-${i}`}
+            src={urlFor(i)}
+            alt=""
+            aria-hidden
+            className="hidden"
+            onLoad={() =>
+              setLoaded((prev) => {
+                if (prev.has(i)) return prev;
+                const next = new Set(prev);
+                next.add(i);
+                return next;
+              })
+            }
+            onError={() => {}}
+          />
+        ))}
+
+      {photos.length > 1 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() =>
+              onAdd({
+                id: "product-photos",
+                type: "materials",
+                label: `Fotky (${photos.length})`,
+                content: `Fotky produktu ${productName}: ${photos.length}\n${allUrls.join("\n")}`,
+              })
+            }
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              isInKit("product-photos")
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "bg-primary text-primary-foreground hover:opacity-90"
+            }`}
+            title="Přidat všechny fotky do Sales Kit"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Přidat všechny fotky
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {photos.map((i) => {
+          const url = urlFor(i);
+          const id = i === 0 ? "photo-main" : `photo-${i}`;
+          const label = i === 0 ? "Hlavní fotka" : `Fotka ${i}`;
+          return (
+            <div key={id} className="rounded-xl border border-border overflow-hidden bg-background">
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block aspect-square bg-muted"
+                title="Otevřít fotku"
+              >
+                <img src={url} alt={`${productName} – ${label}`} className="w-full h-full object-cover" />
+              </a>
+              <div className="p-2 flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground truncate">{label}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAdd({
+                      id,
+                      type: "materials",
+                      label: `Fotka: ${productName}${i ? " " + i : ""}`,
+                      content: url,
+                    })
+                  }
+                  className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                    isInKit(id) ? "bg-green-600 text-white" : "bg-primary/10 text-primary hover:bg-primary/20"
+                  }`}
+                  title="Přidat do Sales Kit"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [activeSection, setActiveSection] = useState<MenuSection>("dashboard");
   const [mobileView, setMobileView] = useState<MobileView>("product");
@@ -195,6 +356,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [dashboardTab, setDashboardTab] = useState<"materials" | "data" | "faq">("materials");
   // Selected category in the "Dostupné materiály" swipe-file left navigation.
   const [materialsCategory, setMaterialsCategory] = useState<MaterialCategory>("fotky");
+  // Number of product photos discovered by <ProductPhotos> (main + code_N variants).
+  const [photoCount, setPhotoCount] = useState(0);
 
   const { role } = useAccess();
   const canEdit = role === "editor";
@@ -1251,7 +1414,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   {(() => {
                     const fbCount = (product.socialFacebook ? 1 : 0) + (product.socialFacebookImage ? 1 : 0);
                     const categories: { id: MaterialCategory; label: string; icon: string; count: number }[] = [
-                      { id: "fotky", label: "Fotky", icon: "📷", count: product.image ? 1 : 0 },
+                      { id: "fotky", label: "Fotky", icon: "📷", count: photoCount || (product.image ? 1 : 0) },
                       { id: "listy", label: "Produktové listy", icon: "📄", count: product.pdfUrl ? 1 : 0 },
                       { id: "galerie", label: "Galerie", icon: "🖼️", count: galleryImages?.length ?? 0 },
                       { id: "bannery", label: "Bannery", icon: "🎯", count: productBanners?.length ?? 0 },
@@ -1353,59 +1516,43 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                             )}
                           </div>
 
-                          {/* Fotky */}
-                          {materialsCategory === "fotky" &&
-                            (product.image ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div className="rounded-xl border border-border overflow-hidden bg-background">
-                                  <button
-                                    type="button"
-                                    onClick={() => openLightboxFromSlider(0)}
-                                    className="block w-full aspect-square bg-muted"
-                                    title="Zobrazit fotku"
-                                  >
-                                    <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                                  </button>
-                                  <div className="p-3 space-y-3">
-                                    <p className="text-sm font-medium text-foreground truncate">Hlavní produktová fotka</p>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {linkButton(product.image, "Otevřít")}
-                                      {addButton("main-photo", {
-                                        id: "main-photo",
-                                        type: "materials",
-                                        label: "Produktová fotka",
-                                        content: product.image || "",
-                                      })}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              emptyState("Pro tento produkt není k dispozici žádná fotka.")
-                            ))}
+                          {/* Fotky – hlavní fotka + odvozené kod_N.jpg */}
+                          {materialsCategory === "fotky" && (
+                            <ProductPhotos
+                              mainImage={product.image}
+                              productName={product.name}
+                              isInKit={inKit}
+                              onAdd={addToSalesKit}
+                              onCount={setPhotoCount}
+                            />
+                          )}
 
-                          {/* Produktové listy (PDF) */}
+                          {/* Produktové listy (PDF) – s náhledem jako v POSM materiálech */}
                           {materialsCategory === "listy" &&
                             (product.pdfUrl ? (
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <div className="rounded-xl border border-border bg-background p-4">
-                                  <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-2xl">📄</span>
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium text-foreground truncate">Produktový list (PDF)</p>
-                                      <p className="text-xs text-muted-foreground truncate">{product.pdfUrl}</p>
-                                    </div>
+                                <div className="rounded-xl border border-border overflow-hidden bg-background">
+                                  <div className="aspect-[3/4] bg-white border-b border-border">
+                                    <iframe
+                                      src={`${product.pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                                      title="Produktový list"
+                                      className="w-full h-full bg-white"
+                                    />
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    {linkButton(product.pdfUrl, "Otevřít PDF")}
-                                    {addButton("pdf-link", {
-                                      id: "pdf-link",
-                                      type: "materials",
-                                      label: "Produktový list",
-                                      content: product.pdfUrl || "",
-                                    })}
+                                  <div className="p-3 space-y-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-lg leading-none">📄</span>
+                                      <p className="text-sm font-medium text-foreground truncate">Produktový list (PDF)</p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {linkButton(product.pdfUrl, "Otevřít PDF")}
+                                      {addButton("pdf-link", {
+                                        id: "pdf-link",
+                                        type: "materials",
+                                        label: "Produktový list",
+                                        content: product.pdfUrl || "",
+                                      })}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
