@@ -287,14 +287,27 @@ export const syncFromFeed = action({
     while ((match = itemRegex.exec(xmlText)) !== null) {
       const itemXml = match[1]
       
+      // Decode common HTML/XML entities. &amp; is decoded last so that
+      // sequences like &amp;lt; resolve to &lt; rather than <.
+      const decodeEntities = (s: string) =>
+        s
+          .replace(/&#13;\n/g, '\n')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&apos;/g, "'")
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+
       // LuigisBox format parsers
       const getTitle = (xml: string) => {
         const m = xml.match(/<title>([^<]*)<\/title>/)
-        return m ? m[1].trim() : null
+        return m ? decodeEntities(m[1].trim()) : null
       }
       const getDescription = (xml: string) => {
         const m = xml.match(/<description>([\s\S]*?)<\/description>/)
-        return m ? m[1].trim().replace(/&#13;\n/g, '\n').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>') : undefined
+        return m ? decodeEntities(m[1].trim()) : undefined
       }
       const getImageLink = (xml: string) => {
         // Use large image (image_link_l) for better quality
@@ -325,7 +338,7 @@ export const syncFromFeed = action({
       }
       const getBrand = (xml: string) => {
         const m = xml.match(/<brand>([^<]*)<\/brand>/)
-        return m ? m[1].trim() : undefined
+        return m ? decodeEntities(m[1].trim()) : undefined
       }
       const getEan = (xml: string) => {
         const m = xml.match(/<ean>([^<]*)<\/ean>/)
@@ -339,7 +352,7 @@ export const syncFromFeed = action({
       const getPrimaryCategory = (xml: string) => {
         // Get category with primary="true"
         const m = xml.match(/<category primary="true">([^<]*)<\/category>/)
-        return m ? m[1].trim() : undefined
+        return m ? decodeEntities(m[1].trim()) : undefined
       }
       
       const externalId = getProductCode2(itemXml)
