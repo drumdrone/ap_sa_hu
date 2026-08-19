@@ -37,7 +37,8 @@ const BULK_SECTIONS = [
   
   // Materiály
   { id: "pdfUrl", label: "Produktový list (PDF)", description: "URL na PDF produktový list", icon: "📄" },
-  
+  { id: "presentationUrl", label: "Prezentace (Google Slides)", description: "Sdílený odkaz na prezentaci z Google Slides", icon: "📊" },
+
   // Prodejní data
   { id: "mainBenefits", label: "3 hlavní benefity", description: "Klíčové prodejní argumenty", icon: "✨" },
   { id: "herbComposition", label: "Zastoupení bylinek", description: "Přehled složení produktu", icon: "🌿" },
@@ -78,6 +79,7 @@ export default function BulkEditContent() {
     socialInstagramImage: "",
     hashtags: "",
     pdfUrl: "",
+    presentationUrl: "",
     mainBenefits: "",
     herbComposition: "",
     salesForecast: "",
@@ -325,6 +327,11 @@ export default function BulkEditContent() {
                               📄
                             </span>
                           )}
+                          {product.presentationUrl && (
+                            <span className="text-xs text-green-600" title="Má prezentaci (Google Slides)">
+                              📊
+                            </span>
+                          )}
                           {product.quickReferenceCard && (
                             <span className="text-xs text-green-600" title="Má Quick Reference Card">
                               ✓
@@ -384,6 +391,19 @@ export default function BulkEditContent() {
                       onChange={(e) => setSectionValues(prev => ({ ...prev, [activeSection]: e.target.value }))}
                       className="font-mono text-sm"
                     />
+                  </div>
+                ) : activeSection === "presentationUrl" ? (
+                  <div className="space-y-2">
+                    <Input
+                      type="url"
+                      placeholder="https://docs.google.com/presentation/d/.../edit?usp=sharing"
+                      value={sectionValues[activeSection]}
+                      onChange={(e) => setSectionValues(prev => ({ ...prev, [activeSection]: e.target.value }))}
+                      className="font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Vložte sdílený odkaz z Google Slides. Přidá se ke všem vybraným produktům a spustí se zeleným tlačítkem „Spustit prezentaci“ v detailu produktu.
+                    </p>
                   </div>
                 ) : activeSection === "pdfUrl" ? (
                   <div className="space-y-3">

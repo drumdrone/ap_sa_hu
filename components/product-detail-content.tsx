@@ -56,6 +56,7 @@ type InlineEdit =
   | "socialImages"
   | "materials"
   | "video"
+  | "presentation"
   | "eshop"
   | "referenceCard"
   | "faq"
@@ -353,6 +354,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<QuickActionPanel>(null);
+  // Presentation viewer modal (Google Slides embed) open/closed state
+  const [presentationViewerOpen, setPresentationViewerOpen] = useState(false);
   const [dashboardTab, setDashboardTab] = useState<"materials" | "data" | "faq">("materials");
   // Selected category in the "Dostupné materiály" swipe-file left navigation.
   const [materialsCategory, setMaterialsCategory] = useState<MaterialCategory>("fotky");
@@ -402,6 +405,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   const updateMarketingData = useMutation(api.products.updateMarketingData);
   const clearPdfUrl = useMutation(api.products.clearPdfUrl);
   const clearVideoUrl = useMutation(api.products.clearVideoUrl);
+  const clearPresentationUrl = useMutation(api.products.clearPresentationUrl);
   const activeEditors = useQuery(api.editors.list, canEdit ? {} : "skip");
 
   // Editor tracking - persisted in localStorage for the session
@@ -788,6 +792,27 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     }
   };
 
+  // Helper: extract the presentation ID from a Google Slides share link
+  const getGoogleSlidesId = (url: string): string | null => {
+    if (!url) return null;
+    const match = url.match(/presentation\/d\/([a-zA-Z0-9_-]+)/);
+    return match?.[1] ?? null;
+  };
+
+  // Helper: embeddable URL for the in-app viewer (has built-in slide arrows)
+  const getGoogleSlidesEmbedUrl = (url: string): string => {
+    const id = getGoogleSlidesId(url);
+    if (!id) return url;
+    return `https://docs.google.com/presentation/d/${id}/embed?start=false&loop=false&delayms=60000`;
+  };
+
+  // Helper: fullscreen present URL for opening in a new window
+  const getGoogleSlidesPresentUrl = (url: string): string => {
+    const id = getGoogleSlidesId(url);
+    if (!id) return url;
+    return `https://docs.google.com/presentation/d/${id}/present`;
+  };
+
   // FAQ save handler
   const handleFaqSave = async () => {
     setIsSaving(true);
@@ -1124,6 +1149,19 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     <span className="truncate">Upravit</span>
                   </button>
                 </div>
+                {/* Spustit prezentaci - only when a presentation link is uploaded */}
+                {product.presentationUrl && (
+                  <button
+                    onClick={() => setPresentationViewerOpen(true)}
+                    className="mt-2 w-full flex items-center justify-center gap-2 p-3 bg-green-600 text-white rounded-lg text-sm font-semibold active:scale-95 transition-transform"
+                    title="Spustit prezentaci"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    Spustit prezentaci
+                  </button>
+                )}
               </div>
 
               {/* Top 20 Mobile */}
@@ -2604,6 +2642,160 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               )}
                             </div>
                           </div>
+                        </div>
+                      )}
+                    </div>
+
+                    )}
+
+                    {/* Prezentace (Google Slides) - Sixth */}
+                    {(product.presentationUrl || canEdit) && (
+                    <div className={`w-full rounded-xl transition-colors ${
+                        product.presentationUrl
+                          ? "bg-green-50 border border-green-200"
+                          : "bg-gray-50 border-2 border-dashed border-gray-300"
+                      }`}>
+                      {inlineEdit === "presentation" ? (
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">
+                                  6
+                                </span>
+                                Prezentace (Google Slides)
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Vložte sdílený odkaz z Google Slides (např.{" "}
+                                <code className="text-xs">https://docs.google.com/presentation/d/.../edit?usp=sharing</code>).
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => { setInlineEdit(null); setInlineValue(""); }}
+                              className="p-1 hover:bg-black/5 rounded-lg"
+                              title="Zavřít"
+                            >
+                              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            <Input
+                              placeholder="https://docs.google.com/presentation/d/.../edit?usp=sharing"
+                              value={inlineValue}
+                              onChange={(e) => setInlineValue(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Prezentaci nasdílejte v Google Slides přes <strong>Sdílet → Kdokoli s odkazem</strong> a vložte zkopírovaný odkaz. Spustí se zeleným tlačítkem „Spustit prezentaci“.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleInlineSave("presentationUrl", inlineValue)}
+                            disabled={isSaving}
+                            className="w-full px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                          >
+                            {isSaving ? "Ukládám..." : "Uložit prezentaci"}
+                          </button>
+                          {canEdit && product.presentationUrl && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Opravdu smazat odkaz na prezentaci?")) return;
+                                setIsSaving(true);
+                                try {
+                                  await clearPresentationUrl({ id: productId });
+                                  setInlineValue("");
+                                  setInlineEdit(null);
+                                  setSaveMessage("Odkaz na prezentaci smazán.");
+                                  setTimeout(() => setSaveMessage(null), 2000);
+                                } catch (error) {
+                                  console.error("Error deleting presentation URL:", error);
+                                  alert("Chyba při mazání odkazu na prezentaci");
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                              disabled={isSaving}
+                              className="w-full px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 disabled:opacity-50"
+                            >
+                              Smazat odkaz na prezentaci
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-4">
+                          <div className="flex items-center gap-4">
+                            <button
+                              onClick={() => { if (!canEdit) return; setInlineEdit("presentation"); setInlineValue(product.presentationUrl || ""); }}
+                              className="flex items-center gap-4 flex-1 text-left hover:opacity-80 transition-opacity"
+                              disabled={!canEdit}
+                            >
+                              <div className="relative flex-shrink-0">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                  product.presentationUrl ? "bg-green-100" : "bg-gray-200"
+                                }`}>
+                                  <span className="text-2xl">📊</span>
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-foreground">Prezentace</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {product.presentationUrl
+                                    ? "Prezentace z Google Slides je připojena"
+                                    : "Přidejte odkaz na prezentaci z Google Slides"}
+                                </p>
+                              </div>
+                            </button>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {product.presentationUrl && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    addToSalesKit({
+                                      id: "product-presentation",
+                                      type: "materials",
+                                      label: "Prezentace",
+                                      content: `Prezentace: ${product.presentationUrl}`,
+                                    });
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    salesKitItems.find(i => i.id === "product-presentation")
+                                      ? "bg-green-500 text-white"
+                                      : "bg-green-100 hover:bg-green-200 text-green-700"
+                                  }`}
+                                  title="Přidat do Sales Kit"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+                              )}
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setInlineEdit("presentation"); setInlineValue(product.presentationUrl || ""); }}
+                                  className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                                  title="Upravit prezentaci"
+                                >
+                                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {/* Green play button - only visible when a presentation link is uploaded */}
+                          {product.presentationUrl && (
+                            <button
+                              onClick={() => setPresentationViewerOpen(true)}
+                              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow-sm"
+                              title="Spustit prezentaci"
+                            >
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                              Spustit prezentaci
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -5034,6 +5226,63 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Presentation viewer (Google Slides embed) */}
+      {presentationViewerOpen && product.presentationUrl && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setPresentationViewerOpen(false)}
+        >
+          {/* Top bar */}
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between gap-3 z-10">
+            <div className="flex items-center gap-2 text-white/80 text-sm font-medium">
+              <span className="text-lg">📊</span>
+              <span className="truncate max-w-[50vw]">Prezentace: {product.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={getGoogleSlidesPresentUrl(product.presentationUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20 transition-colors"
+                title="Otevřít v novém okně"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                Otevřít v novém okně
+              </a>
+              <button
+                onClick={(e) => { e.stopPropagation(); setPresentationViewerOpen(false); }}
+                className="p-2 text-white/70 hover:text-white transition-colors"
+                title="Zavřít"
+              >
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Embedded slides - navigable with the built-in arrow controls */}
+          <div
+            className="w-full max-w-6xl aspect-video mt-12 bg-black rounded-lg overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <iframe
+              src={getGoogleSlidesEmbedUrl(product.presentationUrl)}
+              className="w-full h-full"
+              allowFullScreen
+              title={`Prezentace: ${product.name}`}
+            />
+          </div>
+
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/50 text-xs">
+            Mezi snímky přepínáte šipkami ovládacího panelu prezentace.
+          </p>
         </div>
       )}
 

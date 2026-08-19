@@ -157,6 +157,7 @@ export const updateMarketingData = mutation({
       url: v.string(),
     }))),
     videoUrl: v.optional(v.string()),
+    presentationUrl: v.optional(v.string()),
     pdfUrl: v.optional(v.string()),
     rating: v.optional(v.union(v.number(), v.null())),
     editorShortcut: v.optional(v.string()),
@@ -234,6 +235,21 @@ export const clearVideoUrl = mutation({
       videoUrl: undefined,
       marketingLastUpdated: Date.now(),
       lastUpdatedField: "videoUrl",
+    });
+    return { success: true };
+  },
+});
+
+// Clear product presentation link (Google Slides)
+export const clearPresentationUrl = mutation({
+  args: {
+    id: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      presentationUrl: undefined,
+      marketingLastUpdated: Date.now(),
+      lastUpdatedField: "presentationUrl",
     });
     return { success: true };
   },
@@ -728,6 +744,7 @@ export const bulkUpdate = mutation({
     // Materiály
     pdfUrl: v.optional(v.string()),
     pdfStorageId: v.optional(v.id("_storage")),
+    presentationUrl: v.optional(v.string()),
     // Prodejní data
     mainBenefits: v.optional(v.string()),
     herbComposition: v.optional(v.string()),
