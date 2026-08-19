@@ -135,6 +135,7 @@ export default defineSchema({
       url: v.string(),
     }))),
     videoUrl: v.optional(v.string()), // Product video URL (e.g. Google Drive link)
+    presentationUrl: v.optional(v.string()), // Google Slides shared presentation link
     // Activity tracking
     marketingLastUpdated: v.optional(v.number()), // timestamp when marketing data was last changed
     lastUpdatedField: v.optional(v.string()), // which field was updated last
