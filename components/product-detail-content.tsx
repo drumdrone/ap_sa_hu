@@ -1111,6 +1111,19 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       </a>
                     )}
                   </div>
+                  {/* Spustit prezentaci - shows only when a presentation link is uploaded */}
+                  {product.presentationUrl && (
+                    <button
+                      onClick={() => setPresentationViewerOpen(true)}
+                      className="mt-3 w-full flex items-center justify-center gap-2 p-3 bg-green-600 text-white rounded-lg text-sm font-semibold active:scale-95 transition-transform"
+                      title="Spustit prezentaci"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      Spustit prezentaci
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1149,19 +1162,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     <span className="truncate">Upravit</span>
                   </button>
                 </div>
-                {/* Spustit prezentaci - only when a presentation link is uploaded */}
-                {product.presentationUrl && (
-                  <button
-                    onClick={() => setPresentationViewerOpen(true)}
-                    className="mt-2 w-full flex items-center justify-center gap-2 p-3 bg-green-600 text-white rounded-lg text-sm font-semibold active:scale-95 transition-transform"
-                    title="Spustit prezentaci"
-                  >
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                    Spustit prezentaci
-                  </button>
-                )}
               </div>
 
               {/* Top 20 Mobile */}
@@ -1403,6 +1403,21 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         </div>
                       ) : null;
                     })()}
+                    {/* Spustit prezentaci - shows only when a presentation link is uploaded */}
+                    {product.presentationUrl && (
+                      <div className="mt-5">
+                        <button
+                          onClick={() => setPresentationViewerOpen(true)}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow-sm"
+                          title="Spustit prezentaci"
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                          Spustit prezentaci
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2783,19 +2798,6 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               )}
                             </div>
                           </div>
-                          {/* Green play button - only visible when a presentation link is uploaded */}
-                          {product.presentationUrl && (
-                            <button
-                              onClick={() => setPresentationViewerOpen(true)}
-                              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow-sm"
-                              title="Spustit prezentaci"
-                            >
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M8 5v14l11-7z" />
-                              </svg>
-                              Spustit prezentaci
-                            </button>
-                          )}
                         </div>
                       )}
                     </div>
