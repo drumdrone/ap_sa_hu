@@ -85,6 +85,7 @@ export const createItem = mutation({
     storageId: v.optional(v.id("_storage")),
     fileType: v.optional(v.string()),
     downloadUrl: v.optional(v.string()),
+    documentUrl: v.optional(v.string()),
     distributionType: v.optional(v.union(
       v.literal("download"),
       v.literal("order")
@@ -112,6 +113,7 @@ export const updateItem = mutation({
     storageId: v.optional(v.id("_storage")),
     fileType: v.optional(v.string()),
     downloadUrl: v.optional(v.string()),
+    documentUrl: v.optional(v.string()),
     distributionType: v.optional(v.union(
       v.literal("download"),
       v.literal("order")

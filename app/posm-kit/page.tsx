@@ -12,9 +12,30 @@ type SharedPosmKitItem = {
   distributionType?: "download" | "order";
   imageUrl?: string;
   downloadUrl?: string;
+  documentUrl?: string;
   quantity: number;
   selectedSize?: string;
 };
+
+function DocumentLink({ url }: { url: string }) {
+  let label = "Dokument";
+  try {
+    label = new URL(url).hostname.replace(/^www\./, "");
+  } catch {}
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 text-sky-600 hover:text-sky-700 hover:underline text-xs font-medium"
+    >
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+      </svg>
+      {label}
+    </a>
+  );
+}
 
 type SharedPosmKitPayload = {
   generatedAt: string;
@@ -267,6 +288,7 @@ function PosmKitContent() {
                         </svg>
                         Stáhnout
                       </a>
+                      {item.documentUrl && <DocumentLink url={item.documentUrl} />}
                     </div>
                   </div>
                 );
@@ -294,7 +316,12 @@ function PosmKitContent() {
                       key={`ord-${idx}`}
                       className="border-t border-border odd:bg-card even:bg-muted/20"
                     >
-                      <td className="px-3 py-2">{item.name}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-1">
+                          <span>{item.name}</span>
+                          {item.documentUrl && <DocumentLink url={item.documentUrl} />}
+                        </div>
+                      </td>
                       <td className="px-3 py-2">
                         <span
                           className={`inline-flex text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${item.typeColor}`}
