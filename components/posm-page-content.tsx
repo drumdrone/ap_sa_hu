@@ -82,6 +82,7 @@ type PosmKitItem = {
   distributionType?: DistributionType;
   imageUrl?: string;
   downloadUrl?: string;
+  documentUrl?: string;
   quantity: number;
   selectedSize?: string;
 };
@@ -107,6 +108,22 @@ function getFilenameForKitItem(item: PosmKitItem, url: string): string {
   const base = sanitizeFilename(item.name);
   if (extFromUrl && !base.toLowerCase().endsWith(extFromUrl)) return `${base}${extFromUrl}`;
   return base;
+}
+
+// Opens an external document link (e.g. Google Docs) in a new tab as a plain
+// click-through — no `download` attribute, so cross-origin docs open normally.
+function openDocumentUrl(url: string): void {
+  if (typeof window === "undefined") return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+// Short, human-friendly label for a document link (its host without "www.").
+function documentUrlLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "Dokument";
+  }
 }
 
 function uniqueFilename(name: string, used: Set<string>): string {
@@ -199,6 +216,7 @@ export function PosmPageContent() {
     type: "letak" as PosmType,
     distributionType: "order" as DistributionType,
     downloadUrl: "",
+    documentUrl: "",
     imageUrl: "",
     sizes: "",
     requiresPassword: false,
@@ -370,12 +388,13 @@ export function PosmPageContent() {
             ? "application/pdf"
             : undefined),
         downloadUrl: newItem.downloadUrl || undefined,
+        documentUrl: newItem.documentUrl.trim() || undefined,
         distributionType: newItem.distributionType,
         sizes: sizesArray.length > 0 ? sizesArray : undefined,
         requiresPassword: wantsPasswordProtection ? true : undefined,
       });
 
-      setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "", requiresPassword: false });
+      setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", documentUrl: "", imageUrl: "", sizes: "", requiresPassword: false });
       setUploadedFileName(null);
       setUploadedStorageId(null);
       setUploadedFileType(null);
@@ -436,6 +455,7 @@ export function PosmPageContent() {
         distributionType: (item.distributionType as DistributionType) || undefined,
         imageUrl: item.imageUrl || undefined,
         downloadUrl: item.downloadUrl || undefined,
+        documentUrl: item.documentUrl || undefined,
         quantity: 1,
         selectedSize: item.sizes?.[0] || undefined,
       }];
@@ -535,6 +555,7 @@ export function PosmPageContent() {
             distributionType: k.distributionType,
             imageUrl: k.imageUrl,
             downloadUrl: k.downloadUrl,
+            documentUrl: k.documentUrl,
             quantity: k.quantity,
             selectedSize: k.selectedSize,
           };
@@ -593,6 +614,7 @@ export function PosmPageContent() {
         lines.push(`    Typ: ${getTypeDef(item.type).label}`);
         lines.push(`    Mnozstvi: ${item.quantity} ks`);
         if (item.selectedSize) lines.push(`    Velikost: ${item.selectedSize}`);
+        if (item.documentUrl) lines.push(`    Dokument: ${item.documentUrl}`);
         lines.push("");
       });
       lines.push("---------------------------------------");
@@ -607,6 +629,7 @@ export function PosmPageContent() {
         lines.push(`    Typ: ${getTypeDef(item.type).label}`);
         const url = item.downloadUrl || item.imageUrl;
         if (url) lines.push(`    Odkaz: ${url}`);
+        if (item.documentUrl) lines.push(`    Dokument: ${item.documentUrl}`);
         lines.push("");
       });
       lines.push("---------------------------------------");
@@ -785,7 +808,7 @@ export function PosmPageContent() {
             </p>
           </div>
           <Button onClick={() => {
-              setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", imageUrl: "", sizes: "", requiresPassword: false });
+              setNewItem({ name: "", description: "", type: "letak", distributionType: "order", downloadUrl: "", documentUrl: "", imageUrl: "", sizes: "", requiresPassword: false });
               setUploadedFileName(null);
               setUploadedStorageId(null);
               setUploadedFileType(null);
@@ -1046,6 +1069,14 @@ export function PosmPageContent() {
                               {DISTRIBUTION_TYPES[item.distributionType as DistributionType]?.label || item.distributionType}
                             </Badge>
                           )}
+                          {item.documentUrl && (
+                            <Badge className="bg-sky-100 text-sky-700 inline-flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+                              </svg>
+                              Dokument
+                            </Badge>
+                          )}
                         </div>
                         {item.description && (
                           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
@@ -1113,6 +1144,23 @@ export function PosmPageContent() {
                           }}
                         >
                           Objednat
+                        </Button>
+                      )}
+
+                      {item.documentUrl && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-sky-600 hover:text-sky-700"
+                          title={`Otevrit dokument (${documentUrlLabel(item.documentUrl)})`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDocumentUrl(item.documentUrl!);
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+                          </svg>
                         </Button>
                       )}
 
@@ -1421,6 +1469,30 @@ export function PosmPageContent() {
                 </div>
               )}
 
+              {/* Document link (e.g. Google Docs) - available for both distribution types */}
+              <div className="space-y-2">
+                <Label>Odkaz na dokument</Label>
+                <div className="relative">
+                  <svg
+                    className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+                  </svg>
+                  <Input
+                    value={newItem.documentUrl}
+                    onChange={(e) => setNewItem({ ...newItem, documentUrl: e.target.value })}
+                    placeholder="https://docs.google.com/document/d/..."
+                    className="pl-8"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Odkaz na Google dokument, tabulku nebo web. Otevre se v novem okne primym proklikem.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label>Dostupne velikosti</Label>
                 <Input
@@ -1692,6 +1764,24 @@ export function PosmPageContent() {
                         </div>
                       </div>
                     )}
+                    {selectedItemData.documentUrl && (
+                      <div className="col-span-2">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Dokument</span>
+                        <div className="mt-1">
+                          <a
+                            href={selectedItemData.documentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-sky-600 hover:text-sky-700 hover:underline inline-flex items-center gap-1.5 break-all"
+                          >
+                            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+                            </svg>
+                            {documentUrlLabel(selectedItemData.documentUrl)}
+                          </a>
+                        </div>
+                      </div>
+                    )}
                     <div className="col-span-2">
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Vytvoreno</span>
                       <div className="text-sm mt-1">{new Date(selectedItemData.createdAt).toLocaleDateString("cs-CZ")}</div>
@@ -1718,6 +1808,19 @@ export function PosmPageContent() {
                   >
                     {posmKit.find(k => k.itemId === selectedItemData._id) ? "Odebrat z kitu" : "+ Pridat do POSM kitu"}
                   </Button>
+
+                  {selectedItemData.documentUrl && (
+                    <Button
+                      variant="outline"
+                      className="text-sky-600 hover:text-sky-700 gap-1.5"
+                      onClick={() => openDocumentUrl(selectedItemData.documentUrl!)}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+                      </svg>
+                      Otevrit dokument
+                    </Button>
+                  )}
 
                   {selectedItemData.distributionType === "download" ? (
                     <Button

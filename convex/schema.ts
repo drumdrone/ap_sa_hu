@@ -195,6 +195,7 @@ export default defineSchema({
     storageId: v.optional(v.id("_storage")), // Convex storage ID for uploaded files
     fileType: v.optional(v.string()), // MIME type of uploaded file (e.g. application/pdf)
     downloadUrl: v.optional(v.string()), // External download URL (for download type materials)
+    documentUrl: v.optional(v.string()), // External document link (e.g. Google Docs) opened via a direct click-through
     distributionType: v.optional(v.union(
       v.literal("download"),  // ke stažení
       v.literal("order")      // k objednání
