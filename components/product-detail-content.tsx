@@ -200,6 +200,16 @@ function splitImageUrl(url: string): { base: string; ext: string } | null {
   return { base: path.slice(0, dot), ext: path.slice(dot) + query };
 }
 
+// Convert an apotheke.cz thumbnail URL to its full-resolution original.
+// The product feed delivers small previews from .../pic_zbozi_det/_thb_<code>.jpg,
+// while the originals sellers need for the Sales Kit live in .../pic_zbozi/<code>.jpg.
+// Gallery photos then follow the code_N convention within that same folder
+// (<code>_1.jpg, <code>_2.jpg, ...). URLs that don't match pass through unchanged.
+function toOriginalImageUrl(url?: string): string {
+  if (!url) return url ?? "";
+  return url.replace("/pic_zbozi_det/_thb_", "/pic_zbozi/");
+}
+
 type PhotoKitItem = { id: string; type: "materials"; label: string; content: string };
 
 // Renders all product photos in the "Fotky" swipe-file category.
@@ -220,7 +230,10 @@ function ProductPhotos({
   onCount?: (n: number) => void;
 }) {
   const MAX_EXTRA = 20;
-  const parts = mainImage ? splitImageUrl(mainImage) : null;
+  // Sellers download these to build their Sales Kit, so always resolve to the
+  // full-resolution original rather than the small feed thumbnail.
+  const original = toOriginalImageUrl(mainImage);
+  const parts = original ? splitImageUrl(original) : null;
   const [loaded, setLoaded] = useState<Set<number>>(new Set());
 
   // Reset discovered photos whenever the product (main image) changes.
@@ -229,7 +242,7 @@ function ProductPhotos({
   }, [mainImage]);
 
   const urlFor = (i: number) =>
-    i === 0 ? mainImage || "" : parts ? `${parts.base}_${i}${parts.ext}` : "";
+    i === 0 ? original : parts ? `${parts.base}_${i}${parts.ext}` : "";
 
   const extras = parts
     ? Array.from({ length: MAX_EXTRA }, (_, k) => k + 1)
@@ -4088,7 +4101,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                           <div className="aspect-square w-full max-w-[200px] mx-auto rounded-lg overflow-hidden bg-muted">
                             <Image src={product.image} alt={product.name} width={200} height={200} className="w-full h-full object-cover" />
                           </div>
-                          <a href={product.image} target="_blank" rel="noopener noreferrer" className="block text-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
+                          <a href={toOriginalImageUrl(product.image)} target="_blank" rel="noopener noreferrer" className="block text-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
                             Stáhnout originál
                           </a>
                         </div>
