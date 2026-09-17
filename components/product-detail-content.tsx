@@ -72,6 +72,50 @@ type InlineEdit =
   | "faqTab"
   | null;
 
+// Decodes the handful of HTML entities that survive in feed descriptions.
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;/gi, "'")
+    .replace(/&apos;/gi, "'");
+}
+
+// Converts a feed <description> (rich HTML) into clean, readable plain text.
+// Used for the Sales Kit, which is a plain-text export – no tags should leak.
+function descriptionToPlainText(html: string): string {
+  if (!html) return "";
+  const withBreaks = html
+    .replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*li[^>]*>/gi, "\n• ")
+    .replace(/<\s*(p|div|h[1-6]|ul|ol|tr|table)[^>]*>/gi, "\n")
+    .replace(/<\s*\/\s*(p|div|h[1-6]|ul|ol|tr|table)\s*>/gi, "\n")
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+  return decodeHtmlEntities(withBreaks)
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+// Strips unsafe elements/attributes from feed HTML so the formatted
+// description can be rendered with dangerouslySetInnerHTML.
+function sanitizeDescriptionHtml(html: string): string {
+  if (!html) return "";
+  return html
+    .replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(script|style|iframe|object|embed)[^>]*\/?>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
+    .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
+}
+
 function parseFaqMarkdown(md: string): { question: string; answer: string }[] {
   if (!md) return [];
   const lines = md.split(/\r?\n/);
@@ -1285,7 +1329,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                   <h2 className="text-base font-bold text-foreground mb-2 flex items-center gap-2">
                     <span>📝</span> Popis
                   </h2>
-                  <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">{product.description}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4 whitespace-pre-line">{descriptionToPlainText(product.description)}</p>
                 </div>
               )}
             </div>
@@ -1639,15 +1683,16 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     </div>
                                     <p className="text-sm font-medium text-foreground">Podrobný popis produktu</p>
                                   </div>
-                                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed mb-3">
-                                    {product.description}
-                                  </p>
+                                  <div
+                                    className="text-sm text-foreground leading-relaxed mb-3 max-w-none [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-1 [&_strong]:font-semibold [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_h4]:font-semibold [&_h5]:font-semibold [&_h6]:font-semibold [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-2"
+                                    dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(product.description) }}
+                                  />
                                   <div className="flex flex-wrap items-center gap-2">
                                     {addButton("product-description", {
                                       id: "product-description",
                                       type: "materials",
                                       label: "Podrobný popis",
-                                      content: product.description,
+                                      content: descriptionToPlainText(product.description),
                                     })}
                                   </div>
                                 </div>
@@ -4497,7 +4542,10 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     Popis produktu
                   </h3>
                   <div className="p-4 bg-muted/50 rounded-lg">
-                    <p className="text-foreground whitespace-pre-wrap">{product.description}</p>
+                    <div
+                      className="text-foreground leading-relaxed max-w-none [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-1 [&_strong]:font-semibold [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_h4]:font-semibold [&_h5]:font-semibold [&_h6]:font-semibold [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-2"
+                      dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(product.description) }}
+                    />
                   </div>
                 </div>
               )}
