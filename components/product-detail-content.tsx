@@ -29,6 +29,7 @@ type MobileView = "product" | "data";
 type MaterialCategory =
   | "fotky"
   | "listy"
+  | "popis"
   | "galerie"
   | "bannery"
   | "facebook"
@@ -1482,6 +1483,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                     const categories: { id: MaterialCategory; label: string; icon: string; count: number }[] = [
                       { id: "fotky", label: "Fotky", icon: "📷", count: photoCount || (product.image ? 1 : 0) },
                       { id: "listy", label: "Produktové listy", icon: "📄", count: product.pdfUrl ? 1 : 0 },
+                      { id: "popis", label: "Podrobný popis", icon: "📝", count: product.description ? 1 : 0 },
                       { id: "galerie", label: "Galerie", icon: "🖼️", count: galleryImages?.length ?? 0 },
                       { id: "bannery", label: "Bannery", icon: "🎯", count: productBanners?.length ?? 0 },
                       { id: "facebook", label: "Facebook", icon: "📘", count: fbCount },
@@ -1624,6 +1626,34 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </div>
                             ) : (
                               emptyState("Zatím není nahraný žádný produktový list.")
+                            ))}
+
+                          {/* Podrobný popis – text z feedu (<description>) */}
+                          {materialsCategory === "popis" &&
+                            (product.description ? (
+                              <div className="grid grid-cols-1 gap-4">
+                                <div className="rounded-xl border border-border bg-background p-4">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-xl">📝</span>
+                                    </div>
+                                    <p className="text-sm font-medium text-foreground">Podrobný popis produktu</p>
+                                  </div>
+                                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed mb-3">
+                                    {product.description}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {addButton("product-description", {
+                                      id: "product-description",
+                                      type: "materials",
+                                      label: "Podrobný popis",
+                                      content: product.description,
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              emptyState("Pro tento produkt není k dispozici podrobný popis.")
                             ))}
 
                           {/* Galerie */}
