@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ProductImageSlider } from "@/components/product-image-slider";
 import { useAccess } from "@/components/access-context";
 import { NeuronLoader } from "@/components/ui/neuron-loader";
+import { useSalesKit } from "@/hooks/use-sales-kit";
 
 type MenuSection = "dashboard" | "eshop" | "marketing" | "social" | "gallery" | "materials" | "edit";
 type MobileView = "product" | "data";
@@ -600,17 +601,31 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   
   // Promotion logs section removed
   
-  // Sales Kit - items to export
-  type SalesKitItem = {
+  // Sales Kit - items to export. The kit is shared across products (persisted
+  // in localStorage via useSalesKit) so a seller can collect items from several
+  // products into one kit. Each add button only needs a per-product local id
+  // such as "claim" or "gallery-images"; the hook namespaces it by product.
+  type SalesKitItemLocal = {
     id: string;
     type: "claim" | "reference" | "gallery" | "social" | "materials" | "whybuy";
     label: string;
     content: string;
   };
-  const [salesKitItems, setSalesKitItems] = useState<SalesKitItem[]>([]);
+  const {
+    items: salesKitItems,
+    groups: salesKitGroups,
+    addItem: addSalesKitItem,
+    removeItem: removeFromSalesKit,
+    removeProduct: removeProductFromSalesKit,
+    clear: clearSalesKit,
+    isInKit: isInKitGlobal,
+  } = useSalesKit();
   const [showSalesKit, setShowSalesKit] = useState(false);
   const [showPdfLinkDialog, setShowPdfLinkDialog] = useState(false);
   const [salesKitShareUrl, setSalesKitShareUrl] = useState("");
+
+  // True when the given per-product item is already in the kit for THIS product.
+  const isInKit = (localId: string) => isInKitGlobal(productId, localId);
   
   // Lightbox images: use same ordering as slider (main image first, then gallery)
   const galleryImageUrls = galleryImages?.filter(img => img.url).map(img => img.url!) ?? [];
@@ -658,56 +673,65 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lightboxOpen, lightboxImages.length]);
   
-  const addToSalesKit = (item: SalesKitItem) => {
-    setSalesKitItems(prev => {
-      if (prev.find(i => i.id === item.id)) return prev;
-      return [...prev, item];
+  const addToSalesKit = (item: SalesKitItemLocal) => {
+    if (!product) return;
+    addSalesKitItem({
+      localId: item.id,
+      type: item.type,
+      label: item.label,
+      content: item.content,
+      productId,
+      productName: product.name,
+      productExternalId: product.externalId ?? null,
+      productPrice: product.price ?? null,
     });
     setShowSalesKit(true);
   };
-  
-  const removeFromSalesKit = (id: string) => {
-    setSalesKitItems(prev => prev.filter(i => i.id !== id));
-  };
-  
+
   const exportSalesKitToTxt = () => {
-    if (!product || salesKitItems.length === 0) return;
+    if (salesKitItems.length === 0) return;
     const lines: string[] = [
       "═══════════════════════════════════════",
-      `PRODEJNÍ MATERIÁLY - ${product.name}`,
+      "PRODEJNÍ MATERIÁLY – SALES KIT",
       "═══════════════════════════════════════",
       "",
-      `Produkt: ${product.name}`,
-      `Kód: ${product.externalId || productId}`,
-      `Cena: ${product.price} Kč`,
-      "",
-      "───────────────────────────────────────",
+      `Počet produktů: ${salesKitGroups.length}`,
+      `Počet položek: ${salesKitItems.length}`,
       ""
     ];
-    
-    salesKitItems.forEach(item => {
-      lines.push(`▸ ${item.label.toUpperCase()}`);
+
+    salesKitGroups.forEach(group => {
+      lines.push("═══════════════════════════════════════");
+      lines.push(`PRODUKT: ${group.productName}`);
+      if (group.productExternalId) lines.push(`Kód: ${group.productExternalId}`);
+      if (group.productPrice !== null) lines.push(`Cena: ${group.productPrice} Kč`);
+      lines.push("═══════════════════════════════════════");
       lines.push("");
-      lines.push(item.content);
-      lines.push("");
-      lines.push("───────────────────────────────────────");
-      lines.push("");
+
+      group.items.forEach(item => {
+        lines.push(`▸ ${item.label.toUpperCase()}`);
+        lines.push("");
+        lines.push(item.content);
+        lines.push("");
+        lines.push("───────────────────────────────────────");
+        lines.push("");
+      });
     });
-    
+
     lines.push("Vygenerováno: " + new Date().toLocaleString("cs-CZ"));
-    
+
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_sales_kit.txt`;
+    a.download = "sales_kit.txt";
     a.click();
     URL.revokeObjectURL(url);
   };
-  
+
   const exportSalesKitToPdf = async () => {
-    if (!product || salesKitItems.length === 0) return;
-    
+    if (salesKitItems.length === 0) return;
+
     // Helper to convert URLs to clickable links
     const makeLinksClickable = (text: string) => {
       const escaped = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -718,18 +742,41 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
         return `<a href="${href}" target="_blank" style="color: #2563eb; text-decoration: underline;">${url}</a>`;
       });
     };
-    
+
+    const escapeHtml = (value: string) =>
+      value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const productsHtml = salesKitGroups
+      .map(group => `
+        <section class="product">
+          <h2>🍃 ${escapeHtml(group.productName)}</h2>
+          <div class="meta">
+            ${group.productExternalId ? `<p><strong>Kód produktu:</strong> ${escapeHtml(group.productExternalId)}</p>` : ""}
+            ${group.productPrice !== null ? `<p><strong>Cena:</strong> ${group.productPrice} Kč</p>` : ""}
+          </div>
+          ${group.items.map(item => `
+            <div class="item">
+              <div class="item-label">${escapeHtml(item.label)}</div>
+              <div class="item-content">${makeLinksClickable(item.content)}</div>
+            </div>
+          `).join("")}
+        </section>
+      `)
+      .join("");
+
     // Create a printable HTML and open print dialog
     const printContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Sales Kit - ${product.name}</title>
+        <title>Sales Kit</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
           h1 { color: #2D5A27; border-bottom: 3px solid #2D5A27; padding-bottom: 10px; }
-          .meta { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 30px; }
+          .product { margin-bottom: 40px; page-break-inside: auto; }
+          .product h2 { color: #2D5A27; margin-bottom: 10px; }
+          .meta { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
           .meta p { margin: 5px 0; }
           .item { margin-bottom: 25px; page-break-inside: avoid; }
           .item-label { background: #2D5A27; color: white; padding: 8px 15px; font-weight: bold; border-radius: 4px 4px 0 0; }
@@ -740,25 +787,16 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
         </style>
       </head>
       <body>
-        <h1>🍃 ${product.name}</h1>
-        <div class="meta">
-          <p><strong>Kód produktu:</strong> ${product.externalId || productId}</p>
-          <p><strong>Cena:</strong> ${product.price} Kč</p>
-          ${product.category ? `<p><strong>Kategorie:</strong> ${product.category}</p>` : ""}
-        </div>
-        ${salesKitItems.map(item => `
-          <div class="item">
-            <div class="item-label">${item.label}</div>
-            <div class="item-content">${makeLinksClickable(item.content)}</div>
-          </div>
-        `).join("")}
+        <h1>Sales Kit</h1>
+        <p style="color:#666;margin-top:0;">${salesKitGroups.length} produktů · ${salesKitItems.length} položek</p>
+        ${productsHtml}
         <div class="footer">
           Vygenerováno: ${new Date().toLocaleString("cs-CZ")} | Apotheke Sales Hub
         </div>
       </body>
       </html>
     `;
-    
+
     const printWindow = window.open("", "_blank");
     if (printWindow) {
       printWindow.document.write(printContent);
@@ -768,17 +806,20 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
   };
 
   const generateSalesKitShareUrl = () => {
-    if (!product || salesKitItems.length === 0 || typeof window === "undefined") return "";
+    if (salesKitItems.length === 0 || typeof window === "undefined") return "";
     try {
       const payload = {
-        productName: product.name,
-        externalId: product.externalId || productId,
-        price: product.price ?? null,
+        version: 2,
         generatedAt: new Date().toISOString(),
-        items: salesKitItems.map((item) => ({
-          label: item.label,
-          content: item.content,
-          type: item.type,
+        products: salesKitGroups.map((group) => ({
+          productName: group.productName,
+          externalId: group.productExternalId,
+          price: group.productPrice,
+          items: group.items.map((item) => ({
+            label: item.label,
+            content: item.content,
+            type: item.type,
+          })),
         })),
       };
       const json = JSON.stringify(payload);
@@ -1535,8 +1576,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       { id: "video", label: "Produktové video", icon: "🎬", count: product.videoUrl ? 1 : 0 },
                     ];
 
-                    const inKit = (id: string) => !!salesKitItems.find((i) => i.id === id);
-                    const addButton = (id: string, item: SalesKitItem) => (
+                    const inKit = isInKit;
+                    const addButton = (id: string, item: SalesKitItemLocal) => (
                       <button
                         type="button"
                         onClick={() => addToSalesKit(item)}
@@ -2058,7 +2099,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     setTimeout(() => setSaveMessage(null), 2000);
                                   }}
                                   className={`p-2 rounded-lg transition-colors ${
-                                    salesKitItems.find(i => i.id === "gallery-images")
+                                    isInKit("gallery-images")
                                       ? "bg-green-500 text-white"
                                       : "bg-purple-100 hover:bg-purple-200 text-purple-700"
                                   }`}
@@ -2146,7 +2187,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                 setTimeout(() => setSaveMessage(null), 2000);
                               }}
                               className={`p-2 rounded-lg transition-colors ${
-                                salesKitItems.find(i => i.id === "product-banners")
+                                isInKit("product-banners")
                                   ? "bg-green-500 text-white"
                                   : "bg-cyan-100 hover:bg-cyan-200 text-cyan-700"
                               }`}
@@ -2327,7 +2368,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   ].filter(Boolean).join("\n")
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "social-images")
+                                  isInKit("social-images")
                                     ? "bg-green-500 text-white"
                                     : "bg-pink-100 hover:bg-pink-200 text-pink-700"
                                 }`}
@@ -2579,7 +2620,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     ].filter(Boolean).join("\n\n")
                                   }); }}
                                   className={`p-2 rounded-lg transition-colors ${
-                                    salesKitItems.find(i => i.id === "download-materials")
+                                    isInKit("download-materials")
                                       ? "bg-green-500 text-white"
                                       : "bg-blue-100 hover:bg-blue-200 text-blue-700"
                                   }`}
@@ -2721,7 +2762,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     });
                                   }}
                                   className={`p-2 rounded-lg transition-colors ${
-                                    salesKitItems.find(i => i.id === "product-video")
+                                    isInKit("product-video")
                                       ? "bg-green-500 text-white"
                                       : "bg-red-100 hover:bg-red-200 text-red-700"
                                   }`}
@@ -2862,7 +2903,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     });
                                   }}
                                   className={`p-2 rounded-lg transition-colors ${
-                                    salesKitItems.find(i => i.id === "product-presentation")
+                                    isInKit("product-presentation")
                                       ? "bg-green-500 text-white"
                                       : "bg-green-100 hover:bg-green-200 text-green-700"
                                   }`}
@@ -3107,7 +3148,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                     content: `${item.title}\n${item.url}`
                                   })}
                                   className={`p-1.5 rounded transition-colors opacity-0 group-hover:opacity-100 ${
-                                    salesKitItems.find(i => i.id === `article-${index}`)
+                                    isInKit(`article-${index}`)
                                       ? "bg-green-500 text-white opacity-100"
                                       : "bg-blue-100 hover:bg-blue-200 text-blue-700"
                                   }`}
@@ -3389,7 +3430,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   content: product.mainBenefits || ""
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "mainBenefits")
+                                  isInKit("mainBenefits")
                                     ? "bg-green-500 text-white"
                                     : "bg-amber-100 hover:bg-amber-200 text-amber-700"
                                 }`}
@@ -3486,7 +3527,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   content: product.herbComposition || ""
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "herbComposition")
+                                  isInKit("herbComposition")
                                     ? "bg-green-500 text-white"
                                     : "bg-lime-100 hover:bg-lime-200 text-lime-700"
                                 }`}
@@ -3583,7 +3624,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   content: seasonalOpportunitiesText
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "salesForecast")
+                                  isInKit("salesForecast")
                                     ? "bg-green-500 text-white"
                                     : "bg-purple-100 hover:bg-purple-200 text-purple-700"
                                 }`}
@@ -3683,7 +3724,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   content: product.faqText || ""
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "faq-text")
+                                  isInKit("faq-text")
                                     ? "bg-green-500 text-white"
                                     : "bg-amber-100 hover:bg-amber-200 text-amber-700"
                                 }`}
@@ -3780,7 +3821,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   content: product.targetAudience || ""
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "target-audience")
+                                  isInKit("target-audience")
                                     ? "bg-green-500 text-white"
                                     : "bg-blue-100 hover:bg-blue-200 text-blue-700"
                                 }`}
@@ -3876,7 +3917,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                                   content: product.sensoryProfile || ""
                                 })}
                                 className={`p-2 rounded-lg transition-colors ${
-                                  salesKitItems.find(i => i.id === "sensory-profile")
+                                  isInKit("sensory-profile")
                                     ? "bg-green-500 text-white"
                                     : "bg-purple-100 hover:bg-purple-200 text-purple-700"
                                 }`}
@@ -5090,42 +5131,74 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               <span>🎒</span>
               <span className="font-semibold">Sales Kit</span>
               {salesKitItems.length > 0 && (
-                <span className="bg-white/20 text-xs px-2 py-0.5 rounded-full">{salesKitItems.length}</span>
+                <span className="bg-white/20 text-xs px-2 py-0.5 rounded-full">
+                  {salesKitGroups.length} {salesKitGroups.length === 1 ? "produkt" : "produkty"} · {salesKitItems.length}
+                </span>
               )}
             </div>
-            <button onClick={() => setShowSalesKit(false)} className="hover:bg-white/20 rounded p-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-1">
+              {salesKitItems.length > 0 && (
+                <button
+                  onClick={clearSalesKit}
+                  className="hover:bg-white/20 rounded px-2 py-1 text-xs"
+                  title="Vymazat celý Sales Kit"
+                >
+                  Vymazat vše
+                </button>
+              )}
+              <button onClick={() => setShowSalesKit(false)} className="hover:bg-white/20 rounded p-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
           </div>
-          
-          <div className="max-h-64 overflow-y-auto">
+
+          <div className="max-h-80 overflow-y-auto">
             {salesKitItems.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground text-sm">
-                <p>Klikněte na <span className="inline-flex items-center justify-center w-5 h-5 bg-primary text-primary-foreground rounded text-xs font-bold">+</span> u položky pro přidání do kitu</p>
+                <p>Klikněte na <span className="inline-flex items-center justify-center w-5 h-5 bg-primary text-primary-foreground rounded text-xs font-bold">+</span> u položky pro přidání do kitu. Můžete přidávat položky z více produktů.</p>
               </div>
             ) : (
-              <div className="p-2 space-y-1">
-                {salesKitItems.map(item => (
-                  <div key={item.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg group">
-                    <span className="text-xs">{
-                      item.type === "claim" ? "💬" :
-                      item.type === "reference" ? "📋" :
-                      item.type === "gallery" ? "🖼️" :
-                      item.type === "social" ? "📢" :
-                      item.type === "materials" ? "📥" :
-                      "📄"
-                    }</span>
-                    <span className="flex-1 text-sm truncate">{item.label}</span>
-                    <button 
-                      onClick={() => removeFromSalesKit(item.id)}
-                      className="opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-100 rounded p-1 transition-opacity"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+              <div className="p-2 space-y-3">
+                {salesKitGroups.map(group => (
+                  <div key={group.productId} className="space-y-1">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="flex-1 text-xs font-semibold text-muted-foreground truncate">
+                        {group.productName}
+                        {group.productExternalId ? ` · ${group.productExternalId}` : ""}
+                      </span>
+                      <button
+                        onClick={() => removeProductFromSalesKit(group.productId)}
+                        className="text-red-500 hover:bg-red-100 rounded p-0.5"
+                        title="Odebrat tento produkt z kitu"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    {group.items.map(item => (
+                      <div key={item.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg group">
+                        <span className="text-xs">{
+                          item.type === "claim" ? "💬" :
+                          item.type === "reference" ? "📋" :
+                          item.type === "gallery" ? "🖼️" :
+                          item.type === "social" ? "📢" :
+                          item.type === "materials" ? "📥" :
+                          "📄"
+                        }</span>
+                        <span className="flex-1 text-sm truncate">{item.label}</span>
+                        <button
+                          onClick={() => removeFromSalesKit(item.id)}
+                          className="opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-100 rounded p-1 transition-opacity"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -5215,22 +5288,32 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                 </p>
               )}
             </div>
-            <div className="bg-muted/50 rounded-lg p-3">
+            <div className="bg-muted/50 rounded-lg p-3 max-h-64 overflow-y-auto">
               <p className="text-sm text-muted-foreground mb-2">Obsah Sales Kitu:</p>
-              <ul className="text-sm space-y-1">
-                {salesKitItems.map((item) => (
-                  <li key={item.id} className="flex items-center gap-2">
-                    <span className="text-xs">
-                      {item.type === "claim" ? "💬" :
-                       item.type === "reference" ? "📋" :
-                       item.type === "gallery" ? "🖼️" :
-                       item.type === "social" ? "📢" :
-                       item.type === "materials" ? "📥" : "📄"}
-                    </span>
-                    {item.label}
-                  </li>
+              <div className="space-y-2">
+                {salesKitGroups.map((group) => (
+                  <div key={group.productId}>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">
+                      {group.productName}
+                      {group.productExternalId ? ` · ${group.productExternalId}` : ""}
+                    </p>
+                    <ul className="text-sm space-y-1 pl-2">
+                      {group.items.map((item) => (
+                        <li key={item.id} className="flex items-center gap-2">
+                          <span className="text-xs">
+                            {item.type === "claim" ? "💬" :
+                             item.type === "reference" ? "📋" :
+                             item.type === "gallery" ? "🖼️" :
+                             item.type === "social" ? "📢" :
+                             item.type === "materials" ? "📥" : "📄"}
+                          </span>
+                          {item.label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
             <div className="flex gap-2">
               <button
