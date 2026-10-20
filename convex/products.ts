@@ -745,6 +745,10 @@ export const bulkUpdate = mutation({
     pdfUrl: v.optional(v.string()),
     pdfStorageId: v.optional(v.id("_storage")),
     presentationUrl: v.optional(v.string()),
+    articleUrls: v.optional(v.array(v.object({
+      title: v.string(),
+      url: v.string(),
+    }))),
     // Prodejní data
     mainBenefits: v.optional(v.string()),
     herbComposition: v.optional(v.string()),
