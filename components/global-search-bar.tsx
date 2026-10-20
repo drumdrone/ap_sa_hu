@@ -1,12 +1,66 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAccess } from "@/components/access-context";
 
 const STORAGE_KEY = "globalProductSearchValue";
+
+// Markdown-style link syntax inside a ticker item: [text](url)
+const TICKER_LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+
+// Render one ticker item, turning [text](url) into clickable links and
+// leaving the rest as plain text. Raw HTML is intentionally NOT supported
+// (avoids XSS); editors use the simple [text](url) syntax instead.
+function renderTickerItem(item: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const re = new RegExp(TICKER_LINK_RE.source, "g");
+  let lastIndex = 0;
+  let linkIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(item)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(item.slice(lastIndex, match.index));
+    }
+    const [, text, url] = match;
+    const href = /^(https?:\/\/|mailto:|\/)/i.test(url) ? url : `https://${url}`;
+    nodes.push(
+      <a
+        key={`${keyPrefix}-l${linkIndex}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline decoration-dotted underline-offset-2 text-amber-800 hover:text-amber-900"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {text}
+      </a>,
+    );
+    lastIndex = match.index + match[0].length;
+    linkIndex++;
+  }
+  if (lastIndex < item.length) {
+    nodes.push(item.slice(lastIndex));
+  }
+  return nodes;
+}
+
+// Build the scrolling content: items separated by a bullet, links clickable.
+function renderTickerContent(items: string[], keyPrefix: string): ReactNode {
+  return items.map((item, idx) => (
+    <span key={`${keyPrefix}-${idx}`}>
+      {idx > 0 && <span className="px-3 text-muted-foreground">•</span>}
+      {renderTickerItem(item, `${keyPrefix}-${idx}`)}
+    </span>
+  ));
+}
+
+// Plain-text version (links collapsed to their text) for aria-label.
+function tickerPlainText(items: string[]): string {
+  return items.map((s) => s.replace(TICKER_LINK_RE, "$1")).join("   •   ");
+}
 
 export function GlobalSearchBar() {
   const router = useRouter();
@@ -56,13 +110,11 @@ export function GlobalSearchBar() {
   }, [tickerText]);
 
   const [tickerPlaying, setTickerPlaying] = useState(true);
+  const [tickerHover, setTickerHover] = useState(false);
   const [tickerEditOpen, setTickerEditOpen] = useState(false);
   const [tickerDraft, setTickerDraft] = useState("");
 
-  const tickerLine = useMemo(() => {
-    if (!tickerItems.length) return "";
-    return tickerItems.join("   •   ");
-  }, [tickerItems]);
+  const tickerPlain = useMemo(() => tickerPlainText(tickerItems), [tickerItems]);
 
   // Persist current value so it stays visible on detail pages too
   useEffect(() => {
@@ -183,17 +235,21 @@ export function GlobalSearchBar() {
                 <span className="px-2 py-1 rounded-full bg-amber-100 border border-amber-200">NEWS</span>
               </div>
               <div className="flex-1 min-w-0">
-                {tickerLine ? (
-                  <div className="relative overflow-hidden">
+                {tickerItems.length ? (
+                  <div
+                    className="relative overflow-hidden"
+                    onMouseEnter={() => setTickerHover(true)}
+                    onMouseLeave={() => setTickerHover(false)}
+                  >
                     <div
                       className={`apsa-marquee text-sm text-foreground whitespace-nowrap ${
-                        tickerPlaying ? "" : "apsa-marquee--paused"
+                        tickerPlaying && !tickerHover ? "" : "apsa-marquee--paused"
                       }`}
-                      aria-label={tickerLine}
+                      aria-label={tickerPlain}
                     >
                       <div className="flex items-center">
-                        <span className="pr-10">{tickerLine}</span>
-                        <span className="pr-10">{tickerLine}</span>
+                        <span className="pr-10">{renderTickerContent(tickerItems, "a")}</span>
+                        <span className="pr-10" aria-hidden="true">{renderTickerContent(tickerItems, "b")}</span>
                       </div>
                     </div>
                   </div>
@@ -231,6 +287,9 @@ export function GlobalSearchBar() {
                       onChange={(e) => setTickerDraft(e.target.value)}
                       className="w-full min-h-[90px] rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300/70 focus:border-amber-600"
                     />
+                    <div className="text-xs text-muted-foreground mt-2">
+                      Klikatelný odkaz: <code className="px-1 rounded bg-muted">[text odkazu](https://example.cz)</code> — najetím myší se ticker pozastaví.
+                    </div>
                   </div>
                   <button
                     type="button"
