@@ -38,6 +38,7 @@ const BULK_SECTIONS = [
   // Materiály
   { id: "pdfUrl", label: "Produktový list (PDF)", description: "URL na PDF produktový list", icon: "📄" },
   { id: "presentationUrl", label: "Prezentace (Google Slides)", description: "Sdílený odkaz na prezentaci z Google Slides", icon: "📊" },
+  { id: "articleUrls", label: "Články", description: "Odkazy na články (název + URL) – nahradí stávající články", icon: "📰" },
 
   // Prodejní data
   { id: "mainBenefits", label: "3 hlavní benefity", description: "Klíčové prodejní argumenty", icon: "✨" },
@@ -85,7 +86,13 @@ export default function BulkEditContent() {
     salesForecast: "",
     seasonalOpportunities: "",
     sensoryProfile: "",
+    articleUrls: "", // not used directly - articles are edited via `editingArticles`
   });
+
+  // Articles editor state - articles are {title, url} pairs, not a plain string
+  const [editingArticles, setEditingArticles] = useState<{ title: string; url: string }[]>([
+    { title: "", url: "" },
+  ]);
   
   // Saving state
   const [isSaving, setIsSaving] = useState(false);
@@ -137,8 +144,16 @@ export default function BulkEditContent() {
     
     const value = sectionValues[activeSection];
     const isPdfSection = activeSection === "pdfUrl";
+    const isArticlesSection = activeSection === "articleUrls";
     const hasPdfUpload = !!uploadedPdfStorageId;
-    if (!isPdfSection && !value.trim()) {
+
+    // Articles need at least one complete entry (title + url)
+    const validArticles = editingArticles.filter(a => a.title.trim() && a.url.trim());
+    if (isArticlesSection && validArticles.length === 0) {
+      alert("Přidejte alespoň jeden článek s názvem i URL");
+      return;
+    }
+    if (!isPdfSection && !isArticlesSection && !value.trim()) {
       alert("Vyplňte obsah pro vybranou sekci");
       return;
     }
@@ -146,22 +161,27 @@ export default function BulkEditContent() {
       alert("Nahrajte PDF soubor nebo zadejte URL");
       return;
     }
-    
+
     setIsSaving(true);
     setSaveProgress({ current: 0, total: selectedProducts.size });
     setSaveResult(null);
-    
+
     try {
-      // Handle hashtags specially - convert comma-separated string to array
-      let updateValue: string | string[] = value;
-      if (activeSection === "hashtags") {
-        updateValue = value.split(/[,\s]+/).map(tag => tag.replace(/^#/, "").trim()).filter(Boolean);
-      }
-      
       const payload: Record<string, unknown> = {
         productIds: Array.from(selectedProducts),
-        [activeSection]: updateValue,
       };
+
+      if (isArticlesSection) {
+        // Articles are an array of {title, url} objects
+        payload.articleUrls = validArticles.map(a => ({ title: a.title.trim(), url: a.url.trim() }));
+      } else {
+        // Handle hashtags specially - convert comma-separated string to array
+        let updateValue: string | string[] = value;
+        if (activeSection === "hashtags") {
+          updateValue = value.split(/[,\s]+/).map(tag => tag.replace(/^#/, "").trim()).filter(Boolean);
+        }
+        payload[activeSection] = updateValue;
+      }
 
       if (activeSection === "pdfUrl" && uploadedPdfStorageId) {
         payload.pdfStorageId = uploadedPdfStorageId as Id<"_storage">;
@@ -178,6 +198,9 @@ export default function BulkEditContent() {
         if (activeSection === "pdfUrl") {
           setUploadedPdfName(null);
           setUploadedPdfStorageId(null);
+        }
+        if (activeSection === "articleUrls") {
+          setEditingArticles([{ title: "", url: "" }]);
         }
       }
     } catch (error) {
@@ -434,6 +457,64 @@ export default function BulkEditContent() {
                       </div>
                     </div>
                   </div>
+                ) : activeSection === "articleUrls" ? (
+                  <div className="space-y-3">
+                    <div className="space-y-3">
+                      {editingArticles.map((item, index) => (
+                        <div key={index} className="bg-muted/20 p-3 rounded-lg border border-border space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="text"
+                              value={item.title}
+                              onChange={(e) => {
+                                const next = [...editingArticles];
+                                next[index] = { ...next[index], title: e.target.value };
+                                setEditingArticles(next);
+                              }}
+                              placeholder="Název článku..."
+                              className="flex-1 text-sm"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setEditingArticles(
+                                  editingArticles.length > 1
+                                    ? editingArticles.filter((_, i) => i !== index)
+                                    : [{ title: "", url: "" }]
+                                )
+                              }
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              title="Odebrat článek"
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                          <Input
+                            type="url"
+                            value={item.url}
+                            onChange={(e) => {
+                              const next = [...editingArticles];
+                              next[index] = { ...next[index], url: e.target.value };
+                              setEditingArticles(next);
+                            }}
+                            placeholder="https://..."
+                            className="font-mono text-sm text-blue-600"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingArticles([...editingArticles, { title: "", url: "" }])}
+                    >
+                      + Přidat článek
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Zadané články nahradí stávající seznam článků u všech vybraných produktů.
+                    </p>
+                  </div>
                 ) : activeSection === "hashtags" ? (
                   <div className="space-y-2">
                     <Input
@@ -479,6 +560,8 @@ export default function BulkEditContent() {
                   selectedProducts.size === 0 ||
                   (activeSection === "pdfUrl"
                     ? (!uploadedPdfStorageId && !sectionValues[activeSection].trim())
+                    : activeSection === "articleUrls"
+                    ? editingArticles.filter((a) => a.title.trim() && a.url.trim()).length === 0
                     : !sectionValues[activeSection].trim())
                 }
                 className="w-full"
