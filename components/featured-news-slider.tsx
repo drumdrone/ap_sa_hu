@@ -22,24 +22,27 @@ const formatSlideDate = (ts: number) =>
 
 export function FeaturedNewsSlider() {
   const slides = useQuery(api.featuredSlides.list, { limit: 20 });
-  const [api, setApi] = useState<CarouselApi | null>(null);
+  // IMPORTANT: do NOT name this `api` – it would shadow the imported
+  // Convex `api` above and the useQuery call would throw a TDZ ReferenceError
+  // (silently swallowed by the surrounding ClientErrorBoundary).
+  const [emblaApi, setEmblaApi] = useState<CarouselApi | null>(null);
 
   // Simple autoplay: advance every 5s, pause on user interaction.
   useEffect(() => {
-    if (!api || !slides || slides.length < 2) return;
+    if (!emblaApi || !slides || slides.length < 2) return;
     let paused = false;
     const handlePointer = () => {
       paused = true;
     };
-    api.on("pointerDown", handlePointer);
+    emblaApi.on("pointerDown", handlePointer);
     const id = window.setInterval(() => {
-      if (!paused) api.scrollNext();
+      if (!paused) emblaApi.scrollNext();
     }, 5000);
     return () => {
       window.clearInterval(id);
-      api.off("pointerDown", handlePointer);
+      emblaApi.off("pointerDown", handlePointer);
     };
-  }, [api, slides]);
+  }, [emblaApi, slides]);
 
   if (!slides || slides.length === 0) return null;
 
@@ -47,7 +50,7 @@ export function FeaturedNewsSlider() {
     <div className="mb-6">
       <Carousel
         opts={{ align: "start", loop: slides.length > 1 }}
-        setApi={setApi}
+        setApi={setEmblaApi}
         className="w-full"
       >
         <CarouselContent className="-ml-3">
