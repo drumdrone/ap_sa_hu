@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductImageSlider } from "@/components/product-image-slider";
+import { ProductFeaturedSlides } from "@/components/product-featured-slides";
 import { useAccess } from "@/components/access-context";
 import { NeuronLoader } from "@/components/ui/neuron-loader";
 import { useSalesKit } from "@/hooks/use-sales-kit";
@@ -3309,6 +3310,11 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                       </div>
                     </div>
 
+                    )}
+
+                    {/* Featured News Slider – assign a slide to the dashboard hero */}
+                    {canEdit && (
+                      <ProductFeaturedSlides productId={productId} productName={product.name} productImage={product.image} />
                     )}
 
                     {/* Last Uploaded Images */}

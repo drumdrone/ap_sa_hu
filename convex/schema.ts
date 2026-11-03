@@ -389,6 +389,20 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_updatedAt", ["updatedAt"]),
 
+  // Featured news slides shown in the dashboard hero slider.
+  // Each slide is assigned from a product detail page: photo + title + date,
+  // with a fixed "Novinka" badge in the UI. Sorted by date descending.
+  featuredSlides: defineTable({
+    productId: v.id("products"),
+    title: v.string(),
+    imageStorageId: v.optional(v.id("_storage")), // uploaded image
+    imageUrl: v.optional(v.string()),             // fallback to external URL
+    date: v.number(),                             // user-picked date (timestamp)
+    createdAt: v.number(),
+  })
+    .index("by_product", ["productId"])
+    .index("by_date", ["date"]),
+
   // Editors - people who can be tagged as authors of marketing data edits
   editors: defineTable({
     name: v.string(),
