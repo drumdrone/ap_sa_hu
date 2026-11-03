@@ -746,8 +746,11 @@ export function DashboardPageContent() {
             <FeaturedNewsSlider />
           </ClientErrorBoundary>
 
-          {/* News + Last images (50/50 layout) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* News + Last images (50/50 layout) – hidden per user request */}
+          <div
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"
+            style={{ display: "none" }}
+          >
             {/* News Tabs Panel */}
             <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
               <div className="p-5 border-b border-border flex items-center justify-between">
