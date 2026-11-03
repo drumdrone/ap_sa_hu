@@ -27,20 +27,21 @@ export function FeaturedNewsSlider() {
   // (silently swallowed by the surrounding ClientErrorBoundary).
   const [emblaApi, setEmblaApi] = useState<CarouselApi | null>(null);
 
-  // Simple autoplay: advance every 5s, pause on user interaction.
+  // Autoplay: advance every 5s, pause briefly on interaction then resume
+  // so the carousel keeps rotating indefinitely.
   useEffect(() => {
     if (!emblaApi || !slides || slides.length < 2) return;
-    let paused = false;
-    const handlePointer = () => {
-      paused = true;
+    let pausedUntil = 0;
+    const bump = () => {
+      pausedUntil = Date.now() + 3000;
     };
-    emblaApi.on("pointerDown", handlePointer);
+    emblaApi.on("pointerDown", bump);
     const id = window.setInterval(() => {
-      if (!paused) emblaApi.scrollNext();
+      if (Date.now() >= pausedUntil) emblaApi.scrollNext();
     }, 5000);
     return () => {
       window.clearInterval(id);
-      emblaApi.off("pointerDown", handlePointer);
+      emblaApi.off("pointerDown", bump);
     };
   }, [emblaApi, slides]);
 
@@ -49,7 +50,7 @@ export function FeaturedNewsSlider() {
   return (
     <div className="mb-6">
       <Carousel
-        opts={{ align: "start", loop: slides.length > 1 }}
+        opts={{ align: "start", loop: true, skipSnaps: false }}
         setApi={setEmblaApi}
         className="w-full"
       >
@@ -96,8 +97,12 @@ export function FeaturedNewsSlider() {
         </CarouselContent>
         {slides.length > 1 && (
           <>
-            <CarouselPrevious className="left-2 bg-white/90 border-border" />
-            <CarouselNext className="right-2 bg-white/90 border-border" />
+            <CarouselPrevious
+              className="left-2 sm:left-3 h-10 w-10 bg-primary text-white border-primary shadow-lg hover:bg-primary/90 hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50"
+            />
+            <CarouselNext
+              className="right-2 sm:right-3 h-10 w-10 bg-primary text-white border-primary shadow-lg hover:bg-primary/90 hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50"
+            />
           </>
         )}
       </Carousel>
