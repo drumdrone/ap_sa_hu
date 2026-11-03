@@ -15,6 +15,7 @@ import { Id, Doc } from "@/convex/_generated/dataModel";
 import { useAccess } from "@/components/access-context";
 import { NeuronLoader } from "@/components/ui/neuron-loader";
 import { FeaturedNewsSlider } from "@/components/featured-news-slider";
+import { ClientErrorBoundary } from "@/components/client-error-boundary";
 
 // Business Opportunities data
 const businessOpportunities = [
@@ -738,8 +739,12 @@ export function DashboardPageContent() {
           </div>
         ) : (
           <>
-          {/* Hero slider – featured news assigned from product detail pages */}
-          <FeaturedNewsSlider />
+          {/* Hero slider – featured news assigned from product detail pages.
+              Wrapped in an error boundary so a backend that hasn't deployed
+              the featuredSlides functions yet does not take down the dashboard. */}
+          <ClientErrorBoundary>
+            <FeaturedNewsSlider />
+          </ClientErrorBoundary>
 
           {/* News + Last images (50/50 layout) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

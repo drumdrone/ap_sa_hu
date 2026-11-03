@@ -19,6 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductImageSlider } from "@/components/product-image-slider";
 import { ProductFeaturedSlides } from "@/components/product-featured-slides";
+import { ClientErrorBoundary } from "@/components/client-error-boundary";
 import { useAccess } from "@/components/access-context";
 import { NeuronLoader } from "@/components/ui/neuron-loader";
 import { useSalesKit } from "@/hooks/use-sales-kit";
@@ -3312,9 +3313,13 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
 
                     )}
 
-                    {/* Featured News Slider – assign a slide to the dashboard hero */}
+                    {/* Featured News Slider – assign a slide to the dashboard hero.
+                        Boundary keeps the detail page working if the backend
+                        functions have not been deployed to this Convex yet. */}
                     {canEdit && (
-                      <ProductFeaturedSlides productId={productId} productName={product.name} productImage={product.image} />
+                      <ClientErrorBoundary>
+                        <ProductFeaturedSlides productId={productId} productName={product.name} productImage={product.image} />
+                      </ClientErrorBoundary>
                     )}
 
                     {/* Last Uploaded Images */}
