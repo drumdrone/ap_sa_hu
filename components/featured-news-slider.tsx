@@ -84,11 +84,11 @@ export function FeaturedNewsSlider() {
                       </span>
                     </div>
                   </div>
-                  <div className="w-1/2 bg-card p-4 sm:p-5 flex flex-col justify-center">
-                    <h3 className="text-foreground font-bold text-lg sm:text-xl lg:text-2xl leading-tight line-clamp-4">
-                      {slide.title}
+                  <div className="w-1/2 bg-card p-3 sm:p-4 flex flex-col justify-center">
+                    <h3 className="text-foreground font-bold text-sm sm:text-base leading-snug">
+                      {slide.title.replace(/^\s*Novinka\s*:\s*/i, "")}
                     </h3>
-                    <p className="text-muted-foreground text-xs sm:text-sm mt-2">
+                    <p className="text-muted-foreground text-xs mt-2">
                       {formatSlideDate(slide.date)}
                     </p>
                   </div>
