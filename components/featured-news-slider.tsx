@@ -52,7 +52,7 @@ export function FeaturedNewsSlider() {
       <Carousel
         opts={{ align: "start", loop: true, skipSnaps: false }}
         setApi={setEmblaApi}
-        className="w-full"
+        className="w-full pt-12"
       >
         <CarouselContent className="-ml-3">
           {slides.map((slide) => (
@@ -110,10 +110,10 @@ export function FeaturedNewsSlider() {
         {slides.length > 1 && (
           <>
             <CarouselPrevious
-              className="left-2 sm:left-3 h-10 w-10 bg-primary text-white border-primary shadow-lg hover:bg-primary/90 hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50"
+              className="left-auto right-12 top-0 translate-y-0 h-10 w-10 bg-primary text-white border-primary shadow-lg hover:bg-primary/90 hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50"
             />
             <CarouselNext
-              className="right-2 sm:right-3 h-10 w-10 bg-primary text-white border-primary shadow-lg hover:bg-primary/90 hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50"
+              className="right-0 top-0 translate-y-0 h-10 w-10 bg-primary text-white border-primary shadow-lg hover:bg-primary/90 hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50"
             />
           </>
         )}
