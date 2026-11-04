@@ -64,29 +64,31 @@ export function FeaturedNewsSlider() {
                 href={`/product/${slide.productId}`}
                 className="group block relative overflow-hidden rounded-2xl bg-card border border-border shadow-sm hover:shadow-md transition-shadow"
               >
-                <div className="relative aspect-[16/9] bg-muted overflow-hidden">
-                  {slide.imageResolvedUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={slide.imageResolvedUrl}
-                      alt={slide.title}
-                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-5xl">
-                      📰
+                <div className="relative aspect-[16/9] flex">
+                  <div className="relative w-1/2 bg-white overflow-hidden flex items-center justify-center p-3">
+                    {slide.imageResolvedUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={slide.imageResolvedUrl}
+                        alt={slide.title}
+                        className="w-full h-full object-contain group-hover:scale-[1.03] transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-5xl">
+                        📰
+                      </div>
+                    )}
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-full bg-primary text-white text-xs font-bold shadow-sm uppercase tracking-wide">
+                        Novinka
+                      </span>
                     </div>
-                  )}
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
-                    <span className="px-3 py-1 rounded-full bg-primary text-white text-xs font-bold shadow-sm uppercase tracking-wide">
-                      Novinka
-                    </span>
                   </div>
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-4">
-                    <h3 className="text-white font-semibold text-base sm:text-lg leading-tight line-clamp-2 drop-shadow">
+                  <div className="w-1/2 bg-card p-4 sm:p-5 flex flex-col justify-center">
+                    <h3 className="text-foreground font-bold text-lg sm:text-xl lg:text-2xl leading-tight line-clamp-4">
                       {slide.title}
                     </h3>
-                    <p className="text-white/80 text-xs mt-1">
+                    <p className="text-muted-foreground text-xs sm:text-sm mt-2">
                       {formatSlideDate(slide.date)}
                     </p>
                   </div>
