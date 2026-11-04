@@ -45,6 +45,7 @@ export function ProductFeaturedSlides({
   const removeSlide = useMutation(api.featuredSlides.remove);
   const generateUploadUrl = useMutation(api.featuredSlides.generateUploadUrl);
 
+  type Badge = "novinka" | "redesign";
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState<Date>(new Date());
@@ -52,13 +53,17 @@ export function ProductFeaturedSlides({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [badge, setBadge] = useState<Badge>("novinka");
 
   const resetForm = () => {
     setTitle("");
     setDate(new Date());
     setImageFile(null);
     setImagePreview(null);
+    setBadge("novinka");
   };
+
+  const badgeLabel = (b: Badge) => (b === "redesign" ? "Redesign" : "Novinka");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -98,6 +103,7 @@ export function ProductFeaturedSlides({
         date: date.getTime(),
         imageStorageId,
         imageUrl: !imageStorageId ? productImage : undefined,
+        badge,
       });
 
       resetForm();
@@ -134,7 +140,7 @@ export function ProductFeaturedSlides({
         <Button
           onClick={() => {
             resetForm();
-            setTitle(`Novinka: ${productName}`);
+            setTitle(productName);
             setOpen(true);
           }}
           size="sm"
@@ -166,9 +172,22 @@ export function ProductFeaturedSlides({
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {slide.title}
-                </p>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-white ${
+                      (slide.badge ?? "novinka") === "redesign"
+                        ? "bg-orange-500"
+                        : "bg-blue-500"
+                    }`}
+                  >
+                    {(slide.badge ?? "novinka") === "redesign"
+                      ? "Redesign"
+                      : "Novinka"}
+                  </span>
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {slide.title}
+                  </p>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {formatDate(slide.date)}
                 </p>
@@ -192,14 +211,43 @@ export function ProductFeaturedSlides({
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="slide-title">Název novinky</Label>
+              <Label>Stav</Label>
+              <div className="mt-1 flex gap-2">
+                {(["novinka", "redesign"] as const).map((b) => {
+                  const active = badge === b;
+                  const activeColor =
+                    b === "redesign" ? "bg-orange-500" : "bg-blue-500";
+                  return (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setBadge(b)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide border transition-colors ${
+                        active
+                          ? `${activeColor} text-white border-transparent`
+                          : "bg-white text-foreground border-input hover:bg-muted"
+                      }`}
+                    >
+                      {badgeLabel(b)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="slide-title">Název produktu</Label>
               <Input
                 id="slide-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="např. Nová příchuť čaje Harmonie"
+                placeholder="např. Harmonie – nová příchuť"
                 className="mt-1"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Prefix „{badgeLabel(badge)}: " není potřeba – zobrazí se jako
+                badge na kartě.
+              </p>
             </div>
 
             <div>
