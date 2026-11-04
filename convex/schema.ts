@@ -398,6 +398,8 @@ export default defineSchema({
     imageStorageId: v.optional(v.id("_storage")), // uploaded image
     imageUrl: v.optional(v.string()),             // fallback to external URL
     date: v.number(),                             // user-picked date (timestamp)
+    // Badge zobrazený na kartě. "novinka" = modrý (default), "redesign" = oranžový.
+    badge: v.optional(v.union(v.literal("novinka"), v.literal("redesign"))),
     createdAt: v.number(),
   })
     .index("by_product", ["productId"])

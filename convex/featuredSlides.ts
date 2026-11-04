@@ -60,6 +60,8 @@ export const generateUploadUrl = mutation({
   },
 });
 
+const badgeValidator = v.union(v.literal("novinka"), v.literal("redesign"));
+
 export const create = mutation({
   args: {
     productId: v.id("products"),
@@ -67,6 +69,7 @@ export const create = mutation({
     date: v.number(),
     imageStorageId: v.optional(v.id("_storage")),
     imageUrl: v.optional(v.string()),
+    badge: v.optional(badgeValidator),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("featuredSlides", {
@@ -75,6 +78,7 @@ export const create = mutation({
       date: args.date,
       imageStorageId: args.imageStorageId,
       imageUrl: args.imageUrl,
+      badge: args.badge ?? "novinka",
       createdAt: Date.now(),
     });
   },
@@ -87,6 +91,7 @@ export const update = mutation({
     date: v.optional(v.number()),
     imageStorageId: v.optional(v.id("_storage")),
     imageUrl: v.optional(v.string()),
+    badge: v.optional(badgeValidator),
     removeImage: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {

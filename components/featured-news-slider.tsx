@@ -79,14 +79,24 @@ export function FeaturedNewsSlider() {
                       </div>
                     )}
                     <div className="absolute top-3 left-3 flex items-center gap-2">
-                      <span className="px-3 py-1 rounded-full bg-primary text-white text-xs font-bold shadow-sm uppercase tracking-wide">
-                        Novinka
-                      </span>
+                      {(() => {
+                        const badge = slide.badge ?? "novinka";
+                        const isRedesign = badge === "redesign";
+                        return (
+                          <span
+                            className={`px-3 py-1 rounded-full text-white text-xs font-bold shadow-sm uppercase tracking-wide ${
+                              isRedesign ? "bg-orange-500" : "bg-primary"
+                            }`}
+                          >
+                            {isRedesign ? "Redesign" : "Novinka"}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                   <div className="w-1/2 bg-card p-3 sm:p-4 flex flex-col justify-center">
                     <h3 className="text-foreground font-bold text-sm sm:text-base leading-snug">
-                      {slide.title.replace(/^\s*Novinka\s*:\s*/i, "")}
+                      {slide.title.replace(/^\s*(Novinka|Redesign)\s*:\s*/i, "")}
                     </h3>
                     <p className="text-muted-foreground text-xs mt-2">
                       {formatSlideDate(slide.date)}
