@@ -366,6 +366,67 @@ export function DashboardPageContent() {
   const canEdit = role === "editor";
   const productsNeedingAttention = useQuery(api.products.getProductsNeedingAttention);
   const topProducts = useQuery(api.products.getTopProducts);
+  const reorderTopProducts = useMutation(api.products.reorderTopProducts);
+
+  // Local ordering + drag state for Top 20 drag-and-drop (editor only)
+  const [topOrderOverride, setTopOrderOverride] = useState<Id<"products">[] | null>(null);
+  const [draggedTopId, setDraggedTopId] = useState<Id<"products"> | null>(null);
+  const [dragOverTopId, setDragOverTopId] = useState<Id<"products"> | null>(null);
+
+  // Reset local override whenever server data changes
+  useEffect(() => {
+    setTopOrderOverride(null);
+  }, [topProducts]);
+
+  const displayTopProducts = useMemo(() => {
+    if (!topProducts) return topProducts;
+    if (!topOrderOverride) return topProducts;
+    const byId = new Map(topProducts.map((p) => [p._id, p] as const));
+    const ordered = topOrderOverride
+      .map((id) => byId.get(id))
+      .filter((p): p is NonNullable<typeof p> => !!p);
+    // Append any new products not yet in the override
+    for (const p of topProducts) {
+      if (!topOrderOverride.includes(p._id)) ordered.push(p);
+    }
+    return ordered;
+  }, [topProducts, topOrderOverride]);
+
+  const handleTopDrop = async (targetId: Id<"products">) => {
+    if (!draggedTopId || !topProducts) {
+      setDraggedTopId(null);
+      setDragOverTopId(null);
+      return;
+    }
+    if (draggedTopId === targetId) {
+      setDraggedTopId(null);
+      setDragOverTopId(null);
+      return;
+    }
+    const current = displayTopProducts ?? topProducts;
+    const ids = current.map((p) => p._id);
+    const fromIdx = ids.indexOf(draggedTopId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) {
+      setDraggedTopId(null);
+      setDragOverTopId(null);
+      return;
+    }
+    const next = [...ids];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+
+    setTopOrderOverride(next);
+    setDraggedTopId(null);
+    setDragOverTopId(null);
+    try {
+      await reorderTopProducts({ orderedIds: next });
+    } catch (error) {
+      console.error("Reorder failed:", error);
+      setTopOrderOverride(null);
+      alert(error instanceof Error ? error.message : "Nepodařilo se změnit pořadí");
+    }
+  };
   const searchResults = useQuery(api.products.list, {
     search: debouncedSearch || undefined,
   });
@@ -979,7 +1040,7 @@ export function DashboardPageContent() {
           </div>
 
           {/* Top 20 Products */}
-          {topProducts && topProducts.length > 0 && (
+          {displayTopProducts && displayTopProducts.length > 0 && (
             <div className="bg-card rounded-2xl border border-border shadow-sm mb-8 overflow-hidden">
               <div className="p-5 border-b border-border bg-gradient-to-r from-amber-50 to-yellow-50">
                 <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -988,45 +1049,92 @@ export function DashboardPageContent() {
                   </div>
                   Top 20 produktů
                   <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 text-xs ml-2">
-                    {topProducts.length}/20
+                    {displayTopProducts.length}/20
                   </Badge>
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Prioritní produkty pro prodejce
+                  {canEdit
+                    ? "Pořadí změníte přetažením produktu na nové místo."
+                    : "Prioritní produkty pro prodejce"}
                 </p>
               </div>
               <div className="p-4">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-3">
-                  {topProducts.map((product) => (
-                    <Link
-                      key={product._id}
-                      href={`/product/${product._id}`}
-                      className="group relative bg-white rounded-xl border border-border p-3 hover:shadow-lg hover:border-amber-300 transition-all"
-                    >
-                      <div className="absolute -top-2 -left-2 w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md z-10">
-                        {product.topOrder ?? "?"}
-                      </div>
-                      <div className="aspect-square rounded-lg overflow-hidden bg-muted mb-2">
-                        {product.image ? (
-                          <img
-                            src={product.image}
-                            alt={product.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-2xl text-muted-foreground">
-                            🍵
+                  {displayTopProducts.map((product, idx) => {
+                    const displayOrder = idx + 1;
+                    const isDragging = draggedTopId === product._id;
+                    const isDragOver = dragOverTopId === product._id && draggedTopId !== product._id;
+                    return (
+                      <Link
+                        key={product._id}
+                        href={`/product/${product._id}`}
+                        draggable={canEdit}
+                        onDragStart={canEdit ? (e) => {
+                          setDraggedTopId(product._id);
+                          e.dataTransfer.effectAllowed = "move";
+                          // Some browsers require data to be set to initiate drag
+                          try { e.dataTransfer.setData("text/plain", product._id); } catch {}
+                        } : undefined}
+                        onDragEnd={canEdit ? () => {
+                          setDraggedTopId(null);
+                          setDragOverTopId(null);
+                        } : undefined}
+                        onDragOver={canEdit ? (e) => {
+                          if (!draggedTopId) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (dragOverTopId !== product._id) setDragOverTopId(product._id);
+                        } : undefined}
+                        onDragLeave={canEdit ? () => {
+                          if (dragOverTopId === product._id) setDragOverTopId(null);
+                        } : undefined}
+                        onDrop={canEdit ? (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleTopDrop(product._id);
+                        } : undefined}
+                        onClick={canEdit && draggedTopId ? (e) => e.preventDefault() : undefined}
+                        className={`group relative bg-white rounded-xl border p-3 transition-all ${
+                          canEdit ? "cursor-grab active:cursor-grabbing select-none" : ""
+                        } ${
+                          isDragging ? "opacity-40" : ""
+                        } ${
+                          isDragOver
+                            ? "border-amber-500 ring-2 ring-amber-400 scale-[1.02]"
+                            : "border-border hover:shadow-lg hover:border-amber-300"
+                        }`}
+                      >
+                        <div className="absolute -top-2 -left-2 w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md z-10">
+                          {displayOrder}
+                        </div>
+                        {canEdit && (
+                          <div className="absolute top-1 right-1 text-gray-300 group-hover:text-gray-500 text-xs pointer-events-none" title="Přetáhněte pro změnu pořadí">
+                            ⋮⋮
                           </div>
                         )}
-                      </div>
-                      <h3 className="text-sm font-medium text-foreground line-clamp-2 leading-tight">
-                        {product.name}
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {product.price} Kč
-                      </p>
-                    </Link>
-                  ))}
+                        <div className="aspect-square rounded-lg overflow-hidden bg-muted mb-2">
+                          {product.image ? (
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              draggable={false}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform pointer-events-none"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-2xl text-muted-foreground">
+                              🍵
+                            </div>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-medium text-foreground line-clamp-2 leading-tight">
+                          {product.name}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {product.price} Kč
+                        </p>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             </div>

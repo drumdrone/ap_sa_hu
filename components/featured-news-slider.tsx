@@ -5,13 +5,12 @@ import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 import {
   Carousel,
-  CarouselApi,
   CarouselContent,
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 const formatSlideDate = (ts: number) =>
   new Date(ts).toLocaleDateString("cs-CZ", {
@@ -20,42 +19,88 @@ const formatSlideDate = (ts: number) =>
     year: "numeric",
   });
 
+type Badge = "novinka" | "redesign";
+
+const BADGE_LABEL: Record<Badge, string> = {
+  novinka: "Novinka",
+  redesign: "Redesign",
+};
+
+const BADGE_ACTIVE_CLASS: Record<Badge, string> = {
+  novinka: "bg-primary text-white border-primary",
+  redesign: "bg-orange-500 text-white border-orange-500",
+};
+
 export function FeaturedNewsSlider() {
   const slides = useQuery(api.featuredSlides.list, { limit: 20 });
   // IMPORTANT: do NOT name this `api` – it would shadow the imported
   // Convex `api` above and the useQuery call would throw a TDZ ReferenceError
   // (silently swallowed by the surrounding ClientErrorBoundary).
-  const [emblaApi, setEmblaApi] = useState<CarouselApi | null>(null);
 
-  // Autoplay: advance every 5s, pause briefly on interaction then resume
-  // so the carousel keeps rotating indefinitely.
-  useEffect(() => {
-    if (!emblaApi || !slides || slides.length < 2) return;
-    let pausedUntil = 0;
-    const bump = () => {
-      pausedUntil = Date.now() + 3000;
-    };
-    emblaApi.on("pointerDown", bump);
-    const id = window.setInterval(() => {
-      if (Date.now() >= pausedUntil) emblaApi.scrollNext();
-    }, 5000);
-    return () => {
-      window.clearInterval(id);
-      emblaApi.off("pointerDown", bump);
-    };
-  }, [emblaApi, slides]);
+  const [activeBadge, setActiveBadge] = useState<Badge | null>(null);
+
+  // Tags that actually appear in the current slide set — the filter row
+  // hides chips for tags nobody is using.
+  const availableBadges = useMemo<Badge[]>(() => {
+    if (!slides) return [];
+    const present = new Set<Badge>();
+    for (const s of slides) {
+      const b = (s.badge ?? "novinka") as Badge;
+      present.add(b);
+    }
+    // Keep a stable order: novinka first, then redesign
+    return (["novinka", "redesign"] as Badge[]).filter((b) => present.has(b));
+  }, [slides]);
+
+  const filteredSlides = useMemo(() => {
+    if (!slides) return slides;
+    if (!activeBadge) return slides;
+    return slides.filter((s) => (s.badge ?? "novinka") === activeBadge);
+  }, [slides, activeBadge]);
 
   if (!slides || slides.length === 0) return null;
 
   return (
     <div className="mb-6">
       <Carousel
-        opts={{ align: "start", loop: true, skipSnaps: false }}
-        setApi={setEmblaApi}
-        className="w-full pt-12"
+        opts={{ align: "start", loop: false, skipSnaps: false }}
+        className="w-full pt-12 relative"
       >
+        {/* Filter chips — top-left, on the same row as the carousel arrows */}
+        {availableBadges.length > 1 && (
+          <div className="absolute top-0 left-0 right-28 flex flex-wrap items-center gap-2 h-10">
+            <button
+              type="button"
+              onClick={() => setActiveBadge(null)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide border transition-colors ${
+                activeBadge === null
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-background text-muted-foreground border-border hover:border-foreground hover:text-foreground"
+              }`}
+            >
+              Vše
+            </button>
+            {availableBadges.map((badge) => {
+              const isActive = activeBadge === badge;
+              return (
+                <button
+                  key={badge}
+                  type="button"
+                  onClick={() => setActiveBadge(isActive ? null : badge)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide border transition-colors ${
+                    isActive
+                      ? BADGE_ACTIVE_CLASS[badge]
+                      : "bg-background text-muted-foreground border-border hover:border-foreground hover:text-foreground"
+                  }`}
+                >
+                  {BADGE_LABEL[badge]}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <CarouselContent className="-ml-3">
-          {slides.map((slide) => (
+          {(filteredSlides ?? []).map((slide) => (
             <CarouselItem
               key={slide._id}
               className="pl-3 basis-full sm:basis-1/2 lg:basis-1/3"
@@ -107,7 +152,7 @@ export function FeaturedNewsSlider() {
             </CarouselItem>
           ))}
         </CarouselContent>
-        {slides.length > 1 && (
+        {(filteredSlides?.length ?? 0) > 1 && (
           <>
             <CarouselPrevious
               className="left-auto right-12 top-0 translate-y-0 h-10 w-10 bg-primary text-white border-primary shadow-lg hover:bg-primary/90 hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50"

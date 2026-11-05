@@ -487,7 +487,9 @@ export const setTopOrder = mutation({
   },
 });
 
-// Toggle top status for a product (legacy, now use setTopOrder)
+// Toggle top status for a product.
+// When adding, the product is appended at the end of the Top 20 list.
+// Ordering of the list is managed via drag-and-drop on the homepage (see reorderTopProducts).
 export const toggleTopProduct = mutation({
   args: {
     id: v.id("products"),
@@ -497,40 +499,74 @@ export const toggleTopProduct = mutation({
     if (!product) {
       throw new Error("Product not found");
     }
-    
+
     const isCurrentlyTop = product.isTop ?? false;
-    
+
     if (!isCurrentlyTop) {
-      // Check if we already have 20 top products
       const topProducts = await ctx.db
         .query("products")
         .withIndex("by_isTop", (q) => q.eq("isTop", true))
         .collect();
-      
+
       if (topProducts.length >= 20) {
         throw new Error("Již máte 20 produktů v Top 20. Nejdříve odeberte některý produkt.");
       }
-      
-      // Find next available order
-      const usedOrders = new Set(topProducts.map(p => p.topOrder).filter(Boolean));
-      let nextOrder = 1;
-      while (usedOrders.has(nextOrder) && nextOrder <= 20) nextOrder++;
-      
+
+      // Append at the end: next order = current count + 1
+      const nextOrder = topProducts.length + 1;
+
       await ctx.db.patch(args.id, {
         isTop: true,
         topAddedAt: Date.now(),
-        topOrder: nextOrder <= 10 ? nextOrder : undefined,
+        topOrder: nextOrder,
       });
     } else {
+      const removedOrder = product.topOrder;
+
       await ctx.db.patch(args.id, {
         isTop: false,
         topAddedAt: undefined,
         topOrder: undefined,
       });
+
+      // Compact remaining orders so there are no gaps
+      if (removedOrder !== undefined) {
+        const remaining = await ctx.db
+          .query("products")
+          .withIndex("by_isTop", (q) => q.eq("isTop", true))
+          .collect();
+        for (const p of remaining) {
+          if (p.topOrder !== undefined && p.topOrder > removedOrder) {
+            await ctx.db.patch(p._id, { topOrder: p.topOrder - 1 });
+          }
+        }
+      }
     }
-    
+
     console.log(`Product ${args.id} top status toggled to ${!isCurrentlyTop}`);
     return { success: true, isTop: !isCurrentlyTop };
+  },
+});
+
+// Reorder the Top 20 products by specifying the full ordered list of ids.
+// Used by homepage drag-and-drop. Only products already marked isTop are affected.
+export const reorderTopProducts = mutation({
+  args: {
+    orderedIds: v.array(v.id("products")),
+  },
+  handler: async (ctx, args) => {
+    // Validate every id refers to a top product
+    for (let i = 0; i < args.orderedIds.length; i++) {
+      const p = await ctx.db.get(args.orderedIds[i]);
+      if (!p) {
+        throw new Error("Produkt nenalezen");
+      }
+      if (!p.isTop) {
+        throw new Error("Produkt není v Top 20");
+      }
+      await ctx.db.patch(args.orderedIds[i], { topOrder: i + 1 });
+    }
+    return { success: true, count: args.orderedIds.length };
   },
 });
 

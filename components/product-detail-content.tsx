@@ -581,10 +581,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [productId]);
   
-  // Top product mutations
+  // Top product mutation (ordering is managed by drag-and-drop on the homepage)
   const toggleTopProduct = useMutation(api.products.toggleTopProduct);
-  const setTopOrder = useMutation(api.products.setTopOrder);
-  const topProducts = useQuery(api.products.getTopProducts);
 
   // Helper: detect if URL looks like přímý obrázek
   const isImageUrl = (url?: string | null) => {
@@ -1271,88 +1269,40 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
               }`}>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                    <span>{product.isTop ? "⭐" : "☆"}</span> 
+                    <span>{product.isTop ? "⭐" : "☆"}</span>
                     Top 20
-                    {product.topOrder && (
+                    {product.isTop && product.topOrder && (
                       <span className="text-xs bg-amber-400 text-amber-900 px-2 py-0.5 rounded-full font-bold">
                         #{product.topOrder}
                       </span>
                     )}
                   </h2>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await setTopOrder({ id: productId, order: 1 });
-                        setSaveMessage("Produkt je nyní na prvním místě!");
-                        setTimeout(() => setSaveMessage(null), 2000);
-                      } catch (error: unknown) {
-                        const errorMessage = error instanceof Error ? error.message : "Nepodařilo se změnit pozici";
-                        alert(errorMessage);
-                      }
-                    }}
-                    disabled={isSaving || product.topOrder === 1}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                      product.topOrder === 1
-                        ? "bg-amber-500 text-white"
-                        : "bg-amber-500 text-white active:scale-95"
-                    }`}
-                  >
-                    🥇 {product.topOrder === 1 ? "#1" : "Na 1. místo"}
-                  </button>
                 </div>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((pos) => {
-                    const isCurrentPosition = product.topOrder === pos;
-                    const occupiedBy = topProducts?.find(p => p.topOrder === pos && p._id !== productId);
-                    const isOccupied = !!occupiedBy;
-                    
-                    return (
-                      <button
-                        key={pos}
-                        onClick={async () => {
-                          try {
-                            await setTopOrder({ id: productId, order: isCurrentPosition ? null : pos });
-                            if (!isCurrentPosition) {
-                              setSaveMessage(`Pozice ${pos}!`);
-                              setTimeout(() => setSaveMessage(null), 2000);
-                            }
-                          } catch (error: unknown) {
-                            const errorMessage = error instanceof Error ? error.message : "Chyba";
-                            alert(errorMessage);
-                          }
-                        }}
-                        disabled={isSaving}
-                        className={`aspect-square rounded-lg font-bold text-sm transition-all ${
-                          isCurrentPosition
-                            ? "bg-amber-500 text-white shadow-md"
-                            : isOccupied
-                            ? "bg-amber-100 text-amber-600 border border-amber-300"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {pos}
-                      </button>
-                    );
-                  })}
-                </div>
-                {product.isTop && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await setTopOrder({ id: productId, order: null });
-                        setSaveMessage("Odebráno z Top 20");
-                        setTimeout(() => setSaveMessage(null), 2000);
-                      } catch (error: unknown) {
-                        const errorMessage = error instanceof Error ? error.message : "Chyba";
-                        alert(errorMessage);
-                      }
-                    }}
-                    disabled={isSaving}
-                    className="w-full mt-2 py-2 rounded-lg text-sm font-medium bg-red-100 text-red-600 active:bg-red-200"
-                  >
-                    Odebrat z Top 20
-                  </button>
-                )}
+                <p className="text-xs text-muted-foreground mb-3">
+                  {product.isTop
+                    ? "Produkt je mezi Top 20. Pořadí nastavíte přetažením na úvodní stránce."
+                    : "Přiřaďte produkt k Top 20. Pořadí nastavíte přetažením na úvodní stránce."}
+                </p>
+                <button
+                  onClick={async () => {
+                    try {
+                      await toggleTopProduct({ id: productId });
+                      setSaveMessage(product.isTop ? "Odebráno z Top 20" : "Přidáno do Top 20");
+                      setTimeout(() => setSaveMessage(null), 2000);
+                    } catch (error: unknown) {
+                      const errorMessage = error instanceof Error ? error.message : "Chyba";
+                      alert(errorMessage);
+                    }
+                  }}
+                  disabled={isSaving}
+                  className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${
+                    product.isTop
+                      ? "bg-red-100 text-red-600 active:bg-red-200"
+                      : "bg-amber-500 text-white active:scale-95"
+                  }`}
+                >
+                  {product.isTop ? "Odebrat z Top 20" : "Přidat do Top 20"}
+                </button>
               </div>
 
               {/* Sales Claim Mobile */}
@@ -3189,7 +3139,7 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
 
                     )}
 
-                    {/* Top 20 Selector */}
+                    {/* Top 20 Toggle */}
                     {canEdit && (
                     <div className={`w-full rounded-xl transition-colors ${
                       product.isTop
@@ -3197,9 +3147,8 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                         : "bg-gray-50 border-2 border-dashed border-gray-300"
                     }`}>
                       <div className="p-3 sm:p-4">
-                        {/* Header - stacks on mobile */}
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                          <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                             <div className="relative flex-shrink-0">
                               <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${
                                 product.isTop ? "bg-amber-400" : "bg-gray-200"
@@ -3218,96 +3167,32 @@ export function ProductDetailContent({ productId }: ProductDetailContentProps) {
                               </p>
                               <p className="text-xs sm:text-sm text-muted-foreground">
                                 {product.isTop
-                                  ? "Změňte pořadí nebo odeberte"
-                                  : "Vyberte pozici na dashboardu"}
+                                  ? "Pořadí nastavíte přetažením na úvodní stránce."
+                                  : "Přidejte produkt do Top 20. Pořadí nastavíte přetažením na úvodní stránce."}
                               </p>
                             </div>
                           </div>
-                          {/* Na první místo button - full width on mobile */}
                           <button
                             onClick={async () => {
                               try {
-                                await setTopOrder({ id: productId, order: 1 });
-                                setSaveMessage("Produkt je nyní na prvním místě!");
+                                await toggleTopProduct({ id: productId });
+                                setSaveMessage(product.isTop ? "Produkt odebrán z Top 20" : "Produkt přidán do Top 20");
                                 setTimeout(() => setSaveMessage(null), 2000);
                               } catch (error: unknown) {
-                                const errorMessage = error instanceof Error ? error.message : "Nepodařilo se změnit pozici";
+                                const errorMessage = error instanceof Error ? error.message : "Nepodařilo se změnit stav";
                                 alert(errorMessage);
                               }
                             }}
-                            disabled={isSaving || product.topOrder === 1}
+                            disabled={isSaving}
                             className={`w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-                              product.topOrder === 1
-                                ? "bg-amber-500 text-white cursor-default"
+                              product.isTop
+                                ? "bg-red-100 text-red-600 active:bg-red-200 sm:hover:bg-red-200"
                                 : "bg-amber-500 text-white hover:bg-amber-600 shadow-lg hover:shadow-xl active:scale-95 sm:hover:scale-105"
                             }`}
                           >
-                            <span>🥇</span>
-                            {product.topOrder === 1 ? "Je na 1. místě" : "Na první místo"}
+                            {product.isTop ? "Odebrat z Top 20" : "Přidat do Top 20"}
                           </button>
                         </div>
-                        
-                        {/* Position selector - grid on mobile for better touch targets */}
-                        <div className="mt-3 sm:mt-4">
-                          <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 sm:gap-2">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((pos) => {
-                              const isCurrentPosition = product.topOrder === pos;
-                              const occupiedBy = topProducts?.find(p => p.topOrder === pos && p._id !== productId);
-                              const isOccupied = !!occupiedBy;
-                              
-                              return (
-                                <button
-                                  key={pos}
-                                  onClick={async () => {
-                                    try {
-                                      await setTopOrder({ id: productId, order: isCurrentPosition ? null : pos });
-                                      if (!isCurrentPosition) {
-                                        setSaveMessage(`Produkt je nyní na pozici ${pos}!`);
-                                        setTimeout(() => setSaveMessage(null), 2000);
-                                      }
-                                    } catch (error: unknown) {
-                                      const errorMessage = error instanceof Error ? error.message : "Nepodařilo se změnit pozici";
-                                      alert(errorMessage);
-                                    }
-                                  }}
-                                  disabled={isSaving}
-                                  className={`aspect-square w-full max-w-[44px] rounded-lg font-bold text-sm transition-all ${
-                                    isCurrentPosition
-                                      ? "bg-amber-500 text-white shadow-lg scale-105 sm:scale-110"
-                                      : isOccupied
-                                      ? "bg-amber-100 text-amber-600 active:bg-amber-200 sm:hover:bg-amber-200 border border-amber-300"
-                                      : "bg-white text-gray-600 active:bg-amber-200 sm:hover:bg-amber-200 sm:hover:text-amber-800 border border-gray-200"
-                                  }`}
-                                  title={isOccupied ? `Obsazeno: ${occupiedBy.name} (kliknutím se posune)` : `Nastavit jako Top ${pos}`}
-                                >
-                                  {pos}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          
-                          {product.isTop && (
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await setTopOrder({ id: productId, order: null });
-                                  setSaveMessage("Produkt odebrán z Top 20");
-                                  setTimeout(() => setSaveMessage(null), 2000);
-                                } catch (error: unknown) {
-                                  const errorMessage = error instanceof Error ? error.message : "Nepodařilo se odebrat z Top 20";
-                                  alert(errorMessage);
-                                }
-                              }}
-                              disabled={isSaving}
-                              className="w-full sm:w-auto mt-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-100 text-red-600 active:bg-red-200 sm:hover:bg-red-200 transition-colors"
-                            >
-                              Odebrat z Top 20
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2 hidden sm:block">
-                          Tip: Při nastavení pozice se ostatní produkty automaticky posunou dolů.
-                        </p>
                       </div>
                     </div>
 
